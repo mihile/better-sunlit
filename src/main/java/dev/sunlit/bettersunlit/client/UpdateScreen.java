@@ -4,7 +4,8 @@ import net.minecraft.client.gui.screens.Screen;import net.minecraft.client.gui.G
 public final class UpdateScreen extends Screen {
  final Screen parent;final Set<Integer> expanded=new HashSet<>();int scroll,maxScroll,left,width,top,bottom;Button apply,automatic;List<String> displayed=List.of();
  public UpdateScreen(Screen parent){super(Component.m_237113_("Better Sunlit"));this.parent=parent;}
- List<String> notes(){if(UpdateClient.release!=null)return UpdateClient.release.notes();return List.of("낚시 연출 :: 물고기가 펄떡이다가 서서히 힘이 빠집니다. 약해지기 시작하면 가까이 가서 원래 등급과 수량 그대로 회수할 수 있어요.","업데이트 :: 추가·변경된 기능을 펼쳐 보고, 원하는 때 다운로드해 게임 종료 후 적용할 수 있어요.");}
+ static List<String> installedNotes(){List<String> list=new ArrayList<>();for(int i=0;i<40;i++){String v=Build.META.getProperty("notes."+i);if(v==null)break;list.add(v);}return list.isEmpty()?List.of("자연스러운 낚시 연출 :: 낚은 물고기가 땅에서 펄떡이다가 점점 힘이 빠지고 멈춥니다. 약해지기 시작하면 가까이 가서 원래 별 등급과 수량 그대로 회수할 수 있어요. /realfishing으로 활발한 시간과 약해지는 시간을 설정할 수 있습니다."):List.copyOf(list);}
+ List<String> notes(){return UpdateClient.release!=null&&UpdateClient.release.build()>Build.NUMBER?UpdateClient.release.notes():installedNotes();}
  @Override protected void m_7856_(){width=Math.min(540,f_96543_-24);left=(f_96543_-width)/2;top=82;bottom=f_96544_-80;int y=top-scroll;List<String> notes=notes();displayed=notes;
   for(int i=0;i<notes.size();i++){final int id=i;String[] parts=notes.get(i).split(" :: ",2);if(y>=top&&y+20<=bottom)m_142416_(Button.m_253074_(Component.m_237113_((expanded.contains(i)?"− ":"+ ")+parts[0]),b->{if(!expanded.add(id))expanded.remove(id);m_232761_();}).m_252987_(left+8,y,width-16,20).m_253136_());y+=24;if(expanded.contains(i)&&parts.length>1)y+=f_96547_.m_92923_(Component.m_237113_(parts[1]),width-36).size()*12+10;}
   maxScroll=Math.max(0,y+scroll-top-(bottom-top));scroll=Math.min(scroll,maxScroll);

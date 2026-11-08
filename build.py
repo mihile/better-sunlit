@@ -54,6 +54,13 @@ if not secret.exists():
 if not pub.exists():raise RuntimeError('Missing public key; do not silently rotate trust')
 shutil.copy2(pub,asset/'update-public-key.der')
 identity=f'build={args.build}\nlabel={args.label}\nchannel={side}\npack=sunlit-valley\ntrack=main\n'
+rel_notes=[]
+for rf in sorted((ROOT/'releases').glob('*.json')):
+ data=json.loads(rf.read_text(encoding='utf8'))
+ if int(data.get('build',0))==args.build:rel_notes=[f['title']+' :: '+f['detail'] for f in data.get('features',[])]
+for i,note in enumerate(rel_notes):
+ esc=note.replace('\\','\\\\').replace('\n','\\n').replace('\r','\\r')
+ identity+=f'notes.{i}={esc}\n'
 (asset/'update-build.properties').write_text(identity,encoding='utf8')
 helper=BUILD/'update-helper.jar'
 with zipfile.ZipFile(helper,'w',zipfile.ZIP_DEFLATED) as z:
