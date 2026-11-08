@@ -45,6 +45,7 @@ def main():
     p.add_argument("--local-only", action="store_true")
     args = p.parse_args()
     side = args.side
+    other = "server" if side == "client" else "client"
 
     if args.local_only:
         _, _, latest_data = latest_release_meta()
@@ -52,7 +53,8 @@ def main():
         label = latest_data["label"]
         print(f"=== Better Sunlit [{side}] 로컬 빌드 및 적용: build={build_num}, label={label} ===", flush=True)
         run([sys.executable, "build.py", "--instance", str(INSTANCE), "--side", side, "--build", build_num, "--label", label])
-        run([sys.executable, "tools/test.py", "--side", side])
+        run([sys.executable, "build.py", "--instance", str(INSTANCE), "--side", other, "--build", build_num, "--label", label])
+        run([sys.executable, "tools/test.py"])
         built_jar = ROOT / "build" / side / "better-sunlit.jar"
         target_jar = INSTANCE / "minecraft" / "mods" / "better-sunlit.jar"
         target_jar.parent.mkdir(parents=True, exist_ok=True)
@@ -60,7 +62,6 @@ def main():
         print(f"=== 로컬 클라이언트 모드 적용 완료: {target_jar} ===", flush=True)
         return
 
-    other = "server" if side == "client" else "client"
     cur = out(["git", "branch", "--show-current"])
     if out(["git", "status", "--porcelain"]):
         run(["git", "add", "-A"])
@@ -117,7 +118,8 @@ def main():
         run(["git", "push", "origin", side])
 
     run([sys.executable, "build.py", "--instance", str(INSTANCE), "--side", side, "--build", build_num, "--label", label])
-    run([sys.executable, "tools/test.py", "--side", side])
+    run([sys.executable, "build.py", "--instance", str(INSTANCE), "--side", other, "--build", build_num, "--label", label])
+    run([sys.executable, "tools/test.py"])
     run([sys.executable, "tools/publish.py", "--side", side, "--changes", str(latest_path)])
     print(f"=== Better Sunlit [{side}] {label} 릴리스 배포 완료! ===", flush=True)
 

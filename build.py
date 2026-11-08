@@ -14,6 +14,7 @@ classpath += [LIBRARIES / "net/minecraft/client/1.20.1-20230612.114412/client-1.
 selected = [
     "org/spongepowered/mixin/0.8.5", "com/google/guava/guava/31.1-jre",
     "com/google/code/gson/gson/2.10", "org/joml/joml/1.10.5",
+    "org/lwjgl/lwjgl/3.3.1", "org/lwjgl/lwjgl-opengl/3.3.1",
     "org/apache/logging/log4j/log4j-api/2.19.0", "org/apache/logging/log4j/log4j-core/2.19.0",
     "org/slf4j/slf4j-api/2.0.1", "com/mojang/logging/1.1.1",
     "io/netty/netty-buffer/4.1.82.Final", "io/netty/netty-common/4.1.82.Final",
