@@ -8,3 +8,5 @@ __pycache__/
 *.pk8
 *.log
 local-*/
+*.BAT
+*.bat
