@@ -40,6 +40,7 @@ public final class UpdaterTests {
     static Path incoming(Path game)throws Exception {Path p=game.resolve(".better-sunlit-update/incoming").resolve(valid.sha256()+".jar");Files.createDirectories(p.getParent());Files.write(p,jar);return p;}
     static void mutation(String key,String value)throws Exception {Properties p=metadata();p.setProperty(key,value);rejects(()->SignedRelease.verify(signed(p),pair.getPublic()),"Accepted invalid "+key);}
     public static void main(String[] args)throws Exception {
+        ok(SignedRelease.FEED.toString().equals("https://raw.githubusercontent.com/"+SignedRelease.REPO+"/"+SIDE+"/feed/update.properties"),"Feed was initialized before channel identity");
         work=Files.createTempDirectory("prominence-updater-tests-테스트-");pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();jar=jar(2026102502L,SIDE);
         byte[] envelope=signed(metadata());valid=SignedRelease.verify(envelope,pair.getPublic());ok(valid.notes().size()==1,"Missing readable notes");
         byte[] tampered=envelope.clone();tampered[tampered.length/3]^=1;rejects(()->SignedRelease.verify(tampered,pair.getPublic()),"Accepted altered manifest");

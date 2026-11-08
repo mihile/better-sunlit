@@ -23,7 +23,7 @@ try {
     } finally { $archive.Dispose() }
     if ((Get-Item -LiteralPath $helper).LinkType -eq 'SymbolicLink') { throw 'Linked helper is not supported.' }
     if ((Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) { throw 'Helper checksum mismatch.' }
-    & java -Xms8m -Xmx96m -Djava.awt.headless=true -cp $helper dev.sunlit.bettersunlit.update.ServerUpdate $ServerRoot
+    & java '-Xms8m' '-Xmx96m' '-Djava.awt.headless=true' '-cp' $helper 'dev.sunlit.bettersunlit.update.ServerUpdate' $ServerRoot
     exit $LASTEXITCODE
 } catch {
     Write-Error ('Better Sunlit updater: ' + $_.Exception.Message)
