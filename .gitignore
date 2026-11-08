@@ -1,0 +1,10 @@
+build/
+__pycache__/
+*.pyc
+*.hprof
+*.jfr
+*.key
+*.pem
+*.pk8
+*.log
+local-*/

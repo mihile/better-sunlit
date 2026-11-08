@@ -1,0 +1,1 @@
+Updater core adapted from mihile/prominence-korean-compat (MIT). Original copyright: 2026 Prominence local patch contributors. See LICENSE.
