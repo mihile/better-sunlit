@@ -95,12 +95,14 @@ class PublishFlowTests(unittest.TestCase):
         with mock.patch.object(publish, 'ROOT', self.root), \
              mock.patch.object(publish, 'run', side_effect=fake_run), \
              mock.patch.object(publish, 'output', side_effect=fake_output), \
+             mock.patch.object(publish, 'origin_feed', side_effect=lambda side: subprocess.check_output(
+                 ['git', '--git-dir', self.remote, 'show', 'client:feed/update.properties'])), \
              mock.patch.object(publish.urllib.request, 'urlopen', side_effect=public_feed):
             publish.publish(self.args, self.prepared)
 
     def test_create_then_feed_push_then_redownload_and_verify(self):
         self.execute()
-        self.assertEqual(self.events, ['create', 'download', 'verify', 'public-feed', 'verify'])
+        self.assertEqual(self.events, ['create', 'download', 'verify', 'public-feed', 'public-feed', 'verify'])
         self.assertEqual(self.git('show', 'origin/client:feed/update.properties'), 'signed new feed')
         self.assertEqual(self.git('status', '--porcelain'), '')
 

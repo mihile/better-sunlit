@@ -301,11 +301,18 @@ def main():
     parser.add_argument('--side', choices=[*SIDES, 'both'], required=True)
     parser.add_argument('--local-only', action='store_true')
     parser.add_argument('--prepare-only', action='store_true', help='build, test and sign without pushing or publishing')
+    parser.add_argument('--verify-only', action='store_true', help='recheck existing published artifacts without rebuilding or publishing')
     args = parser.parse_args()
-    if args.local_only and args.prepare_only:
-        parser.error('--local-only and --prepare-only cannot be combined')
+    if sum((args.local_only, args.prepare_only, args.verify_only)) > 1:
+        parser.error('--local-only, --prepare-only and --verify-only cannot be combined')
     with release_lock():
-        if args.local_only:
+        if args.verify_only:
+            changes, _ = latest_release_meta()
+            sides = SIDES if args.side == 'both' else (args.side,)
+            for side in sides:
+                step(f'{side} 기존 공개 빌드 재검증', run, [sys.executable, '-X', 'utf8', 'tools/publish.py',
+                    '--side', side, '--changes', changes, '--verify-only'])
+        elif args.local_only:
             local_build(args.side)
         else:
             release(args.side, args.prepare_only)
