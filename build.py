@@ -57,12 +57,16 @@ inlineSites=json.loads((ROOT/'src/main/resources/assets/better_sunlit/inline/rul
 # Multi-target pseudo mixins still ask Mixin to resolve every advertised target.
 # Exclude absent/disabled mods before generating the annotation, rather than
 # repeating a failed class lookup whenever another target loads during world join.
-availableTargets=set()
-for dependency in classpath:
- if dependency.is_file():
-  with zipfile.ZipFile(dependency) as archive:
-   availableTargets.update(n[:-6] for n in archive.namelist() if n.endswith('.class'))
-if side=='client':inlineSites=[s for s in inlineSites if s['class'] in availableTargets]
+if side=='client':
+ wanted={s['class']+'.class' for s in inlineSites}
+ availableTargets=set()
+ for dependency in classpath:
+  if dependency.is_file() and wanted:
+   with zipfile.ZipFile(dependency) as archive:
+    found=wanted.intersection(archive.namelist())
+    availableTargets.update(n[:-6] for n in found)
+    wanted.difference_update(found)
+ inlineSites=[s for s in inlineSites if s['class'] in availableTargets]
 clientTargets={s['class'] for s in inlineSites if s['clientOnly']}
 inlineLists={'mixins':['InlineScriptSourceMixin'],'client':[]}
 for client in [False,True]:
