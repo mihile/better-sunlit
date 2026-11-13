@@ -10,3 +10,7 @@ __pycache__/
 local-*/
 *.BAT
 *.bat
+!/CLIENT.BAT
+!/GITCLIENT.BAT
+!/GITSERVER.BAT
+!/GITBOTH.BAT
