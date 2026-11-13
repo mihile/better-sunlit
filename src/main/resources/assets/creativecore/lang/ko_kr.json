@@ -1,0 +1,7 @@
+{
+  "gui.config.enabled": "켜짐",
+  "minecraft.item": "아이템",
+  "facing.up": "위",
+  "facing.down": "아래",
+  "dialog.button.OK": "확인"
+}

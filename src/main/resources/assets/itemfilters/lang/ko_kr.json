@@ -1,0 +1,4 @@
+{
+  "itemfilters.help_text.nbt": "NBT 문자열\n▶ 예: { text:\"hello\", value: 1, active: true }",
+  "itemfilters.help_text.weak_nbt": "부분 일치 NBT 문자열\n▶ 예: { text:\"hello\", value: 1, active: true }\n▶ 입력한 NBT 필드만 확인합니다. 아이템의 나머지 필드는 무시합니다"
+}

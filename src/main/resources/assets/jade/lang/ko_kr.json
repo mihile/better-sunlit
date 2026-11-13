@@ -1,0 +1,10 @@
+{
+  "gui.jade.configuration.desc1": "§f바라보는 대상§r의 정보를",
+  "gui.jade.configuration.desc2": "§f표시§r하는 §fUI 개선§r 모드입니다.",
+  "config.jade.tts_mode_toggle": "전환",
+  "jade.error": "<오류가 발생했습니다. %s에 제보해 주세요>",
+  "jade.up": "위",
+  "jade.down": "아래",
+  "jade.theme.jade.top": "프로브 1개",
+  "jade.modName.cpp": "제작++"
+}

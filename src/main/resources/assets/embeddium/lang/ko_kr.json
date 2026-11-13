@@ -1,0 +1,12 @@
+{
+  "embeddium.conflicting_mod": "Emberbium은 렌더링 문제/충돌을 일으키는 것으로 알려진 모드의 존재를 감지했습니다. 제거하는 것이 좋습니다. 아래 목록을 참조하세요.",
+  "embeddium.search_bar_empty": "검색 옵션...",
+  "embeddium.options.added_by_mod_string": "모드에 의해 추가됨: %s",
+  "embeddium.options.fullscreen.resolution.tooltip": "전체 화면 모드에서 게임의 해상도를 제어합니다.",
+  "embeddium.options.use_quad_normals_for_lighting.name": "정확한 쿼드 셰이딩 사용",
+  "embeddium.options.use_quad_normals_for_lighting.tooltip": "활성화되면 Emberbium은 축 정렬 방향이 아닌 실제 방향을 기준으로 바닐라가 아닌 블록 면에 음영을 적용합니다. 이는 Forge 실험용 조명 파이프라인이 비활성화된 경우 조명 품질을 향상시킬 수 있습니다(최상의 성능을 위해 권장됨).\n\n실험용 조명 파이프라인이 활성화된 경우 효과가 없습니다.",
+  "embeddium.options.use_render_pass_optimization.name": "렌더 패스 최적화 사용",
+  "embeddium.options.use_render_pass_optimization.tooltip": "활성화되면 Emberbium은 텍스처가 실제로 불투명(또는 투명)할 때 투명(또는 반투명)으로 표시된 블록 모델 면을 감지하고 자동으로 해당 면에 대해 보다 최적의 렌더 패스를 사용합니다. \n\n이 최적화는 셰이더 팩이 활성화된 경우 효과가 없습니다.",
+  "embeddium.options.chunk_fade_in.name": "청크 페이드인",
+  "embeddium.options.chunk_fade_in.tooltip": "활성화되면 새로 로드된 청크가 갑자기 나타나는 대신 짧은 순간에 안개 밖으로 페이드 인됩니다. 페이드되지 않는 청크에는 추가 비용이 들지 않습니다. \n\n 셰이더 팩이 활성화된 경우에는 효과가 없습니다."
+}

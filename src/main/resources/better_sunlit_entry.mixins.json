@@ -1,0 +1,34 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.sunlit.fishvisuals.mixin",
+  "plugin": "dev.sunlit.bettersunlit.inline.EntryMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "PerfButterflyVariantMixin",
+    "PerfButterflyEntityMixin",
+    "PerfSeasonsConfigMixin",
+    "PerfSeasonHandlerMixin",
+    "PerfSeasonHooksMixin"
+  ],
+  "client": [
+    "EntryJeiIngredientScopeMixin",
+    "EntryCoreLibCandidatesMixin",
+    "EntryJeiTypedCacheMixin",
+    "PerfButterflyRendererMixin",
+    "PerfMothRendererMixin",
+    "PerfButterflyModelMixin",
+    "PerfButterflyItemRendererMixin",
+    "PerfMothItemRendererMixin",
+    "PerfHandbookScreenMixin",
+    "PerfHandbookIndexButtonMixin",
+    "PerfHandbookToastMixin",
+    "PerfParticleSpawnerMixin",
+    "PerfWeatherParticleMixin",
+    "PerfCustomParticleMixin",
+    "PerfSeasonHandlerClientMixin",
+    "PerfSeasonColorHandlersMixin",
+    "PerfAmbientBiomeAreaMixin"
+  ],
+  "injectors": {"defaultRequire": 1}
+}

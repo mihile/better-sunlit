@@ -1,0 +1,22 @@
+{
+  "bobby.upgrade.required": "[바비] 이 세계에는 이전 버전의 Minecraft 데이터가 포함되어 있습니다. `/bobby upgrade`를 실행하여 업그레이드하세요.",
+  "bobby.upgrade.fallback_world": "[Bobby] 대체 세계에는 이전 버전의 Minecraft 데이터가 포함되어 있습니다. \"편집\" -> \"세계 최적화\" 옵션을 사용하여 \"싱글 플레이어\" 메뉴에서 업그레이드하세요.",
+  "bobby.upgrade.not_enabled": "Bobby는 이 세계에서 활성화되지 않았습니다.",
+  "bobby.upgrade.begin": "[바비] 월드 데이터를 현재 마인크래프트 버전으로 업그레이드하는 중입니다. 이 작업은 몇 분 정도 걸릴 수 있습니다.",
+  "bobby.upgrade.progress": "[Bobby] 청크 %d개 변환 완료 (예상 전체: %d개).",
+  "bobby.upgrade.done": "[바비] 월드 데이터 업그레이드가 완료되었습니다. 이제 이전 청크가 다시 표시됩니다.",
+  "title.bobby.config": "바비 구성",
+  "option.bobby.enabled": "켜짐",
+  "option.bobby.no_block_entities": "블록 엔터티 비활성화",
+  "tooltip.option.bobby.no_block_entities": "캐시로 표시하는 청크에서는 상자 같은 블록 개체를 불러오지 않습니다.\n블록 개체는 매 틱 갱신해야 하므로 수가 많아지면 부담이 커집니다.\n\n블록 개체의 렌더링 거리는 보통 서버의 시야 거리보다 짧으므로 기본적으로 켜져 있습니다.",
+  "option.bobby.taint_fake_chunks": "오염된 가짜 청크",
+  "tooltip.option.bobby.taint_fake_chunks": "가짜 청크의 조명 수준을 줄여 실제 청크와 차이를 구분할 수 있습니다.",
+  "option.bobby.unload_delay": "청크 언로드 지연(초)",
+  "tooltip.option.bobby.unload_delay": "시야 거리 밖 청크를 바로 내리지 않고 일정 시간 유지합니다.\n컷신 등으로 잠시 지역을 벗어났다가 돌아올 때\n청크를 모두 다시 불러오는 일을 줄입니다.\n차원을 이동한 경우에는 적용되지 않습니다.",
+  "option.bobby.delete_unused_regions_after_days": "미사용 지역 정리(일수)",
+  "tooltip.option.bobby.delete_unused_regions_after_days": "X일 동안 로드되지 않은 지역은 캐시에서 삭제합니다. \n\n서버 연결이 끊어질 때마다 해당 세계의 캐시가 정리됩니다. \n게임이 시작되고 X일 동안 해당 세계를 방문하지 않으면 전체 세계가 정리됩니다. \n\n비활성화하려면 -1로 설정합니다. \n연결이 끊길 때마다 모든 것을 정리하려면 0으로 설정합니다.",
+  "option.bobby.max_render_distance": "최대 렌더링 거리",
+  "tooltip.option.bobby.max_render_distance": "렌더링 거리에 대해 구성 가능한 최대값을 변경합니다.\n\n나트륨이 필요합니다.",
+  "option.bobby.view_distance_overwrite": "싱글 플레이어 서버 시야 거리",
+  "tooltip.option.bobby.view_distance_overwrite": "통합 서버의 시야 거리를 덮어씁니다.\n이렇게 하면 Bobby가 싱글 플레이어에서 유용하게 사용할 수 있습니다.\n\n0일 때 비활성화됩니다.\nBobby는 이것이 활성화된 경우에만 싱글 플레이어에서 활성화됩니다.\n활성화/비활성화하려면 다시 로그인해야 합니다."
+}

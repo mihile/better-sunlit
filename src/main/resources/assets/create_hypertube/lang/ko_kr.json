@@ -1,0 +1,22 @@
+{
+  "create_hypertube.ponder.simple_tube.header": "하이퍼튜브 만들기",
+  "create_hypertube.ponder.simple_tube.text_1": "하이퍼튜브 연결을 생성하려면 다른 튜브를 잡고 튜브를 마우스 오른쪽 버튼으로 클릭하십시오.",
+  "create_hypertube.ponder.simple_tube.text_2": "그런 다음 두 번째 튜브를 놓습니다.",
+  "create_hypertube.ponder.simple_tube.text_3": "그리고 하이퍼튜브 연결이 있습니다!",
+  "create_hypertube.ponder.simple_tube.text_4": "이미 배치된 튜브를 연결할 수 있습니다.",
+  "create_hypertube.ponder.simple_tube.text_5": "렌치를 사용하여 튜브 세그먼트 수를 변경할 수 있습니다.",
+  "create_hypertube.ponder.entrance.header": "하이퍼튜브 입구",
+  "create_hypertube.ponder.entrance.text_1": "하이퍼튜브 입구는 하이퍼튜브 네트워크에 연결되어 고속 이동이 가능합니다.",
+  "create_hypertube.ponder.entrance.text_2": "하이퍼튜브에 들어가려면 최소 16RPM 이상의 전원이 필요합니다.",
+  "create_hypertube.ponder.entrance.text_3": "회전 속도가 빠를수록 더 빠르게 이동할 수 있습니다.",
+  "create_hypertube.ponder.entrance.text_4": "렌치로 마우스 오른쪽 버튼을 클릭하면 입장 모드를 변경할 수 있습니다.",
+  "create_hypertube.ponder.accelerator.header": "하이퍼튜브 가속기",
+  "create_hypertube.ponder.accelerator.text_1": "하이퍼튜브 가속기는 하이퍼튜브를 이동하는 개체의 속도를 증가시킵니다.",
+  "create_hypertube.ponder.accelerator.text_2": "액셀러레이터를 마우스 오른쪽 버튼으로 클릭하면 BRAKE 모드로 변경할 수 있습니다.",
+  "create_hypertube.ponder.attachments.header": "하이퍼튜브 부착물",
+  "create_hypertube.ponder.attachments.text_1": "스캐너 부착물을 사용하면 하이퍼튜브를 이동하는 개체를 감지할 수 있습니다. (아기 8마력, 어른 15마력)",
+  "create_hypertube.ponder.attachments.text_2": "액셀러레이터의 부착물을 어느 면에나 동시에 배치할 수도 있습니다.",
+  "create_hypertube.ponder.attachments.text_3": "레드스톤 감지기 부착물을 사용하면 레드스톤 신호로 가속기/진입 모드를 변경할 수 있습니다.",
+  "create_hypertube.ponder.tag.hypertube_systems": "하이퍼튜브 시스템",
+  "create_hypertube.ponder.tag.hypertube_systems.description": "하이퍼튜브 운송 시스템에 사용되는 블록 및 아이템입니다."
+}
