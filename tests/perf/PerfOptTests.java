@@ -6,12 +6,17 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.sun.management.ThreadMXBean;
 import dev.sunlit.bettersunlit.client.AmbientSoundsClientPerf;
+import dev.sunlit.bettersunlit.client.IrisDimensionPerf;
+import dev.sunlit.bettersunlit.client.JeiSortingPerf;
 import dev.sunlit.bettersunlit.client.LongwingsClientPerf;
 import dev.sunlit.bettersunlit.client.ParticleRainClientPerf;
 import dev.sunlit.bettersunlit.client.SeasonColorPerf;
 import dev.sunlit.bettersunlit.inline.EntryMixinPlugin;
 import dev.sunlit.bettersunlit.perf.LongwingsVariantPerf;
 import dev.sunlit.bettersunlit.perf.SeasonPerf;
+import net.irisshaders.iris.shaderpack.DimensionId;
+import net.irisshaders.iris.shaderpack.materialmap.NamespacedId;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -31,6 +36,7 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import sereneseasons.season.SeasonColorHandlers;
 import sereneseasons.season.SeasonTime;
+import sereneseasons.util.SeasonColorUtil;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -40,11 +46,13 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 public final class PerfOptTests {
@@ -61,7 +69,9 @@ public final class PerfOptTests {
             "com.cicada.longwings.client.gui.HandbookScreen",
             "com.cicada.longwings.client.gui.HandbookScreen$ButterflyIndexButton",
             "com.cicada.longwings.client.gui.HandbookToast",
+            "pigcart.particlerain.ParticleRain",
             "pigcart.particlerain.ParticleSpawner",
+            "pigcart.particlerain.WindManager",
             "pigcart.particlerain.particle.WeatherParticle",
             "pigcart.particlerain.particle.CustomParticle",
             "sereneseasons.config.SeasonsConfig",
@@ -69,7 +79,10 @@ public final class PerfOptTests {
             "sereneseasons.season.SeasonHooks",
             "sereneseasons.season.SeasonColorHandlers",
             "sereneseasons.util.SeasonColorUtil",
-            "team.creative.ambientsounds.environment.BiomeEnvironment$BiomeArea"
+            "team.creative.ambientsounds.environment.BiomeEnvironment$BiomeArea",
+            "team.creative.ambientsounds.environment.pocket.AirPocketScanner",
+            "net.irisshaders.iris.Iris",
+            "mezz.jei.common.config.sorting.SortingConfig"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -89,9 +102,14 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfParticleSpawnerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfWeatherParticleMixin",
             "dev.sunlit.fishvisuals.mixin.PerfCustomParticleMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfWindManagerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfSeasonHandlerClientMixin",
             "dev.sunlit.fishvisuals.mixin.PerfSeasonColorHandlersMixin",
-            "dev.sunlit.fishvisuals.mixin.PerfAmbientBiomeAreaMixin"
+            "dev.sunlit.fishvisuals.mixin.PerfSeasonColorUtilMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfAmbientBiomeAreaMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfAmbientAirPocketScannerMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfIrisDimensionMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfJeiSortingConfigMixin"
     );
 
     public static void main(String[] args) throws Exception {
@@ -102,6 +120,8 @@ public final class PerfOptTests {
         testParticleRainMathAndZeroAlloc();
         testSereneSeasonsHelpers();
         testAmbientSoundsWildcards();
+        testIrisDimensionCanonicalization();
+        testJeiSortingPerf();
         System.out.println("PerfOptTests: ALL PASSED");
     }
 
@@ -232,6 +252,24 @@ public final class PerfOptTests {
                     assertEquals(expectedCount, totalHits,
                             mixinName + " @Redirect invoke count mismatch for " + atTarget);
                 }
+
+                AnnotationNode overwrite = findAnnotation(m.visibleAnnotations, "Lorg/spongepowered/asm/mixin/Overwrite;");
+                if (overwrite != null) {
+                    MethodNode tm = findMethod(target, m.name + m.desc);
+                    assertNotNull(tm, mixinName + " @Overwrite target missing on " + targetName + ": " + m.name + m.desc);
+                    assertEquals((tm.access & 0x0008) != 0, (m.access & 0x0008) != 0,
+                            mixinName + " @Overwrite static mismatch for " + m.name + m.desc);
+                }
+            }
+
+            if ("dev.sunlit.fishvisuals.mixin.PerfWeatherParticleMixin".equals(mixinName)) {
+                assertNotNull(findMethod(mixin, "m_6355_(F)I"),
+                        "PerfWeatherParticleMixin must override m_6355_(F)I");
+                assertEquals(null, findMethod(target, "m_6355_(F)I"),
+                        "WeatherParticle must not already declare m_6355_(F)I");
+                ClassNode mcParticle = readClassNode("net.minecraft.client.particle.Particle");
+                assertNotNull(findMethod(mcParticle, "m_6355_(F)I"),
+                        "Particle superclass must declare m_6355_(F)I");
             }
         }
     }
@@ -430,6 +468,18 @@ public final class PerfOptTests {
             }
         });
         assertEquals(0L, allocQuads, "ParticleRain quad emission must allocate 0 bytes, got " + allocQuads);
+
+        float[] windCoords = {-125.5f, -1.25f, 0.0f, 17.75f, 4096.25f};
+        float[] windTimes = {0.0f, 12.5f, 2500.75f};
+        for (float coord : windCoords) {
+            for (float time : windTimes) {
+                float expected = -(Mth.m_14031_(coord * 0.05f + time)
+                        * Mth.m_14031_(coord * 0.05f * 0.5f + time * 0.5f) * 0.4f + 0.4f);
+                float actual = ParticleRainClientPerf.computeOneWind(coord, 0.05f, time, 0.4f);
+                assertEquals(Float.floatToRawIntBits(expected), Float.floatToRawIntBits(actual),
+                        "computeOneWind mismatch coord=" + coord + " time=" + time);
+            }
+        }
     }
 
     private static void testSereneSeasonsHelpers() throws Exception {
@@ -534,6 +584,36 @@ public final class PerfOptTests {
             if (acc < 0) throw new AssertionError();
         });
         assertEquals(0L, allocOv, "getOverridesSnapshot hit must allocate 0 bytes, got " + allocOv);
+
+        // 4. Bit-exact SeasonColorUtil replacement equivalence & zero allocation
+        int[] sampleColors = {
+            0x000000, 0xFFFFFF, 0xFF0000, 0x00FF00, 0x0000FF,
+            0x7FBF3F, 0x3A6EA5, 0xFF8010, 0x808080, 0x597D2F,
+            0x123456, 0xABCDEF, 0x8001FE, 0xFE8001, 0x01FE80
+        };
+        float[] satMults = {0.0f, 0.35f, 0.75f, 1.0f, 1.25f, 1.6f, 2.0f};
+        for (int c1 : sampleColors) {
+            for (int c2 : sampleColors) {
+                assertEquals(SeasonColorUtil.overlayBlend(c1, c2), SeasonColorPerf.overlayBlend(c1, c2),
+                        "overlayBlend mismatch " + c1 + " / " + c2);
+                assertEquals(SeasonColorUtil.mixColours(c1, c2, 0.75f), SeasonColorPerf.mixColours(c1, c2, 0.75f),
+                        "mixColours mismatch " + c1 + " / " + c2);
+            }
+            for (float mult : satMults) {
+                assertEquals(SeasonColorUtil.saturateColour(c1, mult), SeasonColorPerf.saturateColour(c1, mult),
+                        "saturateColour mismatch c=" + c1 + " mult=" + mult);
+            }
+        }
+        long allocColor = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int i = 0; i < 10_000; i++) {
+                int blended = SeasonColorPerf.overlayBlend(0x597D2F, 0x7FBF3F);
+                int mixed = SeasonColorPerf.mixColours(blended, 0x597D2F, 0.75f);
+                acc ^= SeasonColorPerf.saturateColour(mixed, 1.25f);
+            }
+            if (acc == 0x13579BDF && System.nanoTime() == 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocColor, "SeasonColorPerf color math must allocate 0 bytes, got " + allocColor);
     }
 
     private static void testAmbientSoundsWildcards() {
@@ -580,6 +660,99 @@ public final class PerfOptTests {
             if (b && System.nanoTime() == 0) throw new AssertionError();
         });
         assertEquals(0L, allocAs, "AmbientSounds plain & glob cache path must allocate 0 bytes, got " + allocAs);
+
+        Direction[] expectedDirs = Direction.values();
+        assertEquals(expectedDirs.length, AmbientSoundsClientPerf.DIRECTIONS.length, "DIRECTIONS length mismatch");
+        for (int i = 0; i < expectedDirs.length; i++) {
+            assertSame(expectedDirs[i], AmbientSoundsClientPerf.DIRECTIONS[i], "DIRECTIONS[" + i + "] mismatch");
+        }
+    }
+
+    private static void testIrisDimensionCanonicalization() throws Exception {
+        IrisDimensionPerf.clearCachesForTests();
+        assertSame(DimensionId.OVERWORLD, IrisDimensionPerf.canonicalDimensionId(null),
+                "Null dimension key must canonicalize to DimensionId.OVERWORLD");
+
+        java.lang.reflect.Method createKey = ResourceKey.class.getDeclaredMethod(
+                "m_135790_", ResourceLocation.class, ResourceLocation.class);
+        createKey.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ResourceKey<Registry<Level>> levelReg = (ResourceKey<Registry<Level>>) createKey.invoke(
+                null, new ResourceLocation("minecraft", "root"), new ResourceLocation("minecraft", "dimension"));
+        ResourceKey<Level> overworld = ResourceKey.m_135785_(levelReg, new ResourceLocation("minecraft", "overworld"));
+        ResourceKey<Level> nether = ResourceKey.m_135785_(levelReg, new ResourceLocation("minecraft", "the_nether"));
+        ResourceKey<Level> end = ResourceKey.m_135785_(levelReg, new ResourceLocation("minecraft", "the_end"));
+        assertSame(DimensionId.OVERWORLD, IrisDimensionPerf.canonicalDimensionId(overworld),
+                "minecraft:overworld must canonicalize to DimensionId.OVERWORLD");
+        assertSame(DimensionId.NETHER, IrisDimensionPerf.canonicalDimensionId(nether),
+                "minecraft:the_nether must canonicalize to DimensionId.NETHER");
+        assertSame(DimensionId.END, IrisDimensionPerf.canonicalDimensionId(end),
+                "minecraft:the_end must canonicalize to DimensionId.END");
+
+        // Fresh ResourceKey instance with distinct object identity must still canonicalize to DimensionId.OVERWORLD
+        @SuppressWarnings("unchecked")
+        ResourceKey<Level> distinctOverworld = (ResourceKey<Level>) createKey.invoke(
+                null, new ResourceLocation("minecraft", "dimension"), new ResourceLocation("minecraft", "overworld"));
+        assertSame(DimensionId.OVERWORLD, IrisDimensionPerf.canonicalDimensionId(distinctOverworld),
+                "Distinct ResourceKey for minecraft:overworld must return DimensionId.OVERWORLD by identity");
+
+        ResourceKey<Level> twilight = ResourceKey.m_135785_(levelReg, new ResourceLocation("twilightforest", "twilight_forest"));
+        NamespacedId tf1 = IrisDimensionPerf.canonicalDimensionId(twilight);
+        NamespacedId tf2 = IrisDimensionPerf.canonicalDimensionId(twilight);
+        assertSame(tf1, tf2, "Repeated custom dimension lookups must return identical NamespacedId");
+        assertEquals("twilightforest", tf1.getNamespace(), "Custom dimension namespace");
+        assertEquals("twilight_forest", tf1.getName(), "Custom dimension path");
+
+        for (int i = 0; i < 1000; i++) {
+            IrisDimensionPerf.canonicalDimensionId(overworld);
+            IrisDimensionPerf.canonicalDimensionId(twilight);
+        }
+        long allocDim = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int i = 0; i < 10_000; i++) {
+                NamespacedId id = IrisDimensionPerf.canonicalDimensionId((i & 1) == 0 ? overworld : twilight);
+                if (id == DimensionId.OVERWORLD) acc++;
+            }
+            if (acc < 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocDim, "IrisDimensionPerf cached lookup must allocate 0 bytes, got " + allocDim);
+    }
+
+    private static void testJeiSortingPerf() {
+        List<String> smallOrder = Arrays.asList("dup", "beta", "alpha", "dup");
+        List<String> smallItems = new ArrayList<>(Arrays.asList("zeta", "alpha", "dup", "missing", "beta"));
+        List<String> smallExpected = new ArrayList<>(smallItems);
+        smallExpected.sort(Comparator.comparingInt(v -> JeiSortingPerf.indexOfSort(smallOrder.indexOf(v))));
+        smallItems.sort(JeiSortingPerf.comparator(smallOrder, Function.identity()));
+        assertEquals(smallExpected, smallItems, "Linear threshold comparator order mismatch");
+
+        List<String> largeOrder = new ArrayList<>();
+        for (int i = 0; i < 64; i++) {
+            largeOrder.add("k_" + i);
+        }
+        largeOrder.add("k_5"); // duplicate later entry must not overwrite earliest index 5
+        largeOrder.add(null);
+
+        List<String> actual = new ArrayList<>();
+        for (int i = 70; i >= 0; i--) {
+            actual.add("k_" + i);
+        }
+        actual.add("k_5");
+        actual.add("extra_a");
+        actual.add(null);
+        actual.add("extra_b");
+
+        List<String> expected = new ArrayList<>(actual);
+        Comparator<String> refBase = Comparator.comparingInt(v -> JeiSortingPerf.indexOfSort(largeOrder.indexOf(v)));
+        expected.sort(refBase);
+        actual.sort(JeiSortingPerf.comparator(largeOrder, Function.identity()));
+        assertEquals(expected, actual, "Large hash comparator must match List.indexOf ordering");
+
+        List<String> actualFile = new ArrayList<>(Arrays.asList("z", "b", "k_20", "a", "k_1", "k_5"));
+        List<String> expectedFile = new ArrayList<>(actualFile);
+        expectedFile.sort(refBase.thenComparing(Comparator.naturalOrder()));
+        actualFile.sort(JeiSortingPerf.fileOrderThenDefault(Comparator.naturalOrder(), largeOrder));
+        assertEquals(expectedFile, actualFile, "fileOrderThenDefault must preserve tie-breaker order");
     }
 
     // ---- Reference original ParticleRain computations for exact comparison ----

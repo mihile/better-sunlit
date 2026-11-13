@@ -7,35 +7,56 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pigcart.particlerain.VersionUtil;
+import pigcart.particlerain.WindManager;
+import pigcart.particlerain.config.ParticleData;
 import pigcart.particlerain.particle.WeatherParticle;
 
 @Pseudo
 @Mixin(targets = "pigcart.particlerain.particle.CustomParticle", remap = false)
 public abstract class PerfCustomParticleMixin extends WeatherParticle {
     @Shadow
+    public ParticleData data;
+
+    @Shadow
     private float oCollisionAnimProgress;
 
     @Shadow
     private float collisionAnimProgress;
+
+    @Shadow
+    public float speed;
+
+    @Shadow
+    float rotationVariation;
+
+    @Shadow
+    float distance;
 
     protected PerfCustomParticleMixin(ClientLevel level, double x, double y, double z) {
         super(level, x, y, z, null);
     }
 
     @Shadow
-    public void renderVelocityQuad(VertexConsumer vc, Camera camera, float partialTick, Vector3f velocity) {
-        throw new AssertionError();
-    }
+    public abstract void tickFading();
+
+    @Shadow
+    public abstract void onPositionUpdate();
+
+    @Shadow
+    public abstract void onCollision(BlockHitResult result);
+
+    @Shadow
+    public abstract float getDistanceSize();
 
     @Shadow
     private void renderSquishyRotatedQuad(VertexConsumer vc, Quaternionf quat,
@@ -43,10 +64,76 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
         throw new AssertionError();
     }
 
-    @Inject(method = "renderVerticalQuad(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderVerticalQuadNoAlloc(VertexConsumer vc, Camera camera, float partialTick,
-                                                  CallbackInfo ci) {
+    @Overwrite(remap = false)
+    public void m_5989_() {
+        super.m_5989_();
+        WeatherParticleBridge bridge = (WeatherParticleBridge) (Object) this;
+        bridge.sunlit$setOQuadSize(this.f_107663_);
+        Vec3 camPos = VersionUtil.camPos(Minecraft.m_91087_().f_91063_.m_109153_());
+        double dx = camPos.f_82479_ - this.f_107212_;
+        double dy = camPos.f_82480_ - this.f_107213_;
+        double dz = camPos.f_82481_ - this.f_107214_;
+        this.distance = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if ((double) this.distance > (double) this.data.spawnPos.renderDistance() + 0.5d) {
+            this.m_107274_();
+        }
+        if (!this.pos.equals(this.oPos)) {
+            this.onPositionUpdate();
+            this.oPos.m_122190_(this.pos);
+        }
+        boolean anim = bridge.sunlit$doCollisionAnim();
+        if (anim) {
+            this.tickCollisionAnim();
+        }
+        this.speed = (float) Math.sqrt(
+                this.f_107215_ * this.f_107215_
+                + this.f_107216_ * this.f_107216_
+                + this.f_107217_ * this.f_107217_);
+        this.tickFading();
+        if (this.data.distanceScaling.floatValue() != 0.0f && !anim) {
+            this.f_107663_ = this.getDistanceSize();
+        }
+        if (this.data.rotationAmount.floatValue() != 0.0f) {
+            this.f_107204_ = this.f_107231_;
+            this.f_107231_ += this.rotationVariation * this.speed;
+        }
+        if (this.data.animateSprites.booleanValue()) {
+            int idx = (this.f_107224_ - 1) % (this.data.spriteLocations.size() - 1);
+            String spriteLoc = this.data.spriteLocations.get(idx);
+            this.m_108337_(VersionUtil.getSprite(VersionUtil.parseId(spriteLoc)));
+        }
+        float rainLevel = this.f_107208_.m_46722_(1.0f);
+        if (this.data.tintType == ParticleData.TintType.FOG && rainLevel > 0.0f && rainLevel < 1.0f) {
+            this.data.tintType.applyTint(this, this.f_107208_, this.pos, this.data);
+        }
+        WindManager.applyWind(this, this.data, this.f_107208_);
+        this.tickCollisions();
+    }
+
+    @Overwrite(remap = false)
+    public void tickCollisions() {
+        double vx = this.f_107215_;
+        double vy = this.f_107216_;
+        double vz = this.f_107217_;
+        double len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        float reach = (float) ((double) this.f_107663_ + len);
+        double nx = len < 1.0E-4D ? 0.0D : vx / len;
+        double ny = len < 1.0E-4D ? 0.0D : vy / len;
+        double nz = len < 1.0E-4D ? 0.0D : vz / len;
+        Vec3 start = new Vec3(this.f_107212_, this.f_107213_, this.f_107214_);
+        Vec3 end = new Vec3(
+                nx * (double) reach + this.f_107212_,
+                ny * (double) reach + this.f_107213_,
+                nz * (double) reach + this.f_107214_);
+        BlockHitResult hit = this.f_107208_.m_45547_(VersionUtil.getClipContext(start, end));
+        if (hit.m_6662_() != HitResult.Type.MISS
+                && !((WeatherParticleBridge) (Object) this).sunlit$doCollisionAnim()) {
+            this.onCollision(hit);
+        }
+    }
+
+    @Overwrite(remap = false)
+    public void renderVerticalQuad(VertexConsumer vc, Camera camera, float partialTick) {
         Vec3 camPos = VersionUtil.camPos(camera);
         float x = (float) (Mth.m_14139_(partialTick, this.f_107209_, this.f_107212_) - camPos.m_7096_());
         float y = (float) (Mth.m_14139_(partialTick, this.f_107210_, this.f_107213_) - camPos.m_7098_());
@@ -58,13 +145,10 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
         s.v0.set(x, y, z);
         this.turnBackfaceFlipways(s.q0, s.v0);
         this.renderRotatedQuad(vc, s.q0, x, y, z, partialTick);
-        ci.cancel();
     }
 
-    @Inject(method = "renderRelativeVelocityQuad(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderRelativeVelocityQuadNoAlloc(VertexConsumer vc, Camera camera, float partialTick,
-                                                          CallbackInfo ci) {
+    @Overwrite(remap = false)
+    public void renderRelativeVelocityQuad(VertexConsumer vc, Camera camera, float partialTick) {
         Vec3 camVel = Minecraft.m_91087_().m_91288_().m_20184_();
         ParticleRainClientPerf.Scratch s = ParticleRainClientPerf.scratch();
         s.vVel.set(
@@ -72,23 +156,17 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
                 (float) (this.f_107216_ - camVel.f_82480_),
                 (float) (this.f_107217_ - camVel.f_82481_));
         this.renderVelocityQuad(vc, camera, partialTick, s.vVel);
-        ci.cancel();
     }
 
-    @Inject(method = "renderWorldVelocityQuad(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderWorldVelocityQuadNoAlloc(VertexConsumer vc, Camera camera, float partialTick,
-                                                       CallbackInfo ci) {
+    @Overwrite(remap = false)
+    public void renderWorldVelocityQuad(VertexConsumer vc, Camera camera, float partialTick) {
         ParticleRainClientPerf.Scratch s = ParticleRainClientPerf.scratch();
         s.vVel.set((float) this.f_107215_, (float) this.f_107216_, (float) this.f_107217_);
         this.renderVelocityQuad(vc, camera, partialTick, s.vVel);
-        ci.cancel();
     }
 
-    @Inject(method = "renderVelocityQuad(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;FLorg/joml/Vector3f;)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderVelocityQuadNoAlloc(VertexConsumer vc, Camera camera, float partialTick,
-                                                  Vector3f velocity, CallbackInfo ci) {
+    @Overwrite(remap = false)
+    public void renderVelocityQuad(VertexConsumer vc, Camera camera, float partialTick, Vector3f velocity) {
         Vec3 camPos = VersionUtil.camPos(camera);
         float x = (float) (Mth.m_14139_(partialTick, this.f_107209_, this.f_107212_) - camPos.m_7096_());
         float y = (float) (Mth.m_14139_(partialTick, this.f_107210_, this.f_107213_) - camPos.m_7098_());
@@ -99,13 +177,10 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
                 velocity, x, y, z, anim, partialTick,
                 this.oCollisionAnimProgress, this.collisionAnimProgress, s);
         this.renderSquishyRotatedQuad(vc, s.q0, x, y, z, partialTick, yScale);
-        ci.cancel();
     }
 
-    @Inject(method = "renderCameraCopyQuad(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderCameraCopyQuadNoAlloc(VertexConsumer vc, Camera camera, float partialTick,
-                                                    CallbackInfo ci) {
+    @Overwrite(remap = false)
+    public void renderCameraCopyQuad(VertexConsumer vc, Camera camera, float partialTick) {
         Vec3 camPos = VersionUtil.camPos(camera);
         float x = (float) (Mth.m_14139_(partialTick, this.f_107209_, this.f_107212_) - camPos.m_7096_());
         float y = (float) (Mth.m_14139_(partialTick, this.f_107210_, this.f_107213_) - camPos.m_7098_());
@@ -117,13 +192,10 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
         }
         s.q0.mul(s.qAux.rotationY(3.1415927f));
         this.renderRotatedQuad(vc, s.q0, x, y, z, partialTick);
-        ci.cancel();
     }
 
-    @Inject(method = "renderHorizontalQuad(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderHorizontalQuadNoAlloc(VertexConsumer vc, Camera camera, float partialTick,
-                                                    CallbackInfo ci) {
+    @Overwrite(remap = false)
+    public void renderHorizontalQuad(VertexConsumer vc, Camera camera, float partialTick) {
         Vec3 camPos = VersionUtil.camPos(camera);
         float x = (float) (Mth.m_14139_(partialTick, this.f_107209_, this.f_107212_) - camPos.m_7096_());
         float y = (float) (Mth.m_14139_(partialTick, this.f_107210_, this.f_107213_) - camPos.m_7098_());
@@ -136,20 +208,16 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
         s.v0.set(x, y, z);
         this.turnBackfaceFlipways(s.q0, s.v0);
         this.renderRotatedQuad(vc, s.q0, x, y, z, partialTick);
-        ci.cancel();
     }
 
-    @Inject(method = "renderVertex(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lorg/joml/Quaternionf;FFFFFFFFI)V",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private void sunlit$renderVertexNoAlloc(VertexConsumer vc, Quaternionf quat,
-                                            float x, float y, float z,
-                                            float xOff, float yOff, float size,
-                                            float u, float v, int light,
-                                            CallbackInfo ci) {
+    @Overwrite(remap = false)
+    private void renderVertex(VertexConsumer vc, Quaternionf quat,
+                              float x, float y, float z,
+                              float xOff, float yOff, float size,
+                              float u, float v, int light) {
         ParticleRainClientPerf.emitVertex(
                 vc, quat, x, y, z, xOff, yOff, size, u, v,
                 this.f_107227_, this.f_107228_, this.f_107229_, this.f_107230_,
                 light, ParticleRainClientPerf.scratch().vCorner);
-        ci.cancel();
     }
 }

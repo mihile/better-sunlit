@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'tools' / 'release.py'
+sys.path.insert(0, str(SCRIPT.parent))
 spec = importlib.util.spec_from_file_location('better_sunlit_release', SCRIPT)
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)

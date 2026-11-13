@@ -19,7 +19,7 @@ mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.j
 common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
 assert len(common_mixins) == 5, common_mixins
-assert len(client_mixins) == 17, client_mixins
+assert len(client_mixins) == 22, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
