@@ -28,7 +28,12 @@
     "PerfCustomParticleMixin",
     "PerfSeasonHandlerClientMixin",
     "PerfSeasonColorHandlersMixin",
-    "PerfAmbientBiomeAreaMixin"
+    "PerfSeasonColorUtilMixin",
+    "PerfAmbientBiomeAreaMixin",
+    "PerfAmbientAirPocketScannerMixin",
+    "PerfWindManagerMixin",
+    "PerfIrisDimensionMixin",
+    "PerfJeiSortingConfigMixin"
   ],
   "injectors": {"defaultRequire": 1}
 }

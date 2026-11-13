@@ -1,16 +1,24 @@
 package dev.sunlit.bettersunlit.client;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import org.joml.AxisAngle4d;
 import org.joml.AxisAngle4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import pigcart.particlerain.ParticleRain;
+import pigcart.particlerain.config.ConfigData;
+import pigcart.particlerain.config.ConfigManager;
+import pigcart.particlerain.config.ParticleData;
+
+import java.util.ArrayList;
 
 /**
- * Thread-local scratch state and allocation-free geometry math for ParticleRain
- * quad rendering and surface/block particle spawning.
+ * Thread-local scratch state and allocation-free geometry/wind math for ParticleRain
+ * quad rendering, wind gusts, and surface/sky/block particle spawning.
  */
 public final class ParticleRainClientPerf {
     private static final float PI_F = 3.1415927f;
@@ -28,6 +36,7 @@ public final class ParticleRainClientPerf {
         public final Vector3f vCorner = new Vector3f();
         public final Vector3f vAux = new Vector3f();
         public final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        public final ArrayList<ParticleData> candidates = new ArrayList<>(16);
     }
 
     private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
@@ -110,5 +119,24 @@ public final class ParticleRainClientPerf {
         emitVertex(vc, quat, x, y, z, -1.0f,  1.0f, size, u1, v0, r, g, b, a, light, cornerScratch);
         emitVertex(vc, quat, x, y, z,  1.0f,  1.0f, size, u0, v0, r, g, b, a, light, cornerScratch);
         emitVertex(vc, quat, x, y, z,  1.0f, -1.0f, size, u0, v1, r, g, b, a, light, cornerScratch);
+    }
+
+    public static float computeOneWind(float coord, float gustFrequency, float modulatedTime, float strength) {
+        float primary = Mth.m_14031_(coord * gustFrequency + modulatedTime);
+        float half = Mth.m_14031_(coord * gustFrequency * 0.5f + modulatedTime * 0.5f);
+        return -(primary * half * strength + strength);
+    }
+
+    public static Vector3f fillWind(double x, double y, double z, Vector3f out) {
+        ClientLevel level = Minecraft.m_91087_().f_91073_;
+        if (level == null) {
+            return out.set(0.0f, 0.0f, 0.0f);
+        }
+        ConfigData.WindOptions wind = ConfigManager.getConfig().wind;
+        float mod = (float) level.m_46467_() * wind.modulationSpeed;
+        float yMul = wind.yLevelAdjustment ? ParticleRain.yLevelWindMultiplier(y) : 0.0f;
+        float wx = computeOneWind((float) x, wind.gustFrequency, mod, wind.strength) * yMul;
+        float wz = computeOneWind((float) z, wind.gustFrequency, mod, wind.strength) * yMul;
+        return out.set(wx, 0.0f, wz);
     }
 }

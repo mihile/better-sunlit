@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+from publication_guard import check_worktree, check_git_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTANCE = ROOT.parents[1]
@@ -104,6 +105,7 @@ def known_remote_builds():
 
 def save_work():
     if git('status', '--porcelain'):
+        check_worktree(ROOT)
         branch = git('branch', '--show-current')
         run(['git', 'add', '-A'])
         if git('diff', '--cached', '--name-only'):
@@ -225,6 +227,7 @@ def publish_side(side, changes):
         run(['git', 'checkout', side])
     # Even an apparently up-to-date local tracking ref can be stale while the
     # tests run. A normal push detects a concurrent remote change safely.
+    check_git_tree(ROOT, remote=f'origin/{side}')
     run(['git', 'push', 'origin', side])
     step(f'{side} 서명 및 공개 검증', run,
          [sys.executable, '-X', 'utf8', 'tools/publish.py', '--side', side, '--changes', changes])

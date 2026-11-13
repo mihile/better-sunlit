@@ -5,11 +5,13 @@ import importlib.util
 import io
 import json
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'tools' / 'publish.py'
+sys.path.insert(0, str(SCRIPT.parent))
 spec = importlib.util.spec_from_file_location('better_sunlit_publish_flow', SCRIPT)
 publish = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publish)
