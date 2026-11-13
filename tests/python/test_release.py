@@ -233,13 +233,61 @@ class ReleaseGitTests(unittest.TestCase):
     def test_public_feed_must_match_signed_bytes(self):
         destination = self.root / 'public-feed.properties'
         expected = b'payload=correct\nsignature=correct\n'
-        with mock.patch.object(publish.urllib.request, 'urlopen', return_value=io.BytesIO(expected)):
-            publish.verify_public_feed('client', expected, destination)
+        with mock.patch.object(publish, 'origin_feed', return_value=expected), \
+             mock.patch.object(publish.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(expected)):
+            publish.verify_public_feed('client', expected, destination, commit='a'*40)
         self.assertEqual(destination.read_bytes(), expected)
         with mock.patch.object(publish.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(b'old feed')), \
+             mock.patch.object(publish, 'origin_feed', return_value=expected), \
              mock.patch.object(publish.time, 'sleep'):
             with self.assertRaisesRegex(RuntimeError, '공개 피드'):
-                publish.verify_public_feed('client', expected, destination)
+                publish.verify_public_feed('client', expected, destination, commit='a'*40)
+
+    def test_stale_branch_cache_does_not_fail_a_verified_origin_and_commit(self):
+        expected = b'correct signed feed'
+        destination = self.root/'public-feed.properties'
+        def response(request, **kwargs):
+            url = request.full_url if hasattr(request, 'full_url') else request
+            return io.BytesIO(b'old cached feed' if '/client/' in url else expected)
+        stdout = io.StringIO()
+        with mock.patch.object(publish, 'origin_feed', return_value=expected), \
+             mock.patch.object(publish.urllib.request, 'urlopen', side_effect=response), \
+             contextlib.redirect_stdout(stdout):
+            publish.verify_public_feed('client', expected, destination, commit='a'*40)
+        self.assertEqual(destination.read_bytes(), expected)
+        self.assertIn('캐시', stdout.getvalue())
+
+    def test_wrong_origin_is_still_a_failure(self):
+        with mock.patch.object(publish, 'origin_feed', return_value=b'wrong origin'), \
+             mock.patch.object(publish.urllib.request, 'urlopen') as request:
+            with self.assertRaisesRegex(RuntimeError, '원본 브랜치'):
+                publish.verify_public_feed('client', b'expected', self.root/'feed.properties', commit='a'*40)
+        request.assert_not_called()
+
+
+class RecoveryModeTests(unittest.TestCase):
+    def test_publish_verification_never_prepares_or_signs(self):
+        with mock.patch.object(sys, 'argv', ['publish.py', '--side', 'client', '--verify-only']), \
+             mock.patch.object(publish, 'prepare') as prepare, \
+             mock.patch.object(publish, 'verification_inputs', return_value=mock.sentinel.saved), \
+             mock.patch.object(publish, 'verify_public_release') as verify:
+            publish.main()
+        prepare.assert_not_called()
+        self.assertIs(verify.call_args.args[1], mock.sentinel.saved)
+
+    def test_both_verification_only_dispatches_saved_release_checks(self):
+        with mock.patch.object(sys, 'argv', ['release.py', '--side', 'both', '--verify-only']), \
+             mock.patch.object(release, 'release_lock', return_value=contextlib.nullcontext()), \
+             mock.patch.object(release, 'latest_release_meta', return_value=(Path('releases/saved.json'), {})), \
+             mock.patch.object(release, 'release') as publish_new, \
+             mock.patch.object(release, 'run') as run:
+            release.main()
+        publish_new.assert_not_called()
+        self.assertEqual(run.call_count, 2)
+        for call, side in zip(run.call_args_list, ('client', 'server')):
+            command = call.args[0]
+            self.assertIn('--verify-only', command)
+            self.assertEqual(command[command.index('--side')+1], side)
 
 
 class ParallelRunnerTests(unittest.TestCase):
