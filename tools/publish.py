@@ -10,6 +10,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from publication_guard import check_git_tree, check_release_jar
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = 'mihile/better-sunlit'
@@ -43,6 +44,7 @@ def prepare(args):
             f"{args.side} 빌드 보고서와 릴리스 설명의 빌드 번호·이름·채널이 다릅니다. 다시 빌드하세요.")
     require(sha256(jar) == report['sha256'] and jar.stat().st_size == report['size'],
             f'{args.side} JAR과 빌드 보고서의 해시 또는 크기가 다릅니다.')
+    check_release_jar(jar)
     require(0 < len(changes['features']) <= 40, '릴리스 기능 설명은 1~40개여야 합니다.')
     key = args.keys / (args.side + '.pk8')
     require(key.is_file() and not key.resolve().is_relative_to(ROOT.resolve()),
@@ -115,6 +117,7 @@ def publish(args, prepared):
     branch = output(['git', '-C', ROOT, 'branch', '--show-current'])
     require(branch == args.side, '게시할 채널과 현재 Git 브랜치가 다릅니다.')
     require(not output(['git', '-C', ROOT, 'status', '--porcelain']), '게시 전에 소스 변경을 커밋하세요.')
+    check_git_tree(ROOT, remote='origin/' + args.side)
     head = output(['git', '-C', ROOT, 'rev-parse', 'HEAD'])
     require(output(['git', '-C', ROOT, 'rev-parse', 'origin/' + args.side]) == head,
             '검증한 소스를 해당 원격 브랜치에 먼저 push하세요.')
