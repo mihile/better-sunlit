@@ -12,7 +12,7 @@ classpath = [(LIBRARIES / "net/minecraftforge/forge/1.20.1-47.4.0") / "forge-1.2
 classpath += [LIBRARIES / "net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-srg.jar"]
 # Prefer Minecraft 1.20.1's exact library versions where multiple Minecraft installations coexist.
 selected = [
-    "org/spongepowered/mixin/0.8.5", "com/google/guava/guava/31.1-jre",
+    "org/spongepowered/mixin/0.8.5", "org/ow2/asm/asm/9.8", "org/ow2/asm/asm-tree/9.8", "com/google/guava/guava/31.1-jre",
     "com/google/code/gson/gson/2.10", "org/joml/joml/1.10.5",
     "org/lwjgl/lwjgl/3.3.1", "org/lwjgl/lwjgl-opengl/3.3.1",
     "org/apache/logging/log4j/log4j-api/2.19.0", "org/apache/logging/log4j/log4j-core/2.19.0",
@@ -22,6 +22,7 @@ selected = [
     "io/netty/netty-handler/4.1.82.Final", "com/mojang/brigadier/1.1.8",
     "com/mojang/datafixerupper/6.0.8", "com/mojang/authlib/4.0.43",
     "it/unimi/dsi/fastutil/8.5.9", "org/apache/commons/commons-lang3/3.12.0",
+    "com/electronwill/night-config/core/3.6.4", "com/electronwill/night-config/toml/3.6.4",
     "net/minecraftforge/eventbus/6.0.5", "net/minecraftforge/forgespi/7.0.1", "net/minecraftforge/unsafe/0.2.0",
     "net/minecraftforge/mergetool/1.1.5",
     "net/minecraftforge/fmlcore/1.20.1-47.4.0", "net/minecraftforge/fmlloader/1.20.1-47.4.0",
@@ -37,15 +38,55 @@ classpath += sorted((INSTANCE / "minecraft/mods").glob("*.jar"))
 
 sourceRoot=ROOT/'src/main/java'
 sources=sorted(sourceRoot.rglob('*.java'))
+CLIENT_ONLY_MIXINS={'ItemEntityRendererMixin.java','ItemPickupParticleMixin.java','XpToastMixin.java','DisplayInfoMixin.java','FontSetMixin.java','StandardFontSetMixin.java'}
+CLIENT_ONLY_MIXINS.update({
+    'EntryJeiIngredientScopeMixin.java','EntryCoreLibCandidatesMixin.java','EntryJeiTypedCacheMixin.java',
+    'PerfButterflyRendererMixin.java','PerfMothRendererMixin.java','PerfButterflyModelMixin.java',
+    'PerfButterflyItemRendererMixin.java','PerfMothItemRendererMixin.java','PerfHandbookScreenMixin.java',
+    'PerfHandbookIndexButtonMixin.java','PerfHandbookToastMixin.java',
+    'PerfParticleSpawnerMixin.java','PerfWeatherParticleMixin.java','PerfCustomParticleMixin.java',
+    'PerfSeasonHandlerClientMixin.java','PerfSeasonColorHandlersMixin.java','PerfAmbientBiomeAreaMixin.java',
+})
 if side=='server':
- sources=[s for s in sources if '/client/' not in s.as_posix() and s.name not in ['ItemEntityRendererMixin.java','ItemPickupParticleMixin.java']]
+ sources=[s for s in sources if '/client/' not in s.as_posix() and s.name not in CLIENT_ONLY_MIXINS]
  common=sourceRoot/'dev/sunlit/fishvisuals/SunlitFishVisuals.java';text=common.read_text(encoding='utf8');old='context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,\n                    () -> () -> dev.sunlit.fishvisuals.client.ClientFishVisuals.receive(packet)));'
  assert old in text;text=text.replace(old,'// Presentation packets are never handled on a dedicated server.');generated=BUILD/'generated/dev/sunlit/fishvisuals/SunlitFishVisuals.java';generated.parent.mkdir(parents=True,exist_ok=True);generated.write_text(text,encoding='utf8');sources=[generated if s==common else s for s in sources]
+# Generate side-specific, optional localization targets from the reviewed site list.
+# A class with any GUI calls belongs entirely to the client mixin on the client.
+inlineSites=json.loads((ROOT/'src/main/resources/assets/better_sunlit/inline/rules.json').read_text(encoding='utf8'))['sites']
+# Multi-target pseudo mixins still ask Mixin to resolve every advertised target.
+# Exclude absent/disabled mods before generating the annotation, rather than
+# repeating a failed class lookup whenever another target loads during world join.
+availableTargets=set()
+for dependency in classpath:
+ if dependency.is_file():
+  with zipfile.ZipFile(dependency) as archive:
+   availableTargets.update(n[:-6] for n in archive.namelist() if n.endswith('.class'))
+if side=='client':inlineSites=[s for s in inlineSites if s['class'] in availableTargets]
+clientTargets={s['class'] for s in inlineSites if s['clientOnly']}
+inlineLists={'mixins':['InlineScriptSourceMixin'],'client':[]}
+for client in [False,True]:
+ if client and side=='server':continue
+ for interface in [False,True]:
+  targets=sorted({s['class'] for s in inlineSites if s['isInterface']==interface and (
+    s['class'] in clientTargets if client else
+    s['class'] not in clientTargets if side=='client' else s['serverPresent'] and not s['clientOnly'])})
+  if not targets:continue
+  name='Inline'+('Client' if client else 'Common')+('Interface' if interface else '')+'Mixin'
+  targetText=','.join(json.dumps(t.replace('/','.')) for t in targets)
+  source='package dev.sunlit.fishvisuals.mixin;\nimport org.spongepowered.asm.mixin.*;\n@Pseudo\n@Mixin(targets={'+targetText+'},remap=false,priority=500)\npublic '+('interface ' if interface else 'abstract class ')+name+' {}\n'
+  generated=BUILD/('generated/dev/sunlit/fishvisuals/mixin/'+name+'.java');generated.parent.mkdir(parents=True,exist_ok=True);generated.write_text(source,encoding='utf8');sources.append(generated)
+  inlineLists['client' if client else 'mixins'].append(name)
 compileArgs=['--release','17','-proc:none','-encoding','UTF-8','-classpath',';'.join(str(s) for s in classpath),'-d',str(CLASSES)]+list(map(str,sources))
 argfile=BUILD/'javac.args';argfile.write_text('\n'.join('"'+s.replace('\\','/').replace('"','\\"')+'"' for s in compileArgs),encoding='utf8');subprocess.run([JDK/'javac.exe','@'+str(argfile.resolve())],check=True)
 resources=BUILD/'resources'
 if resources.exists():shutil.rmtree(resources)
 shutil.copytree(ROOT/'src/main/resources',resources)
+inlineConfig=resources/'better_sunlit_inline.mixins.json';inlineData=json.loads(inlineConfig.read_text(encoding='utf8'));inlineData.update(inlineLists);inlineData['priority']=500
+if side=='server':inlineData.pop('client',None)
+inlineConfig.write_text(json.dumps(inlineData,indent=2),encoding='utf8')
+if side=='server':
+ entryConfig=resources/'better_sunlit_entry.mixins.json';entryData=json.loads(entryConfig.read_text(encoding='utf8'));entryData.pop('client',None);entryConfig.write_text(json.dumps(entryData,indent=2),encoding='utf8')
 asset=resources/'assets/better_sunlit';asset.mkdir(parents=True,exist_ok=True)
 maint=BUILD/'maintainer-tools';maint.mkdir(exist_ok=True);subprocess.run([JDK/'javac.exe','--release','17','-d',maint,ROOT/'tools/SignRelease.java'],check=True)
 args.keys.mkdir(parents=True,exist_ok=True);secret=args.keys/(side+'.pk8');pub=ROOT/'keys'/(side+'-public.der');pub.parent.mkdir(exist_ok=True)
@@ -73,13 +114,13 @@ if side=='server':
  mix=resources/'sunlit_fish_visuals.mixins.json';data=json.loads(mix.read_text());data.pop('client',None);mix.write_text(json.dumps(data,indent=2),encoding='utf8')
 jar=BUILD/'better-sunlit.jar'
 with zipfile.ZipFile(jar,'w',zipfile.ZIP_DEFLATED) as z:
- z.writestr('META-INF/MANIFEST.MF','Manifest-Version: 1.0\r\nMixinConfigs: sunlit_fish_visuals.mixins.json\r\n\r\n')
+ z.writestr('META-INF/MANIFEST.MF','Manifest-Version: 1.0\r\nMixinConfigs: sunlit_fish_visuals.mixins.json,\r\n better_sunlit_inline.mixins.json,better_sunlit_entry.mixins.json\r\n\r\n')
  for base in [CLASSES,resources]:
   for f in sorted(base.rglob('*')):
    if f.is_file():z.write(f,f.relative_to(base).as_posix())
 if side=='server':
  with zipfile.ZipFile(jar) as z:
-  assert not any('/client/' in n or 'ItemEntityRendererMixin' in n or 'ItemPickupParticleMixin' in n for n in z.namelist())
+  assert not any('/client/' in n or any(m.replace('.java','.class') in n for m in CLIENT_ONLY_MIXINS) for n in z.namelist())
   for n in z.namelist():
    if n.endswith('.class'):assert b'net/minecraft/client/' not in z.read(n),n
 report={'side':side,'build':args.build,'label':args.label,'size':jar.stat().st_size,'sha256':hashlib.sha256(jar.read_bytes()).hexdigest(),'helperSha256':helperHash};(BUILD/'build-report.json').write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report))

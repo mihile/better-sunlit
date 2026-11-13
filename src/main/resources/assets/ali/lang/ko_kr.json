@@ -1,0 +1,19 @@
+{
+  "aci.util.auto_detected": "자동 감지: %s",
+  "aci.util.missing": "구현되지 않음: %s",
+  "ali.description.quality": "품질: %s",
+  "ali.error.detail_not_available": "세부정보를 사용할 수 없음",
+  "ali.error.modified_item": "동적으로 변경됩니다!",
+  "ali.property.branch.condition": "조건:",
+  "ali.property.branch.criterions": "조건:",
+  "ali.property.branch.entity_types": "개체 유형:",
+  "ali.property.branch.looking_at": "바라보는 대상:",
+  "ali.property.value.equipment_slot": "장비 슬롯: %s",
+  "ali.property.value.loot_table": "전리품 테이블: %s",
+  "ali.property.value.lore": "설명: %s",
+  "ali.property.value.property": "속성: %s",
+  "ali.util.advanced_loot_info.accepts": "사용 가능:",
+  "emi.category.ali.cat_morning_gift": "고양이 아침 선물",
+  "emi.category.ali.piglin_bartering": "피글린 거래",
+  "emi.category.ali.sniffer_digging": "스니퍼 발굴"
+}

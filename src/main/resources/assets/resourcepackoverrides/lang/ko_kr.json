@@ -1,0 +1,11 @@
+{
+  "packAction.copyId.description": "%s 을 눌러 복사하기",
+  "packAction.copyId.success": "복사됨!",
+  "packAction.copyId.title": "팩 ID 복사",
+  "packAction.reloadSettings.description": "%s 을 눌러 새로 고침",
+  "packAction.reloadSettings.success": "새로 고침됨!",
+  "packAction.reloadSettings.title": "설정 새로 고침",
+  "packAction.toggleDebug.description": "%s 을 눌러 디버그 전환",
+  "packAction.toggleDebug.success": "전환됨!",
+  "packAction.toggleDebug.title": "팩 ID 전환"
+}

@@ -1,0 +1,7 @@
+{
+  "config.entity_features.search": "검색...",
+  "config.entity_texture_features.player_skin_editor.cape.optifine": "옵티파인",
+  "config.entity_texture_features.warn.figura.text.1": "피규어",
+  "config.entity_texture_features.property_explanation.resourcepack": "Resourcepacks\n로드된 각 리소스팩 이름을 테스트합니다.\n§aresourcepack.<n>=<resourcepack_list|regex|pattern>",
+  "config.entity_texture_features.property_explanation.usingShaders": "셰이더 사용\nIris 셰이더가 사용 중인지 여부\n§ausingShaders.<n>=<true/false>"
+}

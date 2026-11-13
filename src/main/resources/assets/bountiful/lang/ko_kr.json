@@ -1,0 +1,17 @@
+{
+  "bountiful.entry.shepherd_obj_wool_wildcard": "모든 양털",
+  "bountiful.entry.fletcher_obj_planks": "모든 판자",
+  "bountiful.entry.fletcher_obj_logs": "모든 원목",
+  "bountiful.entry.shepherd_obj_bed_wildcard": "모든 침대",
+  "bountiful.entry.fisherman_obj_any_boat": "모든 보트",
+  "bountiful.entry.mapper_obj_candles": "모든 양초",
+  "bountiful.entry.shepherd_obj_banner_wildcard": "모든 현수막",
+  "bountiful.entry.fisherman_obj_catch_ench_book": "마법에 걸린 책 낚기",
+  "bountiful.entry.cleric_obj_brew_swiftness": "기본 신속의 물약을 만드세요",
+  "bountiful.entry.cleric_obj_cure_zombie_villager": "좀비 주민을 치료하세요",
+  "bountiful.decree.inventor.name": "발명",
+  "bountiful.decree.mason.name": "석공",
+  "bountiful.decree.tinker.name": "기계 제작",
+  "bountiful.bounty.type.experience.levels": "경험치",
+  "bountiful.bounty.type.experience.points": "경험치"
+}

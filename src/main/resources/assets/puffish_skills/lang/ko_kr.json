@@ -1,0 +1,4 @@
+{
+  "command.puffish_skills.experience.get.success": "%3$s의 %2$s 카테고리 경험치는 %1$s입니다",
+  "command.puffish_skills.points.get.success": "%3$s의 %2$s 카테고리 포인트는 %1$s입니다"
+}

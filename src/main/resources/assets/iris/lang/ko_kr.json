@@ -1,0 +1,12 @@
+{
+  "iris.load.failure.shader": "셰이더 팩을 불러오지 못했습니다. 오류를 셰이더 개발자에게 보고해 주세요. ",
+  "iris.load.failure.generic": "Emberlens에서 셰이더를 로드하는 중 문제가 발생했습니다. Emberlens 개발자에게 이 문제를 보고해 주세요. ",
+  "iris.keybind.wireframe": "와이어프레임 (싱글플레이 전용)",
+  "options.iris.shadowInterval": "섀도우 업데이트 간격",
+  "options.iris.shadowInterval.tooltip": "섀도우 패스가 다시 렌더링되는 빈도입니다. 모든 프레임은 가장 정확하고 가장 비쌉니다. 값이 높을수록 많은 프레임에 대해 이전 그림자 맵을 재사용하므로 값비싼 그림자가 있는 셰이더 팩에서 프레임 속도가 많이 높아질 수 있습니다. 그림자가 올라가면 움직이는 물체 뒤와 카메라 뒤에서 그림자가 눈에 띄게 뒤처집니다.",
+  "options.iris.shadowInterval.everyFrame": "모든 프레임",
+  "options.iris.shadowInterval.everyNFrames": "모든 %s 프레임",
+  "options.iris.shadowInterval.sodium_tooltip": "섀도우 패스가 다시 렌더링되는 빈도입니다. 모든 프레임이 가장 정확하고 가장 비쌉니다. 값이 높을수록 많은 프레임에 대해 이전 섀도우 맵을 재사용하므로 값비싼 섀도우가 포함된 팩에서 GPU 작업이 많이 줄어듭니다. 비용은 그림자가 움직이는 물체 뒤와 카메라 뒤에서 눈에 띄게 뒤처진다는 것입니다.",
+  "options.iris.colorSpace": "색 공간",
+  "options.iris.colorSpace.sodium_tooltip": "화면에 적용할 색 공간입니다. 셰이더 팩 위에도 적용됩니다. 잘 모르겠다면 sRGB를 사용하세요."
+}

@@ -1,0 +1,12 @@
+{
+  "create_mechanical_extruder.goggles.recipe_requirement.biome": "생물 군계가 맞지 않음",
+  "create_mechanical_extruder.goggles.recipe_requirement.ingredients": "재료 부족",
+  "create_mechanical_extruder.goggles.recipe_requirement.max_height": "너무 높음",
+  "create_mechanical_extruder.goggles.recipe_requirement.min_height": "너무 낮음",
+  "create_mechanical_extruder.goggles.recipe_requirement.min_speed": "속도가 충분하지 않습니다",
+  "create_mechanical_extruder.goggles.recipe_requirement.output": "출력 공간이 가득 찼거나 호환되지 않음",
+  "create_mechanical_extruder.ponder.extruder.text_5": "성분 조합에 여러 가지 가능한 결과가 있는 경우 필터 슬롯에서 이를 지정할 수 있습니다.",
+  "create_mechanical_extruder.ui.recipe_requirement.max_height": "최대 Y: %s",
+  "create_mechanical_extruder.ui.recipe_requirement.min_height": "최소 Y: %s",
+  "create_mechanical_extruder.ui.recipe_requirement.min_speed": "최저 속도: %s"
+}

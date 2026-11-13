@@ -1,0 +1,18 @@
+{
+  "block.railways.track_twilightforest_minewood": "마인우드 기차 트랙",
+  "block.railways.track_twilightforest_minewood_narrow": "좁은 마인우드 기차 선로",
+  "block.railways.track_twilightforest_minewood_wide": "넓은 마인우드 기차 트랙",
+  "block.railways.track_twilightforest_sortingwood": "Sortingwood 기차 트랙",
+  "block.railways.track_twilightforest_sortingwood_narrow": "좁은 분류목 기차 트랙",
+  "block.railways.track_twilightforest_sortingwood_wide": "와이드 소팅우드 기차 트랙",
+  "item.railways.track_incomplete_tfc_ash": "불완전한 애쉬 트랙",
+  "item.railways.track_incomplete_tfc_ash_narrow": "불완전한 좁은 재 트랙",
+  "item.railways.track_incomplete_tfc_ash_wide": "불완전한 와이드 애쉬 트랙",
+  "item.railways.track_incomplete_twilightforest_minewood": "불완전한 마인우드 트랙",
+  "item.railways.track_incomplete_twilightforest_minewood_narrow": "불완전한 좁은 지뢰밭 트랙",
+  "item.railways.track_incomplete_twilightforest_minewood_wide": "불완전한 넓은 마인우드 트랙",
+  "item.railways.track_incomplete_twilightforest_sortingwood": "불완전한 분류목 트랙",
+  "item.railways.track_incomplete_twilightforest_sortingwood_narrow": "불완전한 좁은 분류목 트랙",
+  "item.railways.track_incomplete_twilightforest_sortingwood_wide": "불완전한 넓은 분류목 트랙",
+  "railways.display_source.coupler.coupling.to": "대상: "
+}

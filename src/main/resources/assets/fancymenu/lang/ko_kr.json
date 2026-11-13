@@ -1,0 +1,14 @@
+{
+  "fancymenu.helper.editor.element.vanilla.deepcustomization.titlescreen.forge.copyright.example.line1": "< Forge 저작권 알림 텍스트 예시 >",
+  "fancymenu.customization.items.text.placeholder": "<빈 텍스트 요소>",
+  "fancymenu.helper.editor.items.features.advanced_sizing.desc": "§x고급 사용자 전용입니다!\n\n요소의 크기를 수동으로\n설정할 수 있습니다.\n\n고급 크기 조정은 자리 표시자를 지원하므로,\n계산기 자리 표시자를 사용하여\n크기를 계산하고, 다른 요소의 크기를\n가져오는 등 다양한 작업을 수행할 수 있습니다.\n\n요소 크기 조절에 유용한 많은\n자리 표시자는 \"GUI\" 및 \"고급(Advanced)\"\n자리 표시자 카테고리에서\n찾을 수 있습니다.\n\n§x고급 크기로 덮어씌워진 축에 대해서는\n§x요소의 크기를 조절할 수\n§x없습니다.",
+  "fancymenu.editor.shortcuts.delete": "델",
+  "fancymenu.editor.actions.blocks.if": "IF (만약 %s 이라면)",
+  "fancymenu.editor.actions.blocks.else_if": "ELSE-IF (그게아니라 %s 이라면)",
+  "fancymenu.editor.actions.blocks.else": "ELSE (나머지 모두)",
+  "fancymenu.elements.widgets.generic.navigatable": "탐색 가능 여부: %s",
+  "fancymenu.elements.music_controller.play_menu_music": "메뉴 음악 재생: %s",
+  "fancymenu.elements.music_controller.play_world_music": "월드 음악 재생: %s",
+  "fancymenu.editor.background.show_overlay_on_custom_background": "커스텀 배경에 어두운 오버레이 표시: %s",
+  "fancymenu.editor.actions.blocks.while": "WHILE (조건이 %s 일동안)"
+}

@@ -1,0 +1,8 @@
+{
+  "text.easy_npc_example.hello.text": "안녕하세요 @initiator, 제 이름은 @npc입니다. 만나서 반가워요!\n\n나에 대해 더 알고 싶으세요?",
+  "text.easy_npc_example.hello.yes_button": "네, 물론이죠.",
+  "text.easy_npc_example.hello.no_button": "아니요, 감사합니다.",
+  "text.easy_npc_example.hello.yes_answer": "나는 번역가입니다. 세상의 언어를 이해하는 데 도움을 줄 수 있습니다.",
+  "text.easy_npc_example.hello.no_answer": "좋습니다. 좋은 하루 보내세요!",
+  "text.easy_npc_example.hello.name": "번역가"
+}

@@ -1,0 +1,17 @@
+{
+  "item.justhammers.destructor_core": "파괴 코어",
+  "item.justhammers.diamond_destructor_hammer": "다이아몬드 파괴 해머",
+  "item.justhammers.diamond_reinforced_hammer": "다이아몬드 강화 해머",
+  "item.justhammers.diamond_reinforced_impact_hammer": "다이아몬드 강화 충격 해머",
+  "item.justhammers.gold_destructor_hammer": "금 파괴 해머",
+  "item.justhammers.gold_reinforced_hammer": "금 강화 해머",
+  "item.justhammers.gold_reinforced_impact_hammer": "금 강화 충격 해머",
+  "item.justhammers.iron_destructor_hammer": "철 파괴 해머",
+  "item.justhammers.iron_reinforced_hammer": "철 강화 해머",
+  "item.justhammers.iron_reinforced_impact_hammer": "철 강화 충격 해머",
+  "item.justhammers.reinforced_core": "강화 코어",
+  "item.justhammers.reinforced_impact_core": "강화 충격 코어",
+  "item.justhammers.stone_destructor_hammer": "돌 파괴 해머",
+  "item.justhammers.stone_reinforced_hammer": "돌 강화 해머",
+  "item.justhammers.stone_reinforced_impact_hammer": "돌 강화 충격 해머"
+}
