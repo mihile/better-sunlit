@@ -1,5 +1,6 @@
 """Build, verify and publish one or both Better Sunlit channels."""
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import argparse
 import datetime
@@ -171,9 +172,35 @@ def choose_release(sides, remote_builds):
 
 
 def build_both(data):
-    for side in SIDES:
-        step(f'{side} 빌드', run, [sys.executable, '-X', 'utf8', 'build.py', '--instance', INSTANCE,
-                                   '--side', side, '--build', data['build'], '--label', data['label']])
+    logs = ROOT / 'build' / 'build-logs'
+    logs.mkdir(parents=True, exist_ok=True)
+
+    def build(side):
+        start = time.monotonic()
+        log = logs / (side + '.log')
+        command = [sys.executable, '-X', 'utf8', 'build.py', '--instance', INSTANCE,
+                   '--side', side, '--build', str(data['build']), '--label', data['label']]
+        with log.open('wb') as output:
+            result = subprocess.run(list(map(str, command)), cwd=ROOT, stdout=output, stderr=subprocess.STDOUT)
+        return side, log, result.returncode, time.monotonic() - start
+
+    workers = min(2, os.cpu_count() or 1)
+    print(f'\n=== 클라이언트·서버 빌드 (동시 {workers}개) ===', flush=True)
+    failures = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for future in as_completed([pool.submit(build, side) for side in SIDES]):
+            side, log, code, duration = future.result()
+            text = log.read_text(encoding='utf8', errors='replace')
+            print(f'=== {side} 빌드 {"실패" if code else "완료"} ({duration:.1f}초) ===', flush=True)
+            if code:
+                print(text, file=sys.stderr, flush=True)
+                failures.append(f'{side} (종료 코드 {code}, 로그: {log})')
+            else:
+                warnings = sum('warning:' in line for line in text.splitlines())
+                if warnings:
+                    print(f'{side} 컴파일 경고 {warnings}건 (자세한 내용: {log})', flush=True)
+    if failures:
+        raise RuntimeError('빌드 실패: ' + ', '.join(failures))
 
 
 def verify_artifacts(data):

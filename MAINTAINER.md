@@ -42,7 +42,7 @@ JEI `TypedItemStack`의 Guava 캐시는 초기 테이블 용량만 32,768로 지
 
 ## 기능 설명과 게시
 
-인스턴스 루트 또는 저장소의 `GITBOTH.BAT` 한 번으로 클라이언트와 서버를 함께 배포할 수 있습니다. 두 JAR을 각각 한 번 빌드하고 전체 검사를 한 번 실행한 뒤, 각 채널을 서명·게시하고 공개 JAR과 피드를 다시 내려받아 검증합니다. `GITCLIENT.BAT`, `GITSERVER.BAT`는 해당 채널만 게시하며 `CLIENT.BAT`는 검사 후 로컬 클라이언트에만 적용합니다. GitHub 게시 배치는 로컬 모드 폴더를 덮어쓰지 않습니다.
+인스턴스 루트 또는 저장소의 `GITBOTH.BAT` 한 번으로 클라이언트와 서버를 함께 배포할 수 있습니다. 두 JAR을 각각 한 번씩 병렬 빌드하고 전체 검사를 한 번 실행한 뒤, 각 채널을 서명·게시하고 공개 JAR과 피드를 다시 내려받아 검증합니다. 빌드별 전체 출력은 `build/build-logs/`에 남깁니다. `GITCLIENT.BAT`, `GITSERVER.BAT`는 해당 채널만 게시하며 `CLIENT.BAT`는 검사 후 로컬 클라이언트에만 적용합니다. GitHub 게시 배치는 로컬 모드 폴더를 덮어쓰지 않습니다.
 
 ```powershell
 python tools/release.py --side both    # 양쪽 채널
