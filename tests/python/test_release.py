@@ -2,6 +2,7 @@
 from pathlib import Path
 from unittest import mock
 import importlib.util
+import contextlib
 import io
 import json
 import subprocess
@@ -17,6 +18,9 @@ spec.loader.exec_module(release)
 publish_spec = importlib.util.spec_from_file_location('better_sunlit_publish', SCRIPT.parent / 'publish.py')
 publish = importlib.util.module_from_spec(publish_spec)
 publish_spec.loader.exec_module(publish)
+test_spec = importlib.util.spec_from_file_location('better_sunlit_test_runner', SCRIPT.parent / 'test.py')
+test_runner = importlib.util.module_from_spec(test_spec)
+test_spec.loader.exec_module(test_runner)
 
 
 class ReleaseGitTests(unittest.TestCase):
@@ -157,6 +161,42 @@ class ReleaseGitTests(unittest.TestCase):
         self.assertEqual(self.git('show', 'origin/client:feed/update.properties'), 'client-old')
         self.assertEqual(self.git('show', 'origin/server:feed/update.properties'), 'server-old')
 
+    def check_single_channel_from_opposite_branch(self, side, initial):
+        self.git('checkout', initial)
+        events = []
+        actual_run = release.run
+
+        def run_stub(command, *, check=True):
+            if str(command[0]) == sys.executable:
+                if 'tools/test.py' in command:
+                    events.append('test')
+                elif 'tools/publish.py' in command and '--prepare-only' in command:
+                    events.append('prepare-' + command[command.index('--side') + 1])
+                else:
+                    self.fail(f'Unexpected command: {command}')
+                return subprocess.CompletedProcess(command, 0)
+            return actual_run(command, check=check)
+
+        def publish_stub(selected, changes):
+            self.assertEqual(self.git('branch', '--show-current'), side)
+            events.append('publish-' + selected)
+
+        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
+             mock.patch.object(release, 'build_both', side_effect=lambda data: events.append('build')), \
+             mock.patch.object(release, 'verify_artifacts'), \
+             mock.patch.object(release, 'run', side_effect=run_stub), \
+             mock.patch.object(release, 'publish_side', side_effect=publish_stub):
+            release.release(side)
+        self.assertEqual(events, ['build', 'test', 'prepare-' + side, 'publish-' + side])
+        self.assertEqual((self.root/'feed/update.properties').read_text(), side + '-old\n')
+        self.assertEqual((self.root/'release-channel.properties').read_text(), 'channel=' + side + '\n')
+
+    def test_client_only_from_server_branch(self):
+        self.check_single_channel_from_opposite_branch('client', 'server')
+
+    def test_server_only_from_client_branch(self):
+        self.check_single_channel_from_opposite_branch('server', 'client')
+
     def test_concurrent_release_lock_is_rejected(self):
         with release.release_lock():
             with self.assertRaisesRegex(RuntimeError, '실행 중'):
@@ -199,6 +239,21 @@ class ReleaseGitTests(unittest.TestCase):
              mock.patch.object(publish.time, 'sleep'):
             with self.assertRaisesRegex(RuntimeError, '공개 피드'):
                 publish.verify_public_feed('client', expected, destination)
+
+
+class ParallelRunnerTests(unittest.TestCase):
+    def test_failure_is_reported_and_individual_logs_are_kept(self):
+        with tempfile.TemporaryDirectory(prefix='better-sunlit-test-runner-') as directory:
+            tasks = [('success', [[sys.executable, '-c', "print('PASS: isolated success')"]]),
+                     ('failure', [[sys.executable, '-c', "import sys; print('expected error'); sys.exit(7)"]])]
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with mock.patch.object(test_runner, 'root', Path(directory)), \
+                 contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                with self.assertRaisesRegex(RuntimeError, 'failure'):
+                    test_runner.run_tests(tasks)
+            self.assertIn('PASS: isolated success', stdout.getvalue())
+            self.assertIn('expected error', stderr.getvalue())
+            self.assertIn('expected error', (Path(directory)/'build/test-logs/failure.log').read_text())
 
 
 if __name__ == '__main__':

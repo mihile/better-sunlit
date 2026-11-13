@@ -20,7 +20,7 @@ python tools/test.py
 
 `tools/test.py`는 설치된 ModernUI를 사용한 글꼴 CPU 테스트도 실행합니다. 제어 문자의 일반·굵은 글씨 폭과 이모지·리소스팩 글꼴의 우선순위를 검사하며 게임이나 그래픽 컨텍스트는 실행하지 않습니다. 실제 툴팁·이모지 화면 확인은 별도 인게임 검증입니다.
 
-`tools/test.py`와 `tools/test_perf_opts.py`는 이미 만들어진 두 JAR을 검사하며 다시 빌드하지 않습니다. 전체 검사 전후에 JAR·업데이트 도우미·빌드 보고서가 그대로인지 확인합니다. 따라서 직접 실행할 때도 먼저 두 채널을 동일한 빌드 번호로 빌드해야 합니다.
+`tools/test.py`와 `tools/test_perf_opts.py`는 이미 만들어진 두 JAR을 검사하며 다시 빌드하지 않습니다. 전체 검사 전후에 JAR·업데이트 도우미·빌드 보고서가 그대로인지 확인합니다. 독립적인 검사는 최대 3개씩 병렬로 실행하고 전체 출력은 `build/test-logs/`에 남깁니다. 따라서 직접 실행할 때도 먼저 두 채널을 동일한 빌드 번호로 빌드해야 합니다.
 
 모드의 한국어 보완 파일은 `src/main/resources/assets/<namespace>/lang/ko_kr.json`에 누적합니다. 로컬 적용 파일은 인스턴스의 `minecraft/kubejs/assets/<namespace>/lang/ko_kr.json`에도 병합합니다. 기존 한국어와 이리듐 등 모드팩 명칭을 덮어쓰지 말고, 같은 키가 다른 namespace에도 있으면 영어 값이 다시 덮어쓰지 않는지 확인합니다. 치환 인자의 의미·순서, 색상 코드, 명령어 예시와 파일명을 보존합니다. 로컬 상세 점검 및 복원 목록은 무시되는 `build/localization-all/`와 `local-backups/`에 남깁니다.
 
