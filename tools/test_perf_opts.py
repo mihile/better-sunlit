@@ -9,11 +9,10 @@ JDK = Path(os.environ.get('JAVA_HOME', 'C:/Program Files/Eclipse Adoptium/jdk-17
 CLIENT_JAR = ROOT / 'build/client/better-sunlit.jar'
 SERVER_JAR = ROOT / 'build/server/better-sunlit.jar'
 
-subprocess.run([sys.executable, '-X', 'utf8', ROOT / 'build.py', '--instance', str(INSTANCE), '--side', 'client'], check=True)
-subprocess.run([sys.executable, '-X', 'utf8', ROOT / 'build.py', '--instance', str(INSTANCE), '--side', 'server'], check=True)
-
-assert CLIENT_JAR.is_file(), f'Missing {CLIENT_JAR}'
-assert SERVER_JAR.is_file(), f'Missing {SERVER_JAR}'
+# Test the exact artifacts supplied by the caller. Rebuilding here used to
+# overwrite release JARs with build.py's default build number before signing.
+assert CLIENT_JAR.is_file(), f'Missing {CLIENT_JAR}; build the client first'
+assert SERVER_JAR.is_file(), f'Missing {SERVER_JAR}; build the server first'
 
 # 1. Verify mixins.json consistency & strict client/server separation in built JARs.
 mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
