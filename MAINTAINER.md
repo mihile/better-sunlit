@@ -20,6 +20,8 @@ python tools/test.py
 
 `tools/test.py`는 설치된 ModernUI를 사용한 글꼴 CPU 테스트도 실행합니다. 제어 문자의 일반·굵은 글씨 폭과 이모지·리소스팩 글꼴의 우선순위를 검사하며 게임이나 그래픽 컨텍스트는 실행하지 않습니다. 실제 툴팁·이모지 화면 확인은 별도 인게임 검증입니다.
 
+`tools/test.py`와 `tools/test_perf_opts.py`는 이미 만들어진 두 JAR을 검사하며 다시 빌드하지 않습니다. 전체 검사 전후에 JAR·업데이트 도우미·빌드 보고서가 그대로인지 확인합니다. 따라서 직접 실행할 때도 먼저 두 채널을 동일한 빌드 번호로 빌드해야 합니다.
+
 모드의 한국어 보완 파일은 `src/main/resources/assets/<namespace>/lang/ko_kr.json`에 누적합니다. 로컬 적용 파일은 인스턴스의 `minecraft/kubejs/assets/<namespace>/lang/ko_kr.json`에도 병합합니다. 기존 한국어와 이리듐 등 모드팩 명칭을 덮어쓰지 말고, 같은 키가 다른 namespace에도 있으면 영어 값이 다시 덮어쓰지 않는지 확인합니다. 치환 인자의 의미·순서, 색상 코드, 명령어 예시와 파일명을 보존합니다. 로컬 상세 점검 및 복원 목록은 무시되는 `build/localization-all/`와 `local-backups/`에 남깁니다.
 
 ## 코드 및 스크립트의 한국어 보완
@@ -39,6 +41,17 @@ JEI `TypedItemStack`의 Guava 캐시는 초기 테이블 용량만 32,768로 지
 클라이언트 빌드에서 선택적 번역 Mixin의 대상 목록을 현재 클래스패스에 존재하는 클래스로 제한합니다. 비활성화한 모드의 클래스가 다중 대상 Mixin에 남아 클래스 로딩 때마다 조회 실패를 반복하지 않게 합니다. 모드 재활성화 후 해당 하드코딩 문구 보완까지 복원하려면 로컬 빌드를 다시 실행합니다.
 
 ## 기능 설명과 게시
+
+인스턴스 루트 또는 저장소의 `GITBOTH.BAT` 한 번으로 클라이언트와 서버를 함께 배포할 수 있습니다. 두 JAR을 각각 한 번 빌드하고 전체 검사를 한 번 실행한 뒤, 각 채널을 서명·게시하고 공개 JAR과 피드를 다시 내려받아 검증합니다. `GITCLIENT.BAT`, `GITSERVER.BAT`는 해당 채널만 게시하며 `CLIENT.BAT`는 검사 후 로컬 클라이언트에만 적용합니다. GitHub 게시 배치는 로컬 모드 폴더를 덮어쓰지 않습니다.
+
+```powershell
+python tools/release.py --side both    # 양쪽 채널
+python tools/release.py --side client  # 클라이언트만
+python tools/release.py --side server  # 서버만
+python tools/release.py --side both --prepare-only  # 로컬 커밋·동기화·빌드·검증만, push/게시 안 함
+```
+
+배포 도구는 작업 변경을 로컬 커밋하고 원격 변경을 확인합니다. 양쪽 공통 파일은 Git 이력을 사용해 병합하고, 각 브랜치의 피드와 채널 설정은 따로 유지합니다. 공통 파일에 충돌이 있으면 덮어쓰지 않고 중단합니다. 빌드·전체 검사·양쪽 서명 사전 검증이 끝나기 전에는 소스나 릴리스를 push하지 않습니다. 동시에 두 배치를 실행하면 나중에 실행한 쪽은 중단됩니다. 한 채널 게시 후 다른 채널에서 실패하면 완료된 채널을 표시하므로 오류를 고친 뒤 다시 실행하세요.
 
 `releases/<label>.json`의 `features`에 짧은 `title`과 펼쳤을 때 보이는 `detail`을 적습니다. 클라이언트 UI와 GitHub 릴리스가 이 설명을 사용합니다. 원래 기능을 유지한 누적 빌드로 만들고 빌드 번호는 기존 공개 배포보다 증가시킵니다. 공개 자료에는 로그·힙 덤프·JFR·사용자 설정·인증 정보·개인 키를 넣지 않습니다.
 
