@@ -1,0 +1,46 @@
+{
+  "c5d797f402765bd6a551e6d319f26f3b90e5f1714214bbc36d94754763c6f63e": {
+    "file": "startup_scripts/powerfulMachines/villagerHome.js",
+    "edits": [
+      {
+        "start": 370,
+        "end": 439,
+        "before": "\"Brings the invited villager to its housing and sets its home point.\"",
+        "after": "Text.translatable(\"better_sunlit.script.villager_home\")"
+      }
+    ]
+  },
+  "cd9ae7cc1196db502385409c40d3a49ac8990e2a1d29597bcf15e86c402e8109": {
+    "file": "server_scripts/itemEvents/cancelItemEvents.js",
+    "edits": [
+      {
+        "start": 1507,
+        "end": 1523,
+        "before": "\"Don't do that.\"",
+        "after": "Text.translatable(\"better_sunlit.script.cancel_action\")"
+      }
+    ]
+  },
+  "be94b1349dd3e9c0ae7ff58726115c4f04ab396604815b12d64d333bcd5549d8": {
+    "file": "server_scripts/npcs/npcInvite.js",
+    "edits": [
+      {
+        "start": 1010,
+        "end": 1045,
+        "before": "\"Something went wrong! Tell Chakyl\"",
+        "after": "Text.translatable(\"better_sunlit.script.invite_error\")"
+      }
+    ]
+  },
+  "6f716e766d289ffda55747adf022f83a8daff0f4df0a0d0ede654d2f14b906f6": {
+    "file": "server_scripts/npcs/villagerHomeMechanics.js",
+    "edits": [
+      {
+        "start": 5361,
+        "end": 5442,
+        "before": "\"Unbound villager to home! If the villager still exists, run /easy_npc delete @e\"",
+        "after": "Text.translatable(\"better_sunlit.script.home_unbound\")"
+      }
+    ]
+  }
+}

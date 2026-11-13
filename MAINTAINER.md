@@ -18,6 +18,26 @@ python tools/test.py
 
 출력은 `build/<side>/better-sunlit.jar`입니다. `--java-home`으로 JDK를 지정할 수 있습니다. 서명 키는 기본적으로 사용자 홈의 `.codex/secrets/better-sunlit/<side>.pk8`에 만들며 공개 키만 `keys/`에 보관합니다. 공개 키가 있는데 개인 키가 없어졌다면 새 키를 만들지 말고 원래 키를 복구하세요.
 
+`tools/test.py`는 설치된 ModernUI를 사용한 글꼴 CPU 테스트도 실행합니다. 제어 문자의 일반·굵은 글씨 폭과 이모지·리소스팩 글꼴의 우선순위를 검사하며 게임이나 그래픽 컨텍스트는 실행하지 않습니다. 실제 툴팁·이모지 화면 확인은 별도 인게임 검증입니다.
+
+모드의 한국어 보완 파일은 `src/main/resources/assets/<namespace>/lang/ko_kr.json`에 누적합니다. 로컬 적용 파일은 인스턴스의 `minecraft/kubejs/assets/<namespace>/lang/ko_kr.json`에도 병합합니다. 기존 한국어와 이리듐 등 모드팩 명칭을 덮어쓰지 말고, 같은 키가 다른 namespace에도 있으면 영어 값이 다시 덮어쓰지 않는지 확인합니다. 치환 인자의 의미·순서, 색상 코드, 명령어 예시와 파일명을 보존합니다. 로컬 상세 점검 및 복원 목록은 무시되는 `build/localization-all/`와 `local-backups/`에 남깁니다.
+
+## 코드 및 스크립트의 한국어 보완
+
+코드에 직접 적힌 문구는 `assets/better_sunlit/inline/rules.json`의 검토된 호출 위치에서만 번역 컴포넌트로 바꿉니다. 메서드 명령어 지문이 달라지면 원문을 유지합니다. 다른 모드가 주입한 문구는 원본 Mixin 클래스 해시와 병합된 메서드의 텍스트 지문도 검사합니다. 별도 선택적 Mixin 설정을 사용하며 기존 낚시·글꼴 Mixin의 필수 적용 규칙은 유지합니다. 영어 fallback을 포함하여 서버의 `getString()` 결과를 보존합니다. 임의 채팅·사용자 입력에는 전역 치환을 하지 않습니다.
+
+KubeJS의 네 안내문은 `inline/scripts.json`의 전체 소스 해시와 문자열 범위가 맞을 때만 메모리에서 `Text.translatable`로 바꿉니다. 디스크의 스크립트 로직은 수정하지 않습니다. 외부 Patchouli 도감 보완 원본은 `localization/pack-files/`에 보관합니다. `python tools/apply_localization.py --instance <경로>`는 한국어 자산과 해당 도감 파일을 독립 백업한 뒤 로컬에 병합합니다. 게임이 종료된 상태에서 실행하세요.
+
+`tools/test_inline_localization.py`는 실제 설치된 클라이언트·서버 클래스에 대한 변환, 스택 검증, 변경된 버전의 적용 차단, 사용자 인자·서버 영어 fallback 보존, 언어 전환 및 스크립트 지문을 검사합니다. Forge·게임·서버·그래픽 컨텍스트를 실행하지 않으므로 실제 화면 검증과 구분합니다.
+
+## 월드 진입 시 반복 계산 보완
+
+`better_sunlit_entry.mixins.json`은 JEI 15.20.0.129와 SuperMartijn642 Core Lib 1.1.19의 검토된 클래스 SHA-256이 일치할 때만 클라이언트에서 적용합니다. JEI의 `ItemStackListFactory.create` 한 번을 실행하는 동안에만 CoreLib의 기본 아이템 종류 후보를 캐시합니다. 아이템 레지스트리가 잠겨 있을 때만 사용하며, 기존 탭별 표시 조건과 순서는 그대로 평가합니다. 스레드별 범위는 정상 반환·예외·중첩 호출 모두에서 해제합니다. 레시피 등록을 다른 스레드로 옮기거나 생략하지 않습니다.
+
+JEI `TypedItemStack`의 Guava 캐시는 초기 테이블 용량만 32,768로 지정합니다. 기존 로더, 동시성 1, 마지막 접근 후 1초 만료 규칙은 유지합니다. 언어·리소스·레시피 목록을 월드 간에 캐시하지 않습니다. `tools/test_world_entry.py`가 실제 대상 바이너리, 필터의 순서·범위·스레드 격리, 예외 후 정리와 Guava 만료 동작을 검사합니다. 합성 성능 비교는 인게임 진입 시간 개선 수치가 아닙니다.
+
+클라이언트 빌드에서 선택적 번역 Mixin의 대상 목록을 현재 클래스패스에 존재하는 클래스로 제한합니다. 비활성화한 모드의 클래스가 다중 대상 Mixin에 남아 클래스 로딩 때마다 조회 실패를 반복하지 않게 합니다. 모드 재활성화 후 해당 하드코딩 문구 보완까지 복원하려면 로컬 빌드를 다시 실행합니다.
+
 ## 기능 설명과 게시
 
 `releases/<label>.json`의 `features`에 짧은 `title`과 펼쳤을 때 보이는 `detail`을 적습니다. 클라이언트 UI와 GitHub 릴리스가 이 설명을 사용합니다. 원래 기능을 유지한 누적 빌드로 만들고 빌드 번호는 기존 공개 배포보다 증가시킵니다. 공개 자료에는 로그·힙 덤프·JFR·사용자 설정·인증 정보·개인 키를 넣지 않습니다.

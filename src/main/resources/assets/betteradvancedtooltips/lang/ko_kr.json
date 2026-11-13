@@ -1,0 +1,9 @@
+{
+  "betteradvancedtooltips.configuration.remove_creative_tab_tooltip": "크리에이티브 탭 툴팁 숨기기",
+  "betteradvancedtooltips.configuration.remove_component_count_tooltip": "구성 요소 개수 툴팁 숨기기",
+  "betteradvancedtooltips.configuration.fuel_tooltip": "연료 툴팁",
+  "betteradvancedtooltips.configuration.tag_tooltip": "태그 툴팁",
+  "betteradvancedtooltips.configuration.component_tooltip": "구성 요소 툴팁",
+  "key.betteradvancedtooltips.view_nbt": "NBT 데이터 표시",
+  "key.betteradvancedtooltips.view_tags": "태그와 정보 표시"
+}

@@ -1,0 +1,38 @@
+{
+  "description": "Supplemental Korean translations for installed Sunlit Valley mods. Existing pack translations are preserved.",
+  "date": "2026-11-12",
+  "upstream": [
+    {
+      "repo": "MisterJulsen/Create-Train-Navigator",
+      "sha": "c5a1df150fb9bafc9289f6da3ea4d85737da35be",
+      "url": "https://github.com/MisterJulsen/Create-Train-Navigator/tree/c5a1df150fb9bafc9289f6da3ea4d85737da35be"
+    },
+    {
+      "repo": "VazkiiMods/Quark",
+      "sha": "e914d2989e68564a2132c95f2eab45751b3438a9",
+      "url": "https://github.com/VazkiiMods/Quark/tree/e914d2989e68564a2132c95f2eab45751b3438a9"
+    },
+    {
+      "repo": "Creators-of-Create/Create",
+      "sha": "4148fd8d5b05c85d88947edc00fb495a5074f57d",
+      "url": "https://github.com/Creators-of-Create/Create/tree/4148fd8d5b05c85d88947edc00fb495a5074f57d"
+    },
+    {
+      "repo": "VazkiiMods/Botania",
+      "sha": "0c06dcf7ae9555d52885f913ecd769ceb94fa823",
+      "url": "https://github.com/VazkiiMods/Botania/tree/0c06dcf7ae9555d52885f913ecd769ceb94fa823"
+    }
+  ],
+  "other_sources": [
+    "Installed mod language assets",
+    "Existing local Korean translation assets with identical English source text",
+    "Exact phrase matches from the current pack"
+  ],
+  "new_text": "Translation drafts were reviewed for gaming terminology, format arguments, control codes, technical examples and duplicate namespace keys. In-game visual review is separate.",
+  "coverage": {
+    "supplemented": 5167,
+    "recovered_central_kitchen": 14,
+    "excluded": "Names, credits, units, key combinations, Roman numerals, identifiers and translator metadata"
+  },
+  "license_note": "Upstream translations remain subject to their respective projects' licenses."
+}

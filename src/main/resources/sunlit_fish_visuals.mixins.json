@@ -4,6 +4,6 @@
   "package": "dev.sunlit.fishvisuals.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": ["StardewRewardMixin", "ItemEntityMixin"],
-  "client": ["ItemEntityRendererMixin", "ItemPickupParticleMixin"],
+  "client": ["ItemEntityRendererMixin", "ItemPickupParticleMixin", "XpToastMixin", "DisplayInfoMixin", "FontSetMixin", "StandardFontSetMixin"],
   "injectors": {"defaultRequire": 1}
 }

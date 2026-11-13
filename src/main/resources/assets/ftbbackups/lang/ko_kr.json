@@ -1,0 +1,5 @@
+{
+  "ftbbackups2.backup.starting": "서버 백업 시작",
+  "ftbbackups2.backup.failed": "백업을 생성하지 못했습니다.",
+  "ftbbackups2.backup.finished": "백업 생성 완료"
+}

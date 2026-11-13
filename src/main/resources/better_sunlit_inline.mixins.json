@@ -1,0 +1,10 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.sunlit.fishvisuals.mixin",
+  "plugin": "dev.sunlit.bettersunlit.inline.InlineMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["InlineCommonMixin", "InlineScriptSourceMixin"],
+  "client": ["InlineClientMixin"],
+  "injectors": {"defaultRequire": 1}
+}
