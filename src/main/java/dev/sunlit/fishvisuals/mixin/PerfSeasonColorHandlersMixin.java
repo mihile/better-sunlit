@@ -6,12 +6,12 @@ import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.biome.Biome;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import sereneseasons.season.SeasonColorHandlers;
 
 @Pseudo
@@ -35,13 +35,10 @@ public abstract class PerfSeasonColorHandlersMixin {
         SeasonColorPerf.onOverrideRegistered();
     }
 
-    @Inject(method = "resolveColors(Lsereneseasons/season/SeasonColorHandlers$ResolverType;Lnet/minecraft/world/level/biome/Biome;DD)I",
-            at = @At("HEAD"), cancellable = true, require = 1, remap = false)
-    private static void sunlit$resolveColorsFast(SeasonColorHandlers.ResolverType type, Biome biome,
-                                                 double x, double z,
-                                                 CallbackInfoReturnable<Integer> cir) {
-        cir.setReturnValue(SeasonColorPerf.resolveColors(
+    @Overwrite(remap = false)
+    private static int resolveColors(SeasonColorHandlers.ResolverType type, Biome biome, double x, double z) {
+        return SeasonColorPerf.resolveColors(
                 type, biome, x, z,
-                originalGrassColorResolver, originalFoliageColorResolver, resolverOverrides));
+                originalGrassColorResolver, originalFoliageColorResolver, resolverOverrides);
     }
 }

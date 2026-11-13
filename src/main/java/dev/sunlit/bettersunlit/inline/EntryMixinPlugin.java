@@ -30,7 +30,12 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("sereneseasons.season.SeasonHooks","8490b38f943761329edbd05d6bd2a442b96b8e70bb55dab5e024f0c36db6582f"),
         Map.entry("sereneseasons.season.SeasonColorHandlers","c9e3c63e3f59b1fee2accacd315202799920f703397b00fad9e1af282c61ea1a"),
         Map.entry("sereneseasons.util.SeasonColorUtil","6947644acf68df0def5f1bb93818120d50dfe84410503e37dfb73a18b24812cc"),
-        Map.entry("team.creative.ambientsounds.environment.BiomeEnvironment$BiomeArea","7b65c18cc21181edc85049855cc918497db466ba3115e0ec9896f7a879e7aa16"));
+        Map.entry("team.creative.ambientsounds.environment.BiomeEnvironment$BiomeArea","7b65c18cc21181edc85049855cc918497db466ba3115e0ec9896f7a879e7aa16"),
+        Map.entry("net.irisshaders.iris.Iris","f608dc588a5e4777c6d51c8f3f3d1ac1c60356dfca2565df1a1e26190fe278af"),
+        Map.entry("pigcart.particlerain.ParticleRain","93fcfbc14cb40d37ab95120aa1aa81a61abb000dfde524388ad06fc76c8a4867"),
+        Map.entry("pigcart.particlerain.WindManager","a34806f8de69a5fe985ec0cedd162b5397d956631e185bb4f00587e5c6ff6f1c"),
+        Map.entry("team.creative.ambientsounds.environment.pocket.AirPocketScanner","4a58a866bcbfffe54bb8a6b6db04dcfaf5052ee796cc705d6eea1329e23c4787"),
+        Map.entry("mezz.jei.common.config.sorting.SortingConfig","b0f856dc16f6af095200ec8c3ce79aa44045ab730b35c81a1dc403669f11b171"));
     private final Map<String,Boolean> checked=new HashMap<>();
     public boolean matches(String name) {
         return checked.computeIfAbsent(name,n->{
@@ -52,7 +57,11 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  "PerfHandbookScreenMixin", "PerfHandbookIndexButtonMixin", "PerfHandbookToastMixin",
                  "PerfParticleSpawnerMixin", "PerfWeatherParticleMixin", "PerfSeasonsConfigMixin",
                  "PerfSeasonHandlerMixin", "PerfSeasonHandlerClientMixin", "PerfSeasonHooksMixin",
-                 "PerfAmbientBiomeAreaMixin" -> matches(target);
+                 "PerfSeasonColorUtilMixin", "PerfAmbientBiomeAreaMixin",
+                 "PerfAmbientAirPocketScannerMixin", "PerfIrisDimensionMixin",
+                 "PerfJeiSortingConfigMixin" -> matches(target);
+            case "PerfWindManagerMixin" ->
+                 matches(target)&&matches("pigcart.particlerain.ParticleRain");
             case "EntryJeiIngredientScopeMixin", "EntryCoreLibCandidatesMixin" ->
                  matches("com.supermartijn642.core.CoreLib")&&matches("mezz.jei.library.plugins.vanilla.VanillaPlugin")&&matches("mezz.jei.library.plugins.vanilla.ingredients.ItemStackListFactory");
             case "PerfButterflyRendererMixin", "PerfMothRendererMixin" ->

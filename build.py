@@ -44,8 +44,10 @@ CLIENT_ONLY_MIXINS.update({
     'PerfButterflyRendererMixin.java','PerfMothRendererMixin.java','PerfButterflyModelMixin.java',
     'PerfButterflyItemRendererMixin.java','PerfMothItemRendererMixin.java','PerfHandbookScreenMixin.java',
     'PerfHandbookIndexButtonMixin.java','PerfHandbookToastMixin.java',
-    'PerfParticleSpawnerMixin.java','PerfWeatherParticleMixin.java','PerfCustomParticleMixin.java',
-    'PerfSeasonHandlerClientMixin.java','PerfSeasonColorHandlersMixin.java','PerfAmbientBiomeAreaMixin.java',
+    'PerfParticleSpawnerMixin.java','PerfWeatherParticleMixin.java','PerfCustomParticleMixin.java','PerfWindManagerMixin.java',
+    'PerfSeasonHandlerClientMixin.java','PerfSeasonColorHandlersMixin.java','PerfSeasonColorUtilMixin.java',
+    'PerfAmbientBiomeAreaMixin.java','PerfAmbientAirPocketScannerMixin.java',
+    'PerfIrisDimensionMixin.java','PerfJeiSortingConfigMixin.java',
 })
 if side=='server':
  sources=[s for s in sources if '/client/' not in s.as_posix() and s.name not in CLIENT_ONLY_MIXINS]

@@ -1,5 +1,6 @@
 package dev.sunlit.bettersunlit.client;
 
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
@@ -11,11 +12,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
- * Allocation-free biome matching helper for AmbientSounds' {@code BiomeArea.checkBiome}.
+ * Allocation-free biome matching and direction-table helper for AmbientSounds'
+ * {@code BiomeArea.checkBiome} and {@code AirPocketScanner.scan}.
  * Preserves original substring-wildcard semantics {@code ".*" + def.replace("*", ".*") + ".*"}
  * verified from AmbientSounds bytecode without per-call Pattern compilation or string concatenation.
  */
 public final class AmbientSoundsClientPerf {
+    public static final Direction[] DIRECTIONS = Direction.values();
     private static final int MAX_LOC_CACHE = 4096;
     private static final int MAX_RULE_CACHE = 4096;
     private static final String[] EMPTY_PARTS = new String[0];
