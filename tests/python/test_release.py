@@ -255,6 +255,23 @@ class ParallelRunnerTests(unittest.TestCase):
             self.assertIn('expected error', stderr.getvalue())
             self.assertIn('expected error', (Path(directory)/'build/test-logs/failure.log').read_text())
 
+    def test_build_failure_is_reported_after_both_builds_finish(self):
+        with tempfile.TemporaryDirectory(prefix='better-sunlit-build-runner-') as directory:
+            def fake_run(command, cwd, stdout, stderr):
+                side = command[command.index('--side') + 1]
+                stdout.write((side + ' build log').encode('utf8'))
+                return subprocess.CompletedProcess(command, 17 if side == 'server' else 0)
+
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with mock.patch.object(release, 'ROOT', Path(directory)), \
+                 mock.patch.object(release.subprocess, 'run', side_effect=fake_run), \
+                 contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                with self.assertRaisesRegex(RuntimeError, 'server'):
+                    release.build_both({'build': 2026111401, 'label': '2026.11.14.1'})
+            self.assertIn('server build log', stderr.getvalue())
+            self.assertTrue((Path(directory)/'build/build-logs/client.log').is_file())
+            self.assertTrue((Path(directory)/'build/build-logs/server.log').is_file())
+
 
 if __name__ == '__main__':
     unittest.main()
