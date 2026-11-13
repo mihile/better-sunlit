@@ -1,0 +1,13 @@
+{
+  "energy_bar.polylib.energy_storage": "에너지 저장 장치",
+  "energy_bar.polylib.capacity": "용량:",
+  "energy_bar.polylib.stored": "저장됨:",
+  "fluid_tank.polylib.fluid_storage": "유체 저장",
+  "fluid_tank.polylib.capacity": "용량:",
+  "fluid_tank.polylib.stored": "저장됨:",
+  "fluid_tank.polylib.contains": "는 다음을 포함합니다:",
+  "rs_mode.polylib.active_high": "레드스톤 신호로 활성",
+  "rs_mode.polylib.active_low": "레드스톤 신호 없이 활성",
+  "rs_mode.polylib.always_active": "항상 활성",
+  "rs_mode.polylib.never_active": "활성화되지 않음"
+}

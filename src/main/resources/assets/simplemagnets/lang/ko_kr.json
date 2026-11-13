@@ -1,0 +1,5 @@
+{
+  "simplemagnets.gui.demagnetization_coil.show_range": "하이라이트 영역: %s",
+  "simplemagnets.gui.demagnetization_coil.show_range.on": "참",
+  "simplemagnets.gui.demagnetization_coil.show_range.off": "거짓"
+}

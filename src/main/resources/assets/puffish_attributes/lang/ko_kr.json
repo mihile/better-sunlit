@@ -1,0 +1,19 @@
+{
+  "attribute.puffish_attributes.magic_damage": "마법 피해",
+  "attribute.puffish_attributes.magic_resistance": "마법 저항",
+  "attribute.puffish_attributes.melee_resistance": "근접 피해 저항",
+  "attribute.puffish_attributes.ranged_resistance": "원거리 피해 저항",
+  "attribute.puffish_attributes.armor_shred": "갑옷 약화",
+  "attribute.puffish_attributes.toughness_shred": "방어 강도 약화",
+  "attribute.puffish_attributes.protection_shred": "보호 약화",
+  "attribute.puffish_attributes.resistance_shred": "저항 약화",
+  "attribute.puffish_attributes.magic_resistance_shred": "마법 저항 약화",
+  "attribute.puffish_attributes.melee_resistance_shred": "근접 피해 저항 약화",
+  "attribute.puffish_attributes.ranged_resistance_shred": "원거리 피해 저항 약화",
+  "attribute.puffish_attributes.natural_regeneration": "자연 회복",
+  "attribute.puffish_attributes.stealth": "은신",
+  "attribute.puffish_attributes.life_steal": "생명력 흡수",
+  "attribute.puffish_attributes.fall_reduction": "낙하 피해 감소",
+  "attribute.puffish_attributes.bow_projectile_speed": "활 투사체 속도",
+  "attribute.puffish_attributes.crossbow_projectile_speed": "쇠뇌 투사체 속도"
+}

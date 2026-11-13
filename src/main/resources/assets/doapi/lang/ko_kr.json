@@ -1,0 +1,23 @@
+{
+  "block.doapi.standard": "완성주의자 현수막",
+  "block.doapi.wall_standard": "완성주의자 벽 현수막",
+  "sound.doapi.cabinet_close": "캐비닛 닫는 소리",
+  "sound.doapi.cabinet_open": "캐비닛 여는 소리",
+  "sound.doapi.drawer_close": "서랍 닫는 소리",
+  "sound.doapi.drawer_open": "서랍 여는 소리",
+  "sound.doapi.cake_cut": "케이크 자르는 소리",
+  "sound.doapi.typewriter": "타자기 타이핑하는 소리",
+  "sound.doapi.dinner_bell": "저녁 식사 종 울리는 소리",
+  "sound.doapi.brewstation_ambient": "양조기 웅웅거리는 소리",
+  "sound.doapi.brewstation_oven": "오븐 타닥거리는 소리",
+  "sound.doapi.brewstation_timer": "타이머 째깍거리는 소리",
+  "sound.doapi.brewstation_kettle": "거품 터지는 소리",
+  "sound.doapi.brewstation_whistle": "휘파람 부는 소리",
+  "sound.doapi.breath": "숨소리",
+  "sound.doapi.beer_elemental_death": "술의 정령 죽는 소리",
+  "sound.doapi.beer_elemental_ambient": "술의 정령 주변 소리",
+  "sound.doapi.beer_elemental_hurt": "술의 정령 다치는 소리",
+  "sound.doapi.beer_elemental_attack": "술의 정령 공격하는 소리",
+  "sound.doapi.timer_ticking": "타이머 째깍거리는 소리",
+  "pack.source.builtinMod": "내장됨: %s"
+}

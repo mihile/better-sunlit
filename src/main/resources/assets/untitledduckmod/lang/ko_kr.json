@@ -1,0 +1,10 @@
+{
+  "untitledduckmod.config.enable_force_eat": "강제 먹기 활성화",
+  "untitledduckmod.config.force_eat_random_min_tick": "먹이 자동 섭취 최소 대기시간 (틱)",
+  "untitledduckmod.config.force_eat_random_max_tick": "먹이 자동 섭취 최대 대기시간 (틱)",
+  "untitledduckmod.config.enable_force_eat.tooltip": "오리/거위 자동 강제 먹기 활성화/비활성화",
+  "untitledduckmod.config.force_eat_random_min_tick.tooltip": "오리나 거위가 들고 있는 먹이를 자동으로 먹기까지 기다릴 최소 틱 수입니다.",
+  "untitledduckmod.config.force_eat_random_max_tick.tooltip": "오리나 거위가 들고 있는 먹이를 자동으로 먹기까지 기다릴 최대 틱 수입니다.",
+  "untitledduckmod.jade.nextEat": "다음 자동 먹기: %s",
+  "config.jade.plugin_untitledduckmod.next_eat": "다음 자동 식사 시간"
+}

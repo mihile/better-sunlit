@@ -1,0 +1,7 @@
+{
+  "config.moreoverlays.lightoverlay.spawn_numbers": "번호 오버레이 사용",
+  "config.moreoverlays.lightoverlay.update_interval_frames": "업데이트 간격(프레임)",
+  "config.moreoverlays.rendersettings.chunk_line_thick": "청크: 두꺼운 선",
+  "config.moreoverlays.rendersettings.spawn_number_scale": "생성: 숫자 크기",
+  "config.moreoverlays.rendersettings.spawn_safe_color": "생성: 안전한 색상"
+}

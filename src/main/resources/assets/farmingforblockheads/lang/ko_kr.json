@@ -1,0 +1,18 @@
+{
+  "config.farmingforblockheads.merchantNames": "판매자 이름",
+  "config.farmingforblockheads.merchantNames.tooltip": "판매자가 가질 수 있는 이름 목록입니다.",
+  "config.farmingforblockheads.feedingTroughRange": "먹이통 범위",
+  "config.farmingforblockheads.feedingTroughRange.tooltip": "동물 내 범위는 먹이통을 통해 먹이를 줄 수 있습니다.",
+  "config.farmingforblockheads.feedingTroughMaxAnimals": "먹이통 최대 동물",
+  "config.farmingforblockheads.feedingTroughMaxAnimals.tooltip": "먹이통이 먹이를 멈출 때까지의 최대 동물 수(종류별)입니다.",
+  "config.farmingforblockheads.chickenNestRange": "닭 둥지 범위",
+  "config.farmingforblockheads.chickenNestRange.tooltip": "닭 둥지가 낳은 알을 집어 올리는 범위.",
+  "config.farmingforblockheads.fertilizerBonusCropChance": "녹색 비료 보너스 작물 확률",
+  "config.farmingforblockheads.fertilizerBonusCropChance.tooltip": "녹색비료 사용시 확률로 보너스 작물을 얻을 수 있습니다.",
+  "config.farmingforblockheads.fertilizerBonusGrowthChance": "붉은 비료 보너스 성장 확률",
+  "config.farmingforblockheads.fertilizerBonusGrowthChance.tooltip": "붉은 비료 사용 시 확률로 보너스 성장을 얻을 수 있습니다.",
+  "config.farmingforblockheads.fertilizerRegressionChance": "비료 회귀 확률",
+  "config.farmingforblockheads.fertilizerRegressionChance.tooltip": "비옥한 농지가 일반 농지로 돌아갈 확률(제공된 보너스당)",
+  "config.farmingforblockheads.treatMerchantsLikeBabies": "상인을 아기처럼 대하십시오",
+  "config.farmingforblockheads.treatMerchantsLikeBabies.tooltip": "true인 경우 상인은 아기(기술적 수준에서만)로 간주되며 상인 사망 전리품(예: 혈액)을 기반으로 악용을 해결할 수 있습니다."
+}

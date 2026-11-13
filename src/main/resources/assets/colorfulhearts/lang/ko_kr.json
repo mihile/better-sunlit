@@ -1,0 +1,18 @@
+{
+  "colorfulhearts.screen.configuration.colors.category": "색상",
+  "colorfulhearts.screen.configuration.tweaks.category": "개조",
+  "colorfulhearts.screen.health.title": "건강 색상",
+  "colorfulhearts.screen.absorption.title": "흡수 체력 색상",
+  "colorfulhearts.options.button.health_colors": "건강",
+  "colorfulhearts.options.button.absorption_colors": "흡수",
+  "colorfulhearts.options.button.absorption_over_health.false": "흡수 체력: 따로 표시",
+  "colorfulhearts.options.button.absorption_over_health.true": "흡수 체력: 일반 체력 위에 표시",
+  "colorfulhearts.options.button.hearttype.normal": "일반",
+  "colorfulhearts.options.button.hearttype.poisoned": "중독됨",
+  "colorfulhearts.options.button.hearttype.withered": "시든",
+  "colorfulhearts.options.button.hearttype.frozen": "언",
+  "colorfulhearts.options.button.confirmsave": "저장하고 나가기",
+  "colorfulhearts.options.button.cancel": "취소",
+  "colorfulhearts.options.button.vanillaheart.true": "기본 하트: 켜짐",
+  "colorfulhearts.options.button.vanillaheart.false": "기본 하트: 꺼짐"
+}

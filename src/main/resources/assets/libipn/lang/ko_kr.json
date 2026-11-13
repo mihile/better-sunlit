@@ -1,0 +1,11 @@
+{
+  "libipn.common.enum.context.ingame": "게임 내",
+  "libipn.common.gui.config.colorpicker.alpha": "알파",
+  "libipn.common.gui.config.colorpicker.red": "빨간색",
+  "libipn.common.gui.config.colorpicker.green": "초록색",
+  "libipn.common.gui.config.colorpicker.blue": "파란색",
+  "libipn.common.gui.config.color_picker_dialog": "색상을 선택하세요",
+  "libipn.common.gui.config.settings_screen.search-box": "검색",
+  "libipn.common.gui.config.description.settings_screen.search-box": "상자의 검색어와 일치하는 옵션만 표시합니다.",
+  "libipn.common.enum.context.any": "게임 내 / GUI"
+}

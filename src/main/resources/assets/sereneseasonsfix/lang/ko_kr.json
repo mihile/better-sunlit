@@ -1,0 +1,9 @@
+{
+  "commands.sereneseasonsfix.get_season.not_whitelisted": "이 차원에서는 시즌이 비활성화됩니다.",
+  "commands.sereneseasonsfix.set_season.not_whitelisted": "이 차원에서는 시즌이 비활성화됩니다.",
+  "commands.sereneseasonsfix.time.sync_season.not_whitelisted": "이 차원에서는 시즌이 비활성화됩니다.",
+  "commands.sereneseasonsfix.time.sync_season.success": "세계 시간과 동기화된 시즌 시간",
+  "commands.sereneseasonsfix.time.set_season.not_whitelisted": "이 차원에서는 시즌이 비활성화됩니다.",
+  "commands.sereneseasonsfix.time.set_season.success": "시즌 시간을 %s로 설정하세요.",
+  "commands.sereneseasonsfix.time.info": "시즌 시간: %s\n세계 시간: %s\n델타 시간: %s\n허용 목록에 있는 차원: %s"
+}

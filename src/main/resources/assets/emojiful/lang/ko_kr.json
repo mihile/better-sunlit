@@ -1,0 +1,22 @@
+{
+  "emojiful.midnightconfig.enableRenderEmoji": "이모티콘 렌더링 활성화",
+  "emojiful.midnightconfig.renderEmoji": "이모티콘 렌더링",
+  "emojiful.midnightconfig.showEmojiSelector": "채팅 텍스트 라인에서 이모티콘 선택 GUI 활성화",
+  "emojiful.midnightconfig.emojiSelector": "이모티콘 선택기",
+  "emojiful.midnightconfig.emojiAutocomplete": "이모티콘 자동 완성",
+  "emojiful.midnightconfig.loadGifEmojis": "애니메이션 이모티콘을 로드합니다. 비활성화하면 정지 이미지로 표시됩니다.",
+  "emojiful.midnightconfig.gifEmojis": "GIF 이모티콘",
+  "emojiful.midnightconfig.shortEmojiReplacement": ":)와 같은 짧은 버전의 이모티콘을 :smile:로 교체하면 이모티콘으로 렌더링될 수 있습니다.",
+  "emojiful.midnightconfig.emojiReplacement": "짧은 이모티콘 교체",
+  "emojiful.midnightconfig.emojiTypes": "이모티콘 유형",
+  "emojiful.midnightconfig.loadTwemoji": "Twitter 및 Discord와 같은 사이트에서 사용되는 Twemojis 로드",
+  "emojiful.midnightconfig.enableLoadTwemoji": "트웨모지 로드",
+  "emojiful.midnightconfig.enableLoadCustom": "Emojiful에서 제공하는 사용자 정의 이모티콘을 로드합니다.",
+  "emojiful.midnightconfig.loadCustom": "맞춤 이모티콘 로드",
+  "emojiful.midnightconfig.enableLoadDatapack": "가입한 서버에서 제공하는 데이터팩 이모티콘을 로드합니다.",
+  "emojiful.midnightconfig.loadDatapack": "서버 데이터팩 로드",
+  "emojiful.midnightconfig.enableProfanityFilter": "욕설 필터를 활성화하면 나쁜 단어가 이모티콘으로 대체됩니다.",
+  "emojiful.midnightconfig.profanityFilter": "욕설 필터",
+  "emojiful.midnightconfig.profanityFilterString": "욕설 필터의 대체 단어",
+  "emojiful.midnightconfig.profanityFilterReplacement": "대체 단어"
+}

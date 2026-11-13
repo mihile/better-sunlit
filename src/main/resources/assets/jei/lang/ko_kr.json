@@ -1,0 +1,10 @@
+{
+  "jei.tooltip.lookupHistory.enable": "JEI 조회 기록 표시",
+  "jei.tooltip.lookupHistory.disable": "JEI 조회 기록 숨기기",
+  "jei.tooltip.lookupHistory.usage": "최근 레시피 검색에 사용한 재료 목록을 보여줍니다.",
+  "jei.key.combo.command": "명령 + %s",
+  "jei.key.mouse.left": "클릭",
+  "jei.key.mouse.right": "마우스 오른쪽 버튼 클릭",
+  "jei.alias.panda.spawn.egg": "멸종 위기",
+  "jei.alias.villager.spawn.egg": "흠흠"
+}

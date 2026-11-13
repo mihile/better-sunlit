@@ -1,0 +1,6 @@
+{
+  "text.autoconfig.chat_heads.option.renderPosition": "표시 위치",
+  "text.autoconfig.chat_heads.option.renderPosition.@Tooltip": "채팅 머리를 표시할 위치입니다.\n\n참고: 이름 앞(Before Name)은 일부 모드와 호환되지 않을 수 있습니다.\nCaxton과 Modern UI를 사용하면 줄 앞(Before Line)이 자동으로 적용됩니다.",
+  "text.autoconfig.chat_heads.option.renderPosition.BEFORE_LINE": "라인 앞",
+  "text.autoconfig.chat_heads.option.renderPosition.BEFORE_NAME": "이름 앞"
+}

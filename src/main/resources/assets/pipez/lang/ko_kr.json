@@ -1,0 +1,7 @@
+{
+  "tooltip.pipez.filter.not": "아님",
+  "tooltip.pipez.rate.item": "아이템 %s개를 %s틱마다 전송",
+  "tooltip.pipez.rate.fluid": "틱마다 %s mB 전송 중",
+  "tooltip.pipez.rate.energy": "틱마다 %s FE 전송 중",
+  "tooltip.pipez.rate.gas": "틱마다 %s mB 가스 전송"
+}

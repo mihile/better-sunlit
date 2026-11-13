@@ -1,0 +1,22 @@
+{
+  "desc.seasonhud.fertility.fertile": "비옥한",
+  "desc.seasonhud.fertility.underground": "지하",
+  "desc.seasonhud.location.custom": "관습",
+  "desc.seasonhud.season.null": "오류",
+  "desc.seasonhud.season.null.mid": "중간 오류",
+  "jm.minimap.info_slot.bottom": "하단",
+  "jm.minimap.info_slot.top": "상단",
+  "menu.seasonhud.main.journeymap.options.button": "JourneyMap 옵션",
+  "menu.seasonhud.main.journeymap.title": "여정지도",
+  "menu.seasonhud.season.fertilityReplacesSeason.button": "출산율이 계절을 대체합니다.",
+  "menu.seasonhud.season.fertilityReplacesSeason.tooltip": "시즌 이름을 현재 다산으로 바꿉니다.\n\n이것은 생물 군계의 기본값과 다를 때만 활성화됩니다.",
+  "menu.seasonhud.season.scale.slider": "규모: ",
+  "menu.seasonhud.season.scale.tooltip": "미니맵이 설치되지 않은 경우 시즌 텍스트의 크기",
+  "menu.seasonhud.season.serverSide.tooltip": "이 옵션은 서버에 의해 제어됩니다.",
+  "menu.seasonhud.season.showFertility.button": "불임 표시",
+  "menu.seasonhud.season.showFertility.tooltip": "현재 생물 군계의 번식력 수준 표시",
+  "menu.seasonhud.season.showSubSeason.tooltip.error": "현재 계절 길이 %d일(%d틱)은 3으로 나누어떨어지지 않습니다.\n\n이 기능을 사용하려면 'seasons.json'의 'seasonLength' 값을 3으로 나누어떨어지도록 바꿔야 합니다.",
+  "minimap.info.seasonhud.season.description": "렌더 시즌",
+  "xaerominimap.seasonhud.infodisplay.fertility": "불임",
+  "menu.seasonhud.main.journeymap.options.tooltip": "SeasonHUD의 JourneyMap 설정을 엽니다."
+}

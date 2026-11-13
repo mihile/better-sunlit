@@ -1,0 +1,5 @@
+{
+  "item.patchouli:pamphlet.name": "테스트 소책자",
+  "item.patchouli:pamphlet.landing": "카테고리가 하나뿐인 테스트 소책자입니다.",
+  "patchouli.gui.lexicon.button.toggle_mock_header": "모의 머리글 전환"
+}

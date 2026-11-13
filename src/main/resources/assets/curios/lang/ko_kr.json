@@ -1,0 +1,7 @@
+{
+  "commands.curios.drop.success": "슬롯 %s의 아이템을 떨어뜨렸습니다 (대상: %s)",
+  "commands.curios.dropAll.success": "%s의 모든 슬롯에 아이템이 드롭되었습니다.",
+  "commands.curios.replace.success": "슬롯 %s를 교체했습니다 (대상: %s, 새 아이템: %s)",
+  "gui.curios.toggle.cosmetics": "토글 화장품",
+  "gui.curios.page": "페이지 %d / %d"
+}

@@ -1,0 +1,13 @@
+{
+  "midnightlib.overview.title": "MidnightConfig 개요",
+  "midnightlib.midnightconfig.title": "MidnightLib 설정",
+  "midnightlib.midnightconfig.config_screen_list": "설정 화면 목록 활성화",
+  "midnightlib.midnightconfig.enum.ConfigButton.TRUE": "§a예",
+  "midnightlib.midnightconfig.enum.ConfigButton.FALSE": "§c아니오",
+  "midnightlib.midnightconfig.enum.ConfigButton.MODMENU": "§bMod메뉴",
+  "midnightlib.wiki": "위키",
+  "midnightconfig.colorChooser.title": "색상 선택",
+  "midnightconfig.action.list_index": "%s 인덱스의 목록 편집 중",
+  "midnightconfig.action.color_chooser": "색상 선택기 열기",
+  "midnightconfig.action.file_chooser": "파일 선택기 열기"
+}

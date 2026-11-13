@@ -1,0 +1,6 @@
+{
+  "emi.cheat_mode.true": "언제나",
+  "emi.cheat_mode.false": "절대",
+  "emi.cheat_mode.creative": "크리에이티브 전용",
+  "emi.dev.no_output_slots": "제작법 슬롯에 출력이 없습니다\n출력에 §7SlotWidget.recipeContext(this)§r를 호출하세요§r"
+}
