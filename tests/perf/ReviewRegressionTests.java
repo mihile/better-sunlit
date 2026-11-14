@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
 /** Regression fixtures from the independent review; no game or GL context. */
 final class ReviewRegressionTests {
     static void run() throws Exception {
-        graphs(); astOwner(); emojiMutation(); logMutation();
+        graphs(); astOwner(); emojiMutation(); logMutation(); logBootstrap();
         System.out.println("PASS: review regressions (native graph order, cold/growing scratch, actual AST owner, live emoji/log updates)");
     }
     static void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
@@ -139,6 +139,45 @@ final class ReviewRegressionTests {
             check(EmojiRenderPerf.mightContainEmoji("##"), "Replacement of public strings field");
             check(!EmojiRenderPerf.mightContainEmoji("ordinary text"), "Plain text still rejected");
         } finally { Constants.EMOJI_LIST.clear(); Constants.EMOJI_LIST.addAll(saved); EmojiRenderPerf.invalidateIndex(); }
+    }
+
+    private static void logBootstrap() throws Exception {
+        String mixin = "dev.sunlit.fishvisuals.mixin.PerfLogBegoneMixin";
+        ClassLoader cold = new ClassLoader(ReviewRegressionTests.class.getClassLoader()) {
+            @Override protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.startsWith("dev.sunlit.bettersunlit.perf.LogBegonePerf"))
+                    throw new AssertionError("Log callback attempted cold helper loading: " + name);
+                if (name.equals(mixin)) {
+                    Class<?> found = findLoadedClass(name);
+                    if (found != null) return found;
+                    try (var in = getParent().getResourceAsStream(name.replace('.', '/') + ".class")) {
+                        byte[] bytes = in.readAllBytes();
+                        Class<?> result = defineClass(name, bytes, 0, bytes.length);
+                        if (resolve) resolveClass(result);
+                        return result;
+                    } catch (java.io.IOException e) { throw new ClassNotFoundException(name, e); }
+                }
+                return super.loadClass(name, resolve);
+            }
+        };
+        Class<?> filter = cold.loadClass(mixin);
+        equal(true, filter.getMethod("shouldFilterMessage", String.class).invoke(null, new Object[]{null}),
+                "Cold startup filtering must not resolve addon helpers");
+        LogBegonePerf.preload();
+        try (var in = ReviewRegressionTests.class.getClassLoader().getResourceAsStream(mixin.replace('.', '/') + ".class")) {
+            var node = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(in).accept(node, 0);
+            var enable = node.methods.stream().filter(m -> m.name.equals("sunlit$enableFilter")).findFirst().orElseThrow();
+            boolean preloaded = false, published = false;
+            for (var instruction : enable.instructions) {
+                if (instruction instanceof org.objectweb.asm.tree.MethodInsnNode call && call.name.equals("preload")) preloaded = true;
+                if (instruction instanceof org.objectweb.asm.tree.FieldInsnNode store && store.name.equals("sunlit$filterReady")) {
+                    check(preloaded, "Readiness must be published after helper preloading"); published = true;
+                }
+            }
+            check(published, "Filter activation gate missing");
+        }
+        System.out.println("PASS: startup log filter does not load cold helpers; activation follows preloading");
     }
 
     private static void logMutation() throws Exception {
