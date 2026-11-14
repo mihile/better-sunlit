@@ -97,7 +97,7 @@ identity=f'build={args.build}\nlabel={args.label}\nchannel={side}\npack=sunlit-v
 rel_notes=[]
 for rf in sorted((ROOT/'releases').glob('*.json')):
  data=json.loads(rf.read_text(encoding='utf8'))
- if int(data.get('build',0))==args.build:rel_notes=[f['title']+' :: '+f['detail'] for f in data.get('features',[])]
+ if int(data.get('build',0))==args.build:rel_notes=[f['title']+' :: '+f['detail'] for f in data.get('changes',data.get('features',[]))]
 for i,note in enumerate(rel_notes):
  esc=note.replace('\\','\\\\').replace('\n','\\n').replace('\r','\\r')
  identity+=f'notes.{i}={esc}\n'
