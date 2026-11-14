@@ -5,8 +5,12 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.hrznstudio.emojiful.Constants;
 import com.hrznstudio.emojiful.api.Emoji;
+import com.hrznstudio.emojiful.api.EmojiFromEmojipedia;
+import com.hrznstudio.emojiful.api.EmojiFromGithub;
+import com.hrznstudio.emojiful.api.EmojiFromTwitmoji;
 import com.hrznstudio.emojiful.platform.Services;
 import com.hrznstudio.emojiful.render.EmojiFontRenderer;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.FormattedCharSink;
 import org.apache.commons.lang3.tuple.Pair;
@@ -16,6 +20,7 @@ import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.IdentityHashMap;
 import java.lang.reflect.Field;
 import java.util.concurrent.ExecutionException;
@@ -96,6 +101,37 @@ public final class EmojiRenderPerf {
         }
     }
 
+    /**
+     * Collects text runs from {@code text} into a {@link ThreadLocal} {@link StringBuilder}.
+     * Returns {@code null} when the text cannot possibly contain any configured emoji trigger,
+     * allowing callers to delegate directly to vanilla/ModernUI {@code Font.width(FormattedText)}.
+     */
+    public static String extractIfMightContainEmoji(FormattedText text) {
+        if (text == null) {
+            return null;
+        }
+        SbLease lease = SB_LEASE.get();
+        if (lease.busy) {
+            StringBuilder fallback = new StringBuilder();
+            text.m_5651_(part -> {
+                fallback.append(part);
+                return Optional.empty();
+            });
+            return mightContainEmoji(fallback) ? fallback.toString() : null;
+        }
+        lease.busy = true;
+        try {
+            text.m_5651_(lease.textConsumer);
+            if (lease.sb.length() == 0 || !mightContainEmoji(lease.sb)) {
+                return null;
+            }
+            return lease.sb.toString();
+        } finally {
+            lease.sb.setLength(0);
+            lease.busy = false;
+        }
+    }
+
     public static Pair<String, HashMap<Integer, Emoji>> getCachedOrLoad(
             LoadingCache<String, Pair<String, HashMap<Integer, Emoji>>> cache,
             String key) {
@@ -110,11 +146,22 @@ public final class EmojiRenderPerf {
      * Exact necessary-condition pre-check for {@code EmojiFontRenderer.getEmojiFormattedString}.
      * Avoids allocating {@code Matcher} objects across ~1,000+ non-matching emojis per string.
      */
+    public static boolean isStandardEmojiClass(Emoji emoji) {
+        if (emoji == null) {
+            return false;
+        }
+        Class<?> c = emoji.getClass();
+        return c == Emoji.class
+                || c == EmojiFromTwitmoji.class
+                || c == EmojiFromGithub.class
+                || c == EmojiFromEmojipedia.class;
+    }
+
     public static boolean mayEmojiMatchClean(Emoji emoji, String cleanText) {
         if (emoji == null || cleanText == null || cleanText.isEmpty()) {
             return false;
         }
-        if (emoji.getClass() != Emoji.class) {
+        if (!isStandardEmojiClass(emoji)) {
             return true;
         }
         List<String> strings = emoji.strings;
@@ -202,7 +249,7 @@ public final class EmojiRenderPerf {
      * {@code RenderType} and triggers client GL/registry {@code <clinit>}).
      */
     private static String resolveRegexString(Emoji emoji) {
-        if (emoji.getClass() != Emoji.class) {
+        if (!isStandardEmojiClass(emoji)) {
             return emoji.getRegexString();
         }
         List<String> strings = emoji.strings;
@@ -313,8 +360,10 @@ public final class EmojiRenderPerf {
         private final String[][] triggers;
         boolean unindexableFallback;
 
-        // 256 * 4 = 1024 longs = 8 KB L1-friendly exact ASCII/Latin-1 (c0, c1) bigram bitset.
-        private final long[] asciiPairs = new long[1024];
+        // 256 * 4 = 1024 longs = 8 KB L1-friendly exact ASCII/Latin-1 (c0, c1) bigram bitsets.
+        // Triggers with a closing ':' at index >= 2 (e.g. :smile:) require a later ':' in the input.
+        private final long[] asciiPairsUnbounded = new long[1024];
+        private final long[] asciiPairsNeedColon = new long[1024];
         private final long[] singleAscii = new long[4];
         private BitSet singleUnicode;
         private BitSet nonAsciiPairFirst;
@@ -390,13 +439,13 @@ public final class EmojiRenderPerf {
         }
 
         void resetChangedRegexes(List<Emoji> list) {
-            // Emoji caches its regex independently. Refresh only base Emoji instances whose
+            // Emoji caches its regex independently. Refresh standard Emojiful instances whose
             // trigger contents changed; custom subclasses retain their own fallback semantics.
             IdentityHashMap<Emoji, String[]> saved = new IdentityHashMap<>();
             for (int i = 0; i < sources.length; i++) saved.put(sources[i], triggers[i]);
             for (int i = 0; i < list.size(); i++) {
                 Emoji emoji = list.get(i);
-                if (emoji != null && saved.containsKey(emoji) && emoji.getClass() == Emoji.class
+                if (emoji != null && saved.containsKey(emoji) && isStandardEmojiClass(emoji)
                         && !sameTriggers(saved.get(emoji), emoji.strings)) {
                     NativeRegexCache.clear(emoji);
                 }
@@ -428,7 +477,13 @@ public final class EmojiRenderPerf {
             }
             char c1 = lit.charAt(1);
             if (c0 < 256 && c1 < 256) {
-                asciiPairs[(c0 << 2) | (c1 >>> 6)] |= 1L << (c1 & 63);
+                int wordIdx = (c0 << 2) | (c1 >>> 6);
+                long bit = 1L << (c1 & 63);
+                if (hasColonFrom(lit, 2, len)) {
+                    asciiPairsNeedColon[wordIdx] |= bit;
+                } else {
+                    asciiPairsUnbounded[wordIdx] |= bit;
+                }
             } else {
                 if (nonAsciiPairFilter == null) {
                     nonAsciiPairFirst = new BitSet();
@@ -444,6 +499,24 @@ public final class EmojiRenderPerf {
             return true;
         }
 
+        private static boolean hasColonFrom(CharSequence lit, int start, int len) {
+            for (int i = start; i < len; i++) {
+                if (lit.charAt(i) == ':') {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static int findLastColon(CharSequence s, int len) {
+            for (int j = len - 1; j >= 0; j--) {
+                if (s.charAt(j) == ':') {
+                    return j;
+                }
+            }
+            return -1;
+        }
+
         boolean mightContain(CharSequence s) {
             if (empty) {
                 return false;
@@ -453,6 +526,7 @@ public final class EmojiRenderPerf {
             }
             int len = s.length();
             int prev = -1;
+            int lastColon = -2;
             for (int i = 0; i < len; i++) {
                 char c = s.charAt(i);
                 if (c == '\u00a7' && i + 1 < len && isFormattingCodeChar(s.charAt(i + 1))) {
@@ -470,8 +544,18 @@ public final class EmojiRenderPerf {
                 }
                 if (prev >= 0) {
                     if (prev < 256 && c < 256) {
-                        if ((asciiPairs[(prev << 2) | (c >>> 6)] & (1L << (c & 63))) != 0L) {
+                        int wordIdx = (prev << 2) | (c >>> 6);
+                        long bit = 1L << (c & 63);
+                        if ((asciiPairsUnbounded[wordIdx] & bit) != 0L) {
                             return true;
+                        }
+                        if ((asciiPairsNeedColon[wordIdx] & bit) != 0L) {
+                            if (lastColon == -2) {
+                                lastColon = findLastColon(s, len);
+                            }
+                            if (lastColon > i) {
+                                return true;
+                            }
                         }
                     } else if (hasNonAsciiPairs
                             && nonAsciiPairFirst.get(prev)
@@ -506,8 +590,12 @@ public final class EmojiRenderPerf {
     private static final class SbLease {
         final StringBuilder sb = new StringBuilder(128);
         final FormattedCharSink sink = (pos, style, cp) -> {
-            sb.append((char) cp);
+            sb.appendCodePoint(cp);
             return true;
+        };
+        final FormattedText.ContentConsumer<Object> textConsumer = part -> {
+            sb.append(part);
+            return Optional.empty();
         };
         boolean busy;
     }

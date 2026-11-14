@@ -1,12 +1,15 @@
 package dev.sunlit.bettersunlit.perf;
 
 import com.simibubi.create.content.decoration.bracket.BracketBlock;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockBehaviour.BlockStateBase;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.TagsUpdatedEvent;
 import snownee.passablefoliage.PassableFoliage;
 import snownee.passablefoliage.PassableFoliageBlock;
+import snownee.passablefoliage.PassableFoliageCommonConfig;
 
 /**
  * Lock-free versioned occlusion cache backing {@code BlockBehaviour.BlockStateBase.m_60815_()}
@@ -69,9 +72,33 @@ public final class BlockOcclusionPerf {
 
     /** Live occlusion check used for cached passable-foliage states. */
     public static boolean evalPassable(BlockStateBase state) {
-        if (state instanceof BlockState blockState) {
-            return !PassableFoliage.isPassable(blockState);
+        return !isPassableState(state);
+    }
+
+    /**
+     * Fast allocation-free check equivalent to {@code PassableFoliage.isPassable((BlockState) state)},
+     * short-circuiting on {@code pfoliage$isPassable()} before touching the ThreadLocal.
+     */
+    public static boolean isPassableState(BlockStateBase state) {
+        return state instanceof BlockState blockState
+                && state.m_60734_() instanceof PassableFoliageBlock passableBlock
+                && passableBlock.pfoliage$isPassable()
+                && PassableFoliage.isPassable(blockState);
+    }
+
+    /** Exact condition for {@code BlockStateMixin.pfoliage_isViewBlocking}. */
+    public static boolean shouldCancelViewBlocking(BlockStateBase state) {
+        return PassableFoliageCommonConfig.alwaysNotViewBlocking && isPassableState(state);
+    }
+
+    /** Exact replacement for {@code BlockStateMixin.pfoliage_getShadeBrightness} when {@link #isPassableState} is true. */
+    public static float evalPassableShadeBrightness(BlockStateBase state, BlockGetter level, BlockPos pos) {
+        BlockState blockState = (BlockState) state;
+        PassableFoliage.setSuppressPassableCheck(true);
+        try {
+            return blockState.m_60734_().m_180643_(blockState, level, pos) ? 0.2F : 1.0F;
+        } finally {
+            PassableFoliage.setSuppressPassableCheck(false);
         }
-        return true;
     }
 }

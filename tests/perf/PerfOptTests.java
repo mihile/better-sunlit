@@ -5,6 +5,9 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.HashMultimap;
 import com.hrznstudio.emojiful.Constants;
 import com.hrznstudio.emojiful.api.Emoji;
+import com.hrznstudio.emojiful.api.EmojiFromEmojipedia;
+import com.hrznstudio.emojiful.api.EmojiFromGithub;
+import com.hrznstudio.emojiful.api.EmojiFromTwitmoji;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -27,6 +30,7 @@ import dev.sunlit.bettersunlit.client.JeiSortingPerf;
 import dev.sunlit.bettersunlit.client.LongwingsClientPerf;
 import dev.sunlit.bettersunlit.client.ParticleRainClientPerf;
 import dev.sunlit.bettersunlit.client.SeasonColorPerf;
+import dev.sunlit.bettersunlit.client.TextureManagerPerf;
 import dev.sunlit.bettersunlit.inline.EntryMixinPlugin;
 import dev.sunlit.bettersunlit.inline.EntryPostApplyPatches;
 import dev.sunlit.bettersunlit.perf.BlockOcclusionPerf;
@@ -38,8 +42,11 @@ import mezz.jei.common.platform.IPlatformRegistry;
 import net.irisshaders.iris.shaderpack.DimensionId;
 import net.irisshaders.iris.shaderpack.materialmap.NamespacedId;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.Tickable;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -61,6 +68,7 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.FrameNode;
+import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LabelNode;
@@ -141,12 +149,19 @@ public final class PerfOptTests {
             "org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack",
             "net.irisshaders.batchedentityrendering.impl.ordering.GraphTranslucencyRenderOrderManager",
             "de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider",
+            "de.odysseus.ithaka.digraph.util.fas.AbstractFeedbackArcSetProvider",
+            "de.odysseus.ithaka.digraph.Digraphs",
             "mod.azure.logbegone.LogBegoneMod",
             "mod.azure.logbegone.LogBegoneConfig",
             "mod.azure.logbegone.LogBegoneConfig$Common",
             "com.hrznstudio.emojiful.render.EmojiFontRenderer",
             "com.hrznstudio.emojiful.Constants",
             "com.hrznstudio.emojiful.api.Emoji",
+            "com.hrznstudio.emojiful.api.EmojiFromTwitmoji",
+            "com.hrznstudio.emojiful.api.EmojiFromGithub",
+            "com.hrznstudio.emojiful.api.EmojiFromEmojipedia",
+            "snownee.passablefoliage.PassableFoliageCommonConfig",
+            "snownee.passablefoliage.PassableFoliageBlock",
             "net.irisshaders.iris.pipeline.PipelineManager",
             "io.github.douira.glsl_transformer.ast.transform.ASTParser",
 
@@ -160,7 +175,34 @@ public final class PerfOptTests {
             "traben.entity_model_features.models.animation.math.variables.factories.ModelPartVariableFactory",
             "me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderMeshingTask",
             "fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin",
-            "fr.madu59.obe.client.util.meshing.SectionMeshingUtil"
+            "fr.madu59.obe.client.util.meshing.SectionMeshingUtil",
+            "team.creative.ambientsounds.block.AmbientBlockGroup",
+            "team.creative.ambientsounds.block.AmbientBlock",
+            "team.creative.ambientsounds.AmbientSounds",
+            "team.creative.ambientsounds.AmbientSoundsConfig",
+            "team.creative.ambientsounds.engine.AmbientEngine",
+            "team.creative.ambientsounds.environment.pocket.AirPocket",
+            "team.creative.ambientsounds.environment.pocket.BlockDistribution",
+            "team.creative.creativecore.common.util.type.set.QuadBitSet",
+            "team.creative.creativecore.common.util.type.map.HashMapDouble",
+            "net.raphimc.immediatelyfast.feature.core.BufferBuilderPool",
+            "traben.entity_model_features.utils.EMFLODHandler",
+            "traben.entity_model_features.config.EMFConfig",
+            "traben.entity_model_features.models.animation.state.EMFState",
+            "traben.entity_model_features.models.animation.state.EMFEntityRenderState",
+            "traben.entity_model_features.mod_compat.IrisShadowPassDetection",
+            "traben.entity_model_features.utils.UEntityTypes",
+            "net.minecraft.client.renderer.texture.TextureManager",
+            "net.minecraft.client.renderer.LevelRenderer",
+            "pigcart.particlerain.config.ConfigManager",
+            "pigcart.particlerain.config.ConfigData",
+            "pigcart.particlerain.config.ConfigData$CompatibilityOptions",
+            "pigcart.particlerain.mixin.render.WeatherEffectRendererMixin",
+            "pigcart.particlerain.config.Whitelist",
+            "net.minecraft.world.level.chunk.SingleValuePalette",
+            "net.minecraft.world.level.chunk.PalettedContainer",
+            "net.minecraft.world.level.chunk.PalettedContainer$Data",
+            "net.minecraft.world.level.chunk.Palette"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -187,6 +229,7 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfSeasonColorHandlersMixin",
             "dev.sunlit.fishvisuals.mixin.PerfSeasonColorUtilMixin",
             "dev.sunlit.fishvisuals.mixin.PerfAmbientBiomeAreaMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfAmbientBlockGroupMixin",
             "dev.sunlit.fishvisuals.mixin.PerfAmbientAirPocketScannerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfIrisDimensionMixin",
             "dev.sunlit.fishvisuals.mixin.PerfJeiSortingConfigMixin",
@@ -195,6 +238,7 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfEmfCubeMixin",
             "dev.sunlit.fishvisuals.mixin.PerfEmfModelPartMixin",
             "dev.sunlit.fishvisuals.mixin.PerfEmfMathParserMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfEmfLodHandlerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfGraphOrderMixin",
             "dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin",
             "dev.sunlit.fishvisuals.mixin.PerfPipelineManagerMixin",
@@ -202,7 +246,12 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfJeiRegistryWrapperMixin",
             "dev.sunlit.fishvisuals.mixin.PerfBatchableBufferSourceMixin",
             "dev.sunlit.fishvisuals.mixin.PerfEmfModelPartVariableMixin",
-            "dev.sunlit.fishvisuals.mixin.PerfChunkBuilderMeshingTaskMixin"
+            "dev.sunlit.fishvisuals.mixin.PerfChunkBuilderMeshingTaskMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfTextureManagerMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfLevelRendererWeatherMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfWhitelistMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfSingleValuePaletteMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfPalettedContainerMixin"
     );
 
     public static void main(String[] args) throws Exception {
@@ -211,6 +260,8 @@ public final class PerfOptTests {
         testLongwingsVariantPoolAndMatches();
         testLongwingsTextureCacheAndReload();
         testParticleRainMathAndZeroAlloc();
+        testWeatherRenderingShortCircuitAndPositionUpdate();
+        testParticleRainWhitelistPaletteAndAirRay();
         testSereneSeasonsHelpers();
         testAmbientSoundsWildcards();
         testIrisDimensionCanonicalization();
@@ -218,11 +269,15 @@ public final class PerfOptTests {
         testArea1BlockOcclusionAndModelShaperPatches();
         testArea1ChunkBuilderMeshingTaskPatch();
         testArea2EmfRenderPerfAndPatches();
+        testCompiledCubeAndSodiumVertexWriter();
+        testRound4EmfLodAndModelPart();
         testArea2GraphOrderPerf();
+        testArea2GraphOrderMultiSccAndLargeCyclePerf();
         testArea3LogBegonePerf();
         testArea3EmojiRenderPerfAndPatch();
         testArea4IrisAstCachePerf();
         testArea4JeiRegistryPerf();
+        testTextureManagerThreadSafety();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
     }
@@ -299,13 +354,17 @@ public final class PerfOptTests {
                 "dev.sunlit.fishvisuals.mixin.PerfObeModelMixin"),
                 "Tampered OBE mixin must fail-closed PerfObeModelMixin");
 
-        TamperPluginLoader pfTampered = new TamperPluginLoader(
-                EntryMixinPlugin.class.getClassLoader(), "snownee/passablefoliage/PassableFoliage.class");
-        Object pfPlugin = pfTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
-        assertFalse((Boolean) pfPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
-                pfPlugin, "net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase",
-                "dev.sunlit.fishvisuals.mixin.PerfBlockOcclusionMixin"),
-                "Tampered PassableFoliage must fail-closed PerfBlockOcclusionMixin");
+        for (String dependency : List.of(
+                "snownee/passablefoliage/PassableFoliage.class",
+                "snownee/passablefoliage/PassableFoliageCommonConfig.class",
+                "snownee/passablefoliage/PassableFoliageBlock.class")) {
+            TamperPluginLoader pfTampered = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object pfPlugin = pfTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            assertFalse((Boolean) pfPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                    pfPlugin, "net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase",
+                    "dev.sunlit.fishvisuals.mixin.PerfBlockOcclusionMixin"),
+                    "Tampered PassableFoliage dependency must fail-closed PerfBlockOcclusionMixin: " + dependency);
+        }
 
         TamperPluginLoader fasTampered = new TamperPluginLoader(
                 EntryMixinPlugin.class.getClassLoader(), "de/odysseus/ithaka/digraph/util/fas/SimpleFeedbackArcSetProvider.class");
@@ -323,13 +382,18 @@ public final class PerfOptTests {
                 "dev.sunlit.fishvisuals.mixin.PerfLogBegoneMixin"),
                 "Tampered LogBegoneConfig$Common must fail-closed PerfLogBegoneMixin");
 
-        TamperPluginLoader emojiTampered = new TamperPluginLoader(
-                EntryMixinPlugin.class.getClassLoader(), "com/hrznstudio/emojiful/api/Emoji.class");
-        Object emojiPlugin = emojiTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
-        assertFalse((Boolean) emojiPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
-                emojiPlugin, "com.hrznstudio.emojiful.render.EmojiFontRenderer",
-                "dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin"),
-                "Tampered Emoji must fail-closed PerfEmojiFontRendererMixin");
+        for (String dependency : List.of(
+                "com/hrznstudio/emojiful/api/Emoji.class",
+                "com/hrznstudio/emojiful/api/EmojiFromTwitmoji.class",
+                "com/hrznstudio/emojiful/api/EmojiFromGithub.class",
+                "com/hrznstudio/emojiful/api/EmojiFromEmojipedia.class")) {
+            TamperPluginLoader emojiTampered = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object emojiPlugin = emojiTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            assertFalse((Boolean) emojiPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                    emojiPlugin, "com.hrznstudio.emojiful.render.EmojiFontRenderer",
+                    "dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin"),
+                    "Tampered Emoji dependency must fail-closed PerfEmojiFontRendererMixin: " + dependency);
+        }
 
         TamperPluginLoader astTampered = new TamperPluginLoader(
                 EntryMixinPlugin.class.getClassLoader(), "io/github/douira/glsl_transformer/ast/transform/ASTParser.class");
@@ -362,6 +426,54 @@ public final class PerfOptTests {
                 "dev.sunlit.fishvisuals.mixin.PerfBatchableBufferSourceMixin"),
                 "Tampered IrisCompat must fail-closed PerfBatchableBufferSourceMixin");
 
+        TamperPluginLoader bufferPoolTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "net/raphimc/immediatelyfast/feature/core/BufferBuilderPool.class");
+        Object bufferPoolPlugin = bufferPoolTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) bufferPoolPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                bufferPoolPlugin, "net.raphimc.immediatelyfast.feature.core.BatchableBufferSource",
+                "dev.sunlit.fishvisuals.mixin.PerfBatchableBufferSourceMixin"),
+                "Tampered BufferBuilderPool must fail-closed PerfBatchableBufferSourceMixin");
+
+        TamperPluginLoader ambientBlockTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "team/creative/ambientsounds/block/AmbientBlock.class");
+        Object ambientBlockPlugin = ambientBlockTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) ambientBlockPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                ambientBlockPlugin, "team.creative.ambientsounds.block.AmbientBlockGroup",
+                "dev.sunlit.fishvisuals.mixin.PerfAmbientBlockGroupMixin"),
+                "Tampered AmbientBlock must fail-closed PerfAmbientBlockGroupMixin");
+
+        for (String dependency : List.of(
+                "team/creative/ambientsounds/block/AmbientBlockGroup.class",
+                "team/creative/ambientsounds/block/AmbientBlock.class",
+                "team/creative/ambientsounds/AmbientSounds.class",
+                "team/creative/ambientsounds/AmbientSoundsConfig.class",
+                "team/creative/ambientsounds/engine/AmbientEngine.class",
+                "team/creative/ambientsounds/environment/pocket/AirPocket.class",
+                "team/creative/ambientsounds/environment/pocket/BlockDistribution.class",
+                "team/creative/creativecore/common/util/type/set/QuadBitSet.class",
+                "team/creative/creativecore/common/util/type/map/HashMapDouble.class")) {
+            TamperPluginLoader loader = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object gated = loader.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            assertFalse((Boolean) gated.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                    gated, "team.creative.ambientsounds.environment.pocket.AirPocketScanner",
+                    "dev.sunlit.fishvisuals.mixin.PerfAmbientAirPocketScannerMixin"),
+                    "AmbientSounds dependency must fail-closed PerfAmbientAirPocketScannerMixin: " + dependency);
+        }
+
+        for (String dependency : List.of(
+                "traben/entity_model_features/config/EMFConfig.class",
+                "traben/entity_model_features/models/animation/state/EMFState.class",
+                "traben/entity_model_features/models/animation/state/EMFEntityRenderState.class",
+                "traben/entity_model_features/mod_compat/IrisShadowPassDetection.class",
+                "traben/entity_model_features/utils/UEntityTypes.class")) {
+            TamperPluginLoader loader = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object gated = loader.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            assertFalse((Boolean) gated.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                    gated, "traben.entity_model_features.utils.EMFLODHandler",
+                    "dev.sunlit.fishvisuals.mixin.PerfEmfLodHandlerMixin"),
+                    "EMF LOD dependency must fail-closed PerfEmfLodHandlerMixin: " + dependency);
+        }
+
         for (String dependency : List.of(
                 "fr/madu59/obe/client/mixin/renderer/compat/sodium/ChunkBuilderMeshingTaskMixin.class",
                 "fr/madu59/obe/client/util/meshing/SectionMeshingUtil.class")) {
@@ -371,6 +483,20 @@ public final class PerfOptTests {
                     gated, "me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderMeshingTask",
                     "dev.sunlit.fishvisuals.mixin.PerfChunkBuilderMeshingTaskMixin"),
                     "OBE dependency must fail-closed PerfChunkBuilderMeshingTaskMixin: " + dependency);
+        }
+
+        for (String dependency : List.of(
+                "pigcart/particlerain/ParticleRain.class",
+                "pigcart/particlerain/config/ConfigManager.class",
+                "pigcart/particlerain/config/ConfigData.class",
+                "pigcart/particlerain/config/ConfigData$CompatibilityOptions.class",
+                "pigcart/particlerain/mixin/render/WeatherEffectRendererMixin.class")) {
+            TamperPluginLoader loader = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object gated = loader.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            assertFalse((Boolean) gated.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                    gated, "net.minecraft.client.renderer.LevelRenderer",
+                    "dev.sunlit.fishvisuals.mixin.PerfLevelRendererWeatherMixin"),
+                    "ParticleRain dependency must fail-closed PerfLevelRendererWeatherMixin: " + dependency);
         }
 
         for (String mixinClass : ALL_PERF_MIXINS) {
@@ -680,6 +806,83 @@ public final class PerfOptTests {
         }
     }
 
+    private static void testWeatherRenderingShortCircuitAndPositionUpdate() throws Exception {
+        ClassNode lrTarget = readClassNode("net.minecraft.client.renderer.LevelRenderer");
+        MethodNode renderSnowAndRain = findMethod(lrTarget,
+                "m_109703_(Lnet/minecraft/client/renderer/LightTexture;FDDD)V");
+        assertNotNull(renderSnowAndRain, "LevelRenderer.m_109703_ missing");
+        assertEquals(1, countMethodInvoke(renderSnowAndRain,
+                "Lnet/minecraft/client/renderer/LightTexture;m_109896_()V"),
+                "LevelRenderer.m_109703_ must invoke LightTexture.m_109896_()V once");
+
+        ClassNode customMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfCustomParticleMixin");
+        MethodNode onPositionUpdate = findMethod(customMixin, "onPositionUpdate()V");
+        assertNotNull(onPositionUpdate, "PerfCustomParticleMixin.onPositionUpdate() missing");
+        assertEquals(0, countMethodInvoke(onPositionUpdate,
+                "Lnet/minecraft/client/multiplayer/ClientLevel;m_204166_(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/Holder;"),
+                "PerfCustomParticleMixin.onPositionUpdate must route biome lookups through ParticleRainClientPerf.getBiomeFast");
+        assertEquals(1, countMethodInvoke(onPositionUpdate,
+                "Ldev/sunlit/bettersunlit/client/ParticleRainClientPerf;getBiomeFast(Lnet/minecraft/client/multiplayer/ClientLevel;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/Holder;"),
+                "PerfCustomParticleMixin.onPositionUpdate must call ParticleRainClientPerf.getBiomeFast once");
+        MethodNode tickCollisions = findMethod(customMixin, "tickCollisions()V");
+        assertNotNull(tickCollisions, "PerfCustomParticleMixin.tickCollisions() missing");
+        assertEquals(1, countMethodInvoke(tickCollisions,
+                "Ldev/sunlit/bettersunlit/client/ParticleRainClientPerf;isClearAirRay(Lnet/minecraft/client/multiplayer/ClientLevel;Lnet/minecraft/core/BlockPos$MutableBlockPos;DDDDDD)Z"),
+                "PerfCustomParticleMixin.tickCollisions must call ParticleRainClientPerf.isClearAirRay once");
+        assertEquals(1, countMethodInvoke(onPositionUpdate,
+                "Lnet/minecraft/client/multiplayer/ClientLevel;m_8055_(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"),
+                "PerfCustomParticleMixin.onPositionUpdate must call getBlockState once");
+        assertEquals(0, countMethodInvoke(onPositionUpdate,
+                "Lnet/minecraft/client/multiplayer/ClientLevel;m_6425_(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/material/FluidState;"),
+                "PerfCustomParticleMixin.onPositionUpdate must reuse blockState.getFluidState instead of level.getFluidState");
+
+        assertFalse(ParticleRainClientPerf.shouldSkipVanillaWeatherLoop(null),
+                "Null ParticleRain config must fail open to vanilla rendering");
+        Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        theUnsafeField.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) theUnsafeField.get(null);
+
+        pigcart.particlerain.config.ConfigData nullCompatCfg =
+                (pigcart.particlerain.config.ConfigData) unsafe.allocateInstance(
+                        pigcart.particlerain.config.ConfigData.class);
+        nullCompatCfg.compat = null;
+        assertFalse(ParticleRainClientPerf.shouldSkipVanillaWeatherLoop(nullCompatCfg),
+                "Null CompatibilityOptions must fail open to vanilla rendering");
+
+        Field configField = pigcart.particlerain.config.ConfigManager.class.getDeclaredField("config");
+        configField.setAccessible(true);
+        Object prevConfig = configField.get(null);
+        try {
+            pigcart.particlerain.config.ConfigData cfg =
+                    (pigcart.particlerain.config.ConfigData) unsafe.allocateInstance(
+                            pigcart.particlerain.config.ConfigData.class);
+            cfg.compat = (pigcart.particlerain.config.ConfigData.CompatibilityOptions) unsafe.allocateInstance(
+                    pigcart.particlerain.config.ConfigData.CompatibilityOptions.class);
+            configField.set(null, cfg);
+            cfg.compat.renderDefaultRain = false;
+            cfg.compat.renderDefaultSnow = false;
+            assertTrue(ParticleRainClientPerf.shouldSkipVanillaWeatherLoop(),
+                    "Both default rain & snow disabled must skip LevelRenderer weather loop");
+
+            cfg.compat.renderDefaultRain = true;
+            cfg.compat.renderDefaultSnow = false;
+            assertFalse(ParticleRainClientPerf.shouldSkipVanillaWeatherLoop(),
+                    "Enabling renderDefaultRain must not skip weather loop");
+
+            cfg.compat.renderDefaultRain = false;
+            cfg.compat.renderDefaultSnow = true;
+            assertFalse(ParticleRainClientPerf.shouldSkipVanillaWeatherLoop(),
+                    "Enabling renderDefaultSnow must not skip weather loop");
+
+            cfg.compat.renderDefaultRain = true;
+            cfg.compat.renderDefaultSnow = true;
+            assertFalse(ParticleRainClientPerf.shouldSkipVanillaWeatherLoop(),
+                    "Enabling both must not skip weather loop");
+        } finally {
+            configField.set(null, prevConfig);
+        }
+    }
+
     private static void testSereneSeasonsHelpers() throws Exception {
         // 1. Whitelist checks
         java.lang.reflect.Method createKey = ResourceKey.class.getDeclaredMethod(
@@ -864,6 +1067,83 @@ public final class PerfOptTests {
         for (int i = 0; i < expectedDirs.length; i++) {
             assertSame(expectedDirs[i], AmbientSoundsClientPerf.DIRECTIONS[i], "DIRECTIONS[" + i + "] mismatch");
         }
+        assertEquals(1 << Direction.UP.ordinal(), AmbientSoundsClientPerf.UP_MASK, "UP_MASK mismatch");
+
+        int ox = 10, oy = 64, oz = -5;
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = -2; dy <= 2; dy++) {
+                for (int dz = -2; dz <= 2; dz++) {
+                    int px = ox + dx, py = oy + dy, pz = oz + dz;
+                    for (Direction dir : expectedDirs) {
+                        int pAxis = switch (dir.m_122434_()) {
+                            case X -> px;
+                            case Y -> py;
+                            case Z -> pz;
+                        };
+                        int oAxis = switch (dir.m_122434_()) {
+                            case X -> ox;
+                            case Y -> oy;
+                            case Z -> oz;
+                        };
+                        boolean expected = dir.m_122421_() == Direction.AxisDirection.POSITIVE
+                                ? pAxis + 1 > oAxis
+                                : pAxis - 1 < oAxis;
+                        assertEquals(expected,
+                                AmbientSoundsClientPerf.canExpandOutward(dir.ordinal(), px, py, pz, ox, oy, oz),
+                                "canExpandOutward mismatch dir=" + dir + " d=(" + dx + "," + dy + "," + dz + ")");
+                    }
+                }
+            }
+        }
+
+        AmbientSoundsClientPerf.WaveQueue wave = new AmbientSoundsClientPerf.WaveQueue(16);
+        long seedPos = net.minecraft.core.BlockPos.m_121882_(ox, oy, oz);
+        wave.addSeed(seedPos);
+        assertEquals(1, wave.size(), "WaveQueue seed size");
+        assertEquals(AmbientSoundsClientPerf.ALL_DIRS_MASK, wave.dirMaskAt(0), "WaveQueue seed dirMask");
+
+        long negPos = net.minecraft.core.BlockPos.m_121882_(-120, -64, 300);
+        assertTrue(wave.addDirection(negPos, 1 << Direction.EAST.ordinal()), "First addDirection must insert");
+        assertFalse(wave.addDirection(negPos, 1 << Direction.UP.ordinal()), "Duplicate addDirection must merge");
+        assertEquals(2, wave.size(), "WaveQueue size after merge");
+        assertEquals((1 << Direction.EAST.ordinal()) | (1 << Direction.UP.ordinal()), wave.dirMaskAt(1), "Merged mask");
+        assertEquals(-120, net.minecraft.core.BlockPos.m_121983_(wave.packedPosAt(1)), "Unpacked X");
+        assertEquals(-64, net.minecraft.core.BlockPos.m_122008_(wave.packedPosAt(1)), "Unpacked Y");
+        assertEquals(300, net.minecraft.core.BlockPos.m_122015_(wave.packedPosAt(1)), "Unpacked Z");
+
+        for (int i = 0; i < 120; i++) {
+            long p = net.minecraft.core.BlockPos.m_121882_(i - 40, -10 + (i & 15), 200 + i);
+            assertTrue(wave.addDirection(p, 1 << (i % 6)), "Growth insert " + i);
+        }
+        assertEquals(122, wave.size(), "WaveQueue size after growth");
+        wave.clear();
+        assertEquals(0, wave.size(), "WaveQueue size after clear");
+        assertTrue(wave.addDirection(negPos, 1 << Direction.NORTH.ordinal()), "Re-insert after clear must insert cleanly");
+        assertEquals(1 << Direction.NORTH.ordinal(), wave.dirMaskAt(0), "Mask after clear must not leak previous bits");
+
+        long[] wavePositions = new long[128];
+        for (int i = 0; i < wavePositions.length; i++) {
+            wavePositions[i] = net.minecraft.core.BlockPos.m_121882_(i & 7, (i >> 3) & 3, -(i >> 5));
+        }
+        AmbientSoundsClientPerf.WaveQueue reusable = new AmbientSoundsClientPerf.WaveQueue(16);
+        for (int w = 0; w < 500; w++) {
+            reusable.clear();
+            for (int i = 0; i < wavePositions.length; i++) {
+                reusable.addDirection(wavePositions[i], 1 << (i % 6));
+            }
+        }
+        long allocWave = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int run = 0; run < 200; run++) {
+                reusable.clear();
+                for (int i = 0; i < wavePositions.length; i++) {
+                    reusable.addDirection(wavePositions[i], 1 << (i % 6));
+                }
+                acc += reusable.size();
+            }
+            if (acc < 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocWave, "Warm WaveQueue reuse must allocate 0 bytes, got " + allocWave);
     }
 
     private static void testIrisDimensionCanonicalization() throws Exception {
@@ -979,6 +1259,8 @@ public final class PerfOptTests {
         synOcc.superName = "net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase";
         synOcc.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "f_60601_", "Z", null, null));
         synOcc.fields.add(new FieldNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_VOLATILE, "sunlit$occCache", "I", null, null));
+        synOcc.fields.add(new FieldNode(Opcodes.ACC_PROTECTED, "f_60593_",
+                "Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase$Cache;", null, null));
         MethodNode m60815 = new MethodNode(Opcodes.ACC_PUBLIC, "m_60815_", "()Z", null, null);
         String cirDesc = "(L" + EntryPostApplyPatches.CIR_INTERNAL + ";)V";
         m60815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
@@ -998,11 +1280,107 @@ public final class PerfOptTests {
             stub.maxStack = 1;
             stub.maxLocals = 2;
         }
+        String getterPosBool = "(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;)Z";
+        String getterPosFloat = "(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;)F";
+        MethodNode m60838 = addPassableSynMethod(synOcc, "m_60838_", getterPosBool,
+                "handler$zz3$pfoliage_isCollisionShapeFullBlock", false, 4, true, false);
+        MethodNode m60831 = addPassableSynMethod(synOcc, "m_60831_", getterPosBool,
+                "handler$zz4$pfoliage_isViewBlocking", false, 3, false, false);
+        MethodNode m60828 = addPassableSynMethod(synOcc, "m_60828_", getterPosBool,
+                "handler$zz5$pfoliage_isSuffocating", false, 3, true, true);
+        MethodNode m60792 = addPassableSynMethod(synOcc, "m_60792_", getterPosFloat,
+                "handler$zz6$pfoliage_getShadeBrightness", true, 3, true, true);
         assertTrue(EntryPostApplyPatches.patchBlockOcclusion(synOcc), "Valid occlusion structure must patch");
         assertTrue(EntryPostApplyPatches.patchBlockOcclusion(synOcc), "Idempotent occlusion re-patch must succeed");
+        for (MethodNode pm : Arrays.asList(m60838, m60831, m60828, m60792)) {
+            assertEquals(0, countNewType(pm, EntryPostApplyPatches.CIR_INTERNAL),
+                    pm.name + " must eliminate all NEW CallbackInfoReturnable allocations");
+        }
+        assertEquals(1, countMethodInvoke(m60838, "Ldev/sunlit/bettersunlit/perf/BlockOcclusionPerf;isPassableState(Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase;)Z"),
+                "m_60838_ must call isPassableState");
+        assertEquals(1, countMethodInvoke(m60831, "Ldev/sunlit/bettersunlit/perf/BlockOcclusionPerf;shouldCancelViewBlocking(Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase;)Z"),
+                "m_60831_ must call shouldCancelViewBlocking");
+        assertEquals(1, countMethodInvoke(m60828, "Ldev/sunlit/bettersunlit/perf/BlockOcclusionPerf;isPassableState(Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase;)Z"),
+                "m_60828_ must call isPassableState");
+        assertEquals(1, countMethodInvoke(m60792, "Ldev/sunlit/bettersunlit/perf/BlockOcclusionPerf;isPassableState(Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase;)Z"),
+                "m_60792_ must call isPassableState");
+        assertEquals(1, countMethodInvoke(m60792, "Ldev/sunlit/bettersunlit/perf/BlockOcclusionPerf;evalPassableShadeBrightness(Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;)F"),
+                "m_60792_ must call evalPassableShadeBrightness");
         ClassWriter occWriter = new ClassWriter(0);
         synOcc.accept(occWriter);
         verifyBytecode(synOcc.name.replace('/', '.'), occWriter.toByteArray());
+
+        // Unexpected handler in m_60838_ must fail-closed for m_60838_ alone without mutating it
+        ClassNode badPassable = new ClassNode();
+        badPassable.version = Opcodes.V17;
+        badPassable.access = Opcodes.ACC_PUBLIC;
+        badPassable.name = "dev/sunlit/bettersunlit/tests/perf/UnexpectedPassableOccState";
+        badPassable.superName = "net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase";
+        badPassable.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "f_60601_", "Z", null, null));
+        badPassable.fields.add(new FieldNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_VOLATILE, "sunlit$occCache", "I", null, null));
+        MethodNode valid815 = new MethodNode(Opcodes.ACC_PUBLIC, "m_60815_", "()Z", null, null);
+        valid815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        valid815.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        valid815.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, badPassable.name, "handler$zz1$customOcclusion", cirDesc, false));
+        valid815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        valid815.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        valid815.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, badPassable.name, "handler$zz2$pfoliage_canOcclude", cirDesc, false));
+        valid815.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        valid815.instructions.add(new InsnNode(Opcodes.IRETURN));
+        badPassable.methods.add(valid815);
+        MethodNode bad838 = addPassableSynMethod(badPassable, "m_60838_", getterPosBool,
+                "handler$zz3$pfoliage_isCollisionShapeFullBlock", false, 3, false, false);
+        bad838.instructions.insertBefore(bad838.instructions.getLast(),
+                new MethodInsnNode(Opcodes.INVOKESTATIC, badPassable.name, "handler$zz9$thirdParty", "()V", false));
+        assertTrue(EntryPostApplyPatches.patchBlockOcclusion(badPassable), "m_60815_ still succeeds when passable method aborts fail-closed");
+        assertEquals(1, countNewType(bad838, EntryPostApplyPatches.CIR_INTERNAL),
+                "Unexpected handler in m_60838_ must fail-closed leaving NEW CIR intact");
+
+        // ModernFix redirect$ in the vanilla tail of m_60838_ must be tolerated while tail handler$ still aborts
+        ClassNode modernFixOcc = new ClassNode();
+        modernFixOcc.version = Opcodes.V17;
+        modernFixOcc.access = Opcodes.ACC_PUBLIC;
+        modernFixOcc.name = "dev/sunlit/bettersunlit/tests/perf/ModernFixTailOccState";
+        modernFixOcc.superName = "net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase";
+        modernFixOcc.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "f_60601_", "Z", null, null));
+        modernFixOcc.fields.add(new FieldNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_VOLATILE, "sunlit$occCache", "I", null, null));
+        MethodNode mf815 = new MethodNode(Opcodes.ACC_PUBLIC, "m_60815_", "()Z", null, null);
+        String mfCirDesc = "(L" + EntryPostApplyPatches.CIR_INTERNAL + ";)V";
+        mf815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        mf815.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        mf815.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, modernFixOcc.name, "handler$zz1$customOcclusion", mfCirDesc, false));
+        mf815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        mf815.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        mf815.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, modernFixOcc.name, "handler$zz2$pfoliage_canOcclude", mfCirDesc, false));
+        mf815.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        mf815.instructions.add(new InsnNode(Opcodes.IRETURN));
+        mf815.maxStack = 2;
+        mf815.maxLocals = 1;
+        modernFixOcc.methods.add(mf815);
+        MethodNode mf838 = addPassableSynMethod(modernFixOcc, "m_60838_", getterPosBool,
+                "handler$zz3$pfoliage_isCollisionShapeFullBlock", false, 4, true, false);
+        AbstractInsnNode mfReturn = mf838.instructions.getLast();
+        mf838.instructions.insertBefore(mfReturn.getPrevious(), new VarInsnNode(Opcodes.ALOAD, 0));
+        mf838.instructions.insertBefore(mfReturn.getPrevious(), new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL, modernFixOcc.name, "redirect$zeb000$dynamicCacheGen", "()V", false));
+        MethodNode mfRedirectStub = new MethodNode(Opcodes.ACC_PRIVATE, "redirect$zeb000$dynamicCacheGen", "()V", null, null);
+        mfRedirectStub.instructions.add(new InsnNode(Opcodes.RETURN));
+        mfRedirectStub.maxStack = 1;
+        mfRedirectStub.maxLocals = 1;
+        modernFixOcc.methods.add(mfRedirectStub);
+        assertTrue(EntryPostApplyPatches.patchBlockOcclusion(modernFixOcc),
+                "m_60838_ with ModernFix redirect$ in tail must patch cleanly");
+        assertEquals(0, countNewType(mf838, EntryPostApplyPatches.CIR_INTERNAL),
+                "ModernFix-coexisting m_60838_ must eliminate NEW CallbackInfoReturnable");
+        assertEquals(1, countMethodInvoke(mf838,
+                "Ldev/sunlit/bettersunlit/perf/BlockOcclusionPerf;isPassableState(Lnet/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase;)Z"),
+                "ModernFix-coexisting m_60838_ must insert isPassableState fast path");
+        assertEquals(1, countMethodInvoke(mf838,
+                "L" + modernFixOcc.name + ";redirect$zeb000$dynamicCacheGen()V"),
+                "ModernFix tail redirect$ call must be preserved verbatim");
+        ClassWriter mfWriter = new ClassWriter(0);
+        modernFixOcc.accept(mfWriter);
+        verifyBytecode(modernFixOcc.name.replace('/', '.'), mfWriter.toByteArray());
 
         // Unexpected third-party callback must abort fail-closed without mutating instructions
         ClassNode unexpectedOcc = new ClassNode();
@@ -1210,6 +1588,321 @@ public final class PerfOptTests {
             if (acc && System.nanoTime() == 0) throw new AssertionError();
         });
         assertEquals(0L, allocVarSyntax, "matchesModelPartVariableSyntax must allocate 0 bytes, got " + allocVarSyntax);
+
+        // Real EMFModelPart + PerfEmfModelPartMixin contract & sunlit$cubes post-apply ASM rewrite
+        assertFalse(ClientPostApplyPatches.patchEmfModelPart(null), "patchEmfModelPart(null) must fail closed");
+        ClassNode emfPartNode = readClassNode("traben.entity_model_features.models.parts.EMFModelPart");
+        ClassNode emfPartMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfEmfModelPartMixin");
+        MethodNode mixinCubes = findMethod(emfPartMixin, "sunlit$cubes()Ljava/util/List;");
+        assertNotNull(mixinCubes, "PerfEmfModelPartMixin.sunlit$cubes missing");
+        MethodNode mixinCompile = findMethod(emfPartMixin,
+                "m_104290_(Lcom/mojang/blaze3d/vertex/PoseStack$Pose;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V");
+        assertNotNull(mixinCompile, "PerfEmfModelPartMixin.m_104290_ overwrite missing");
+        assertEquals(0, countMethodInvoke(mixinCompile, "Ljava/util/List;iterator()Ljava/util/Iterator;"),
+                "PerfEmfModelPartMixin.m_104290_ must not call List.iterator()");
+        assertEquals(1, countMethodInvoke(mixinCompile,
+                "Ldev/sunlit/fishvisuals/mixin/PerfEmfModelPartMixin;sunlit$cubes()Ljava/util/List;"),
+                "PerfEmfModelPartMixin.m_104290_ must read cubes via sunlit$cubes()");
+        assertNotNull(findMethod(emfPartMixin, "sunlit$children()Ljava/util/Map;"),
+                "PerfEmfModelPartMixin.sunlit$children missing");
+        assertNotNull(findMethod(emfPartMixin, "sunlit$getChildrenArray(Ljava/util/Map;)[Lnet/minecraft/client/model/geom/ModelPart;"),
+                "PerfEmfModelPartMixin.sunlit$getChildrenArray missing");
+        MethodNode mixinRenderVanilla = findMethod(emfPartMixin,
+                "renderLikeVanilla(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V");
+        assertNotNull(mixinRenderVanilla, "PerfEmfModelPartMixin.renderLikeVanilla overwrite missing");
+        assertEquals(0, countMethodInvoke(mixinRenderVanilla, "Ljava/util/Map;values()Ljava/util/Collection;"),
+                "PerfEmfModelPartMixin.renderLikeVanilla must not call Map.values() per frame");
+        assertEquals(1, countMethodInvoke(mixinRenderVanilla,
+                "Ldev/sunlit/fishvisuals/mixin/PerfEmfModelPartMixin;sunlit$getChildrenArray(Ljava/util/Map;)[Lnet/minecraft/client/model/geom/ModelPart;"),
+                "PerfEmfModelPartMixin.renderLikeVanilla must use cached sunlit$getChildrenArray");
+
+        MethodNode copiedCubes = new MethodNode(mixinCubes.access, mixinCubes.name, mixinCubes.desc, mixinCubes.signature, null);
+        mixinCubes.accept(copiedCubes);
+        emfPartNode.methods.add(copiedCubes);
+        MethodNode mixinChildren = findMethod(emfPartMixin, "sunlit$children()Ljava/util/Map;");
+        MethodNode copiedChildren = new MethodNode(mixinChildren.access, mixinChildren.name, mixinChildren.desc, mixinChildren.signature, null);
+        mixinChildren.accept(copiedChildren);
+        emfPartNode.methods.add(copiedChildren);
+        assertTrue(ClientPostApplyPatches.patchEmfModelPart(emfPartNode), "patchEmfModelPart must succeed");
+        assertTrue(ClientPostApplyPatches.patchEmfModelPart(emfPartNode), "patchEmfModelPart must be idempotent");
+        MethodNode boundCubes = findMethod(emfPartNode, "sunlit$cubes()Ljava/util/List;");
+        assertNotNull(boundCubes, "sunlit$cubes missing after patchEmfModelPart");
+        boolean sawCubesField = false;
+        for (AbstractInsnNode insn = boundCubes.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof FieldInsnNode fi && fi.getOpcode() == Opcodes.GETFIELD
+                    && emfPartNode.name.equals(fi.owner) && "f_104212_".equals(fi.name)
+                    && "Ljava/util/List;".equals(fi.desc)) {
+                sawCubesField = true;
+            }
+        }
+        assertTrue(sawCubesField, "sunlit$cubes must read EMFModelPart.f_104212_ directly");
+        MethodNode boundChildren = findMethod(emfPartNode, "sunlit$children()Ljava/util/Map;");
+        assertNotNull(boundChildren, "sunlit$children missing after patchEmfModelPart");
+        boolean sawChildrenField = false;
+        for (AbstractInsnNode insn = boundChildren.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof FieldInsnNode fi && fi.getOpcode() == Opcodes.GETFIELD
+                    && emfPartNode.name.equals(fi.owner) && "f_104213_".equals(fi.name)
+                    && "Ljava/util/Map;".equals(fi.desc)) {
+                sawChildrenField = true;
+            }
+        }
+        assertTrue(sawChildrenField, "sunlit$children must read EMFModelPart.f_104213_ directly");
+
+        // Verify JVM bytecode execution of GETFIELD f_104212_ & f_104213_ inherited from superclass without final ModelPart AT
+        ClassNode synPartNode = new ClassNode();
+        synPartNode.version = Opcodes.V17;
+        synPartNode.access = Opcodes.ACC_PUBLIC;
+        synPartNode.name = "dev/sunlit/bettersunlit/tests/perf/SynEmfModelPart";
+        synPartNode.superName = SynEmfModelPartBase.class.getName().replace('.', '/');
+        MethodNode synCubes = new MethodNode(Opcodes.ACC_PUBLIC, "sunlit$cubes", "()Ljava/util/List;", null, null);
+        synCubes.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        synCubes.instructions.add(new InsnNode(Opcodes.ARETURN));
+        synCubes.maxStack = 1;
+        synCubes.maxLocals = 1;
+        synPartNode.methods.add(synCubes);
+        MethodNode synChildren = new MethodNode(Opcodes.ACC_PUBLIC, "sunlit$children", "()Ljava/util/Map;", null, null);
+        synChildren.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        synChildren.instructions.add(new InsnNode(Opcodes.ARETURN));
+        synChildren.maxStack = 1;
+        synChildren.maxLocals = 1;
+        synPartNode.methods.add(synChildren);
+        assertTrue(ClientPostApplyPatches.patchEmfModelPart(synPartNode), "Synthetic subclass patchEmfModelPart must succeed");
+        ClassWriter synPartWriter = new ClassWriter(0);
+        synPartNode.accept(synPartWriter);
+        verifyBytecode(synPartNode.name.replace('/', '.'), synPartWriter.toByteArray());
+    }
+
+    public static class SynEmfModelPartBase {
+        public final List<ModelPart.Cube> f_104212_ = new ArrayList<>();
+        public final Map<String, ModelPart> f_104213_ = new HashMap<>();
+    }
+
+    private static void testRound4EmfLodAndModelPart() throws Exception {
+        assertEquals(0, dev.sunlit.bettersunlit.client.EmfRenderPerf.EMPTY_MODEL_PARTS.length,
+                "EMPTY_MODEL_PARTS must be zero-length");
+        dev.sunlit.bettersunlit.client.EmfRenderPerf.clearLodTimersForTests();
+
+        java.util.UUID u1 = new java.util.UUID(1L, 2L);
+        java.util.UUID u2 = new java.util.UUID(1L, 3L);
+        assertEquals(Integer.MIN_VALUE,
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(u1, "emf:sheep"),
+                "Unseen LOD timer key must return Integer.MIN_VALUE");
+        dev.sunlit.bettersunlit.client.EmfRenderPerf.putLodTimer(u1, "emf:sheep", 5);
+        assertEquals(5, dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(u1, "emf:sheep"),
+                "Inserted LOD timer must match");
+        assertEquals(Integer.MIN_VALUE,
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(u1, "emf:cow"),
+                "Different modelId must not collide");
+        assertEquals(Integer.MIN_VALUE,
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(u2, "emf:sheep"),
+                "Different UUID must not collide");
+        dev.sunlit.bettersunlit.client.EmfRenderPerf.putLodTimer(u1, "emf:sheep", 4);
+        assertEquals(4, dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(u1, "emf:sheep"),
+                "Updated LOD timer must match");
+
+        java.util.UUID[] uuids = new java.util.UUID[20];
+        String[] models = new String[20];
+        for (int i = 0; i < 20; i++) {
+            uuids[i] = new java.util.UUID(100L, i);
+            models[i] = "model_" + i;
+            dev.sunlit.bettersunlit.client.EmfRenderPerf.putLodTimer(uuids[i], models[i], i + 1);
+        }
+        for (int w = 0; w < 500; w++) {
+            for (int i = 0; i < 20; i++) {
+                int cur = dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(uuids[i], models[i]);
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.putLodTimer(uuids[i], models[i], cur == 0 ? 5 : cur - 1);
+            }
+        }
+        long allocLod = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int run = 0; run < 500; run++) {
+                for (int i = 0; i < 20; i++) {
+                    int cur = dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(uuids[i], models[i]);
+                    int next = cur == 0 ? 5 : cur - 1;
+                    dev.sunlit.bettersunlit.client.EmfRenderPerf.putLodTimer(uuids[i], models[i], next);
+                    acc += next;
+                }
+            }
+            if (acc < 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocLod, "Warm EmfRenderPerf LOD timer updates must allocate 0 bytes, got " + allocLod);
+        dev.sunlit.bettersunlit.client.EmfRenderPerf.clearLodTimers();
+        assertEquals(Integer.MIN_VALUE,
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(uuids[0], models[0]),
+                "clearLodTimers must evict cached LOD timers");
+
+        java.util.UUID firstOverflowUuid = new java.util.UUID(999L, 0L);
+        for (int i = 0; i < 4200; i++) {
+            dev.sunlit.bettersunlit.client.EmfRenderPerf.putLodTimer(new java.util.UUID(999L, i), "emf:overflow", i);
+        }
+        assertEquals(Integer.MIN_VALUE,
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(firstOverflowUuid, "emf:overflow"),
+                "LOD_TIMERS must bound size and evict stale entries above capacity");
+        assertEquals(4199,
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.getLodTimer(new java.util.UUID(999L, 4199L), "emf:overflow"),
+                "Most recent LOD timer entry after bounded wrap must remain queryable");
+        dev.sunlit.bettersunlit.client.EmfRenderPerf.clearLodTimersForTests();
+
+        ClassNode blockGroupMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfAmbientBlockGroupMixin");
+        MethodNode bgIs = findMethod(blockGroupMixin, "is(Lnet/minecraft/world/level/block/state/BlockState;)Z");
+        assertNotNull(bgIs, "PerfAmbientBlockGroupMixin.is missing");
+        assertEquals(0, countMethodInvoke(bgIs, "Ljava/util/List;iterator()Ljava/util/Iterator;"),
+                "PerfAmbientBlockGroupMixin.is must not allocate List iterator");
+
+        ClassNode scannerMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfAmbientAirPocketScannerMixin");
+        MethodNode scannerRun = findMethod(scannerMixin, "run()V");
+        assertNotNull(scannerRun, "PerfAmbientAirPocketScannerMixin.run missing");
+        assertEquals(0, countMethodInvoke(scannerRun, "Lnet/minecraft/core/Direction;values()[Lnet/minecraft/core/Direction;"),
+                "AirPocketScanner.run must not allocate Direction.values()");
+        assertEquals(0, countMethodInvoke(scannerRun, "Ljava/lang/Double;valueOf(D)Ljava/lang/Double;"),
+                "AirPocketScanner.run must not box Double weights");
+        assertEquals(0, countMethodInvoke(scannerRun, "Ljava/util/HashMap;get(Ljava/lang/Object;)Ljava/lang/Object;"),
+                "AirPocketScanner.run must use WaveQueue instead of HashMap.get");
+
+        ClassNode lodMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfEmfLodHandlerMixin");
+        MethodNode lodMethod = findMethod(lodMixin, "isLODSkippingThisFrame(Ljava/lang/String;)Z");
+        assertNotNull(lodMethod, "PerfEmfLodHandlerMixin.isLODSkippingThisFrame missing");
+        assertEquals(0, countMethodInvoke(lodMethod, "Ljava/lang/String;valueOf(Ljava/lang/Object;)Ljava/lang/String;"),
+                "EMFLODHandler.isLODSkippingThisFrame must not stringify UUID");
+        assertEquals(0, countMethodInvoke(lodMethod, "Ljava/lang/Integer;valueOf(I)Ljava/lang/Integer;"),
+                "EMFLODHandler.isLODSkippingThisFrame must not box Integer");
+
+        ClassNode batchMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfBatchableBufferSourceMixin");
+        MethodNode addFallback = findMethod(batchMixin,
+                "addNewFallbackBuffer(Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/BufferBuilder;");
+        assertNotNull(addFallback, "PerfBatchableBufferSourceMixin.addNewFallbackBuffer missing");
+        assertEquals(1, countMethodInvoke(addFallback,
+                "Lnet/raphimc/immediatelyfast/feature/core/BufferBuilderPool;get()Lcom/mojang/blaze3d/vertex/BufferBuilder;"),
+                "addNewFallbackBuffer must pull from BufferBuilderPool");
+        assertEquals(0, countMethodInvoke(addFallback,
+                "Ljava/util/Map;computeIfAbsent(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;"),
+                "addNewFallbackBuffer must not call computeIfAbsent lambda");
+        MethodNode drawCurrent = findMethod(batchMixin, "m_173043_()V");
+        assertNotNull(drawCurrent, "PerfBatchableBufferSourceMixin.m_173043_ missing");
+        assertEquals(1, countMethodInvoke(drawCurrent, "Ljava/util/Arrays;sort([Ljava/lang/Object;IILjava/util/Comparator;)V"),
+                "m_173043_ must sort slice [0, layerCount) using cached comparator");
+        MethodNode recycleSet = findMethod(batchMixin,
+                "sunlit$recycleSet(Lit/unimi/dsi/fastutil/objects/ReferenceSet;)V");
+        assertNotNull(recycleSet, "PerfBatchableBufferSourceMixin.sunlit$recycleSet missing");
+        assertEquals(1, countMethodInvoke(recycleSet,
+                "Lit/unimi/dsi/fastutil/objects/ReferenceSet;size()I"),
+                "sunlit$recycleSet must check set size before clear/pooling");
+        MethodNode getOrCreate = findMethod(batchMixin,
+                "getOrCreateBufferBuilder(Lnet/minecraft/client/renderer/RenderType;)Lcom/mojang/blaze3d/vertex/BufferBuilder;");
+        assertNotNull(getOrCreate, "PerfBatchableBufferSourceMixin.getOrCreateBufferBuilder missing");
+        assertEquals(1, countMethodInvoke(getOrCreate,
+                "Lit/unimi/dsi/fastutil/objects/ReferenceSet;isEmpty()Z"),
+                "getOrCreateBufferBuilder must guard against empty fallback sets");
+    }
+
+    private static void testArea2GraphOrderMultiSccAndLargeCyclePerf() {
+        SimpleFeedbackArcSetProvider refProvider = new SimpleFeedbackArcSetProvider();
+
+        // Case A: Multiple nontrivial SCCs + singletons + self-loop + unequal weights
+        GraphOrderPerf.PooledRenderDigraph<String> multiScc = new GraphOrderPerf.PooledRenderDigraph<>();
+        String[] nodesA = { "s0", "s1", "s2", "s3", "mid", "t0", "t1", "t2", "sink" };
+        for (String v : nodesA) multiScc.add(v);
+        multiScc.put("s0", "s1", 3);
+        multiScc.put("s1", "s2", 1);
+        multiScc.put("s2", "s3", 5);
+        multiScc.put("s3", "s0", 2);
+        multiScc.put("s2", "s0", 4);
+        multiScc.put("s3", "s1", 1);
+        multiScc.put("s1", "mid", 7);
+        multiScc.put("mid", "mid", 9);
+        multiScc.put("mid", "t0", 6);
+        multiScc.put("t0", "t1", 2);
+        multiScc.put("t1", "t2", 8);
+        multiScc.put("t2", "t0", 1);
+        multiScc.put("t2", "sink", 3);
+        assertGraphOrderParityWithReference(multiScc, refProvider, "multi-SCC + self-loop");
+
+        // Case B: Multi-SCC with 18-vertex HashSet-resize SCC (>12 threshold -> 16->32 bucket resize)
+        GraphOrderPerf.PooledRenderDigraph<String> resizeScc = new GraphOrderPerf.PooledRenderDigraph<>();
+        for (int i = 0; i < 18; i++) resizeScc.add("c_" + i);
+        for (int i = 0; i < 4; i++) resizeScc.add("d_" + i);
+        for (int i = 0; i < 18; i++) {
+            resizeScc.put("c_" + i, "c_" + ((i + 1) % 18), (i % 5) + 1);
+            resizeScc.put("c_" + i, "c_" + ((i + 4) % 18), ((i * 3) % 7) + 1);
+        }
+        resizeScc.put("c_5", "d_0", 4);
+        for (int i = 0; i < 4; i++) {
+            resizeScc.put("d_" + i, "d_" + ((i + 1) % 4), i + 2);
+        }
+        assertGraphOrderParityWithReference(resizeScc, refProvider, "multi-SCC HashSet-resize");
+
+        // Case C: Warm cache-miss computation must allocate 0 bytes across all 8 OrderCache slots
+        GraphOrderPerf.PooledRenderDigraph<String> missGraph = new GraphOrderPerf.PooledRenderDigraph<>();
+        String[] missNodes = { "a", "b", "c", "d", "br", "e", "f", "g" };
+        List<String> missOut = new ArrayList<>(16);
+        // Warm all 8 cache slots with distinct weights > threshold so each OrderCache & row array is grown
+        for (int w = 1; w <= 16; w++) {
+            missGraph.clear();
+            for (String v : missNodes) missGraph.add(v);
+            missGraph.put("a", "b", w);
+            missGraph.put("b", "c", 3);
+            missGraph.put("c", "d", 5);
+            missGraph.put("d", "a", 2);
+            missGraph.put("c", "br", 4);
+            missGraph.put("br", "e", 6);
+            missGraph.put("e", "f", 1);
+            missGraph.put("f", "g", 4);
+            missGraph.put("g", "e", 2);
+            missOut.clear();
+            GraphOrderPerf.orderPooledGraph(missGraph, missOut);
+        }
+        final int[] counter = { 100 };
+        long missAlloc = measureAllocBytes(() -> {
+            for (int iter = 0; iter < 16; iter++) {
+                int w = counter[0]++;
+                missGraph.clear();
+                for (String v : missNodes) missGraph.add(v);
+                missGraph.put("a", "b", w);
+                missGraph.put("b", "c", 3);
+                missGraph.put("c", "d", 5);
+                missGraph.put("d", "a", 2);
+                missGraph.put("c", "br", 4);
+                missGraph.put("br", "e", 6);
+                missGraph.put("e", "f", 1);
+                missGraph.put("f", "g", 4);
+                missGraph.put("g", "e", 2);
+                missOut.clear();
+                GraphOrderPerf.orderPooledGraph(missGraph, missOut);
+            }
+        });
+        assertEquals(0L, missAlloc, "Warm multi-SCC cache-miss FAS computation must allocate 0 bytes, got " + missAlloc);
+    }
+
+    private static void assertGraphOrderParityWithReference(
+            GraphOrderPerf.PooledRenderDigraph<String> pooled,
+            SimpleFeedbackArcSetProvider refProvider,
+            String label) {
+        MapDigraph<String> ref = new MapDigraph<>();
+        for (String v : pooled.vertices()) {
+            ref.add(v);
+        }
+        for (String u : pooled.vertices()) {
+            for (String v : pooled.targets(u)) {
+                ref.put(u, v, pooled.get(u, v).getAsInt());
+            }
+        }
+        FeedbackArcSet<String> refFas = refProvider.getFeedbackArcSet(ref, ref, FeedbackArcSetPolicy.MIN_WEIGHT);
+        for (String src : refFas.vertices()) {
+            for (String dst : refFas.targets(src)) {
+                ref.remove(src, dst);
+            }
+        }
+        List<String> expectedOrder = Digraphs.toposort(ref, false);
+
+        List<String> actualOrder = new ArrayList<>();
+        GraphOrderPerf.orderPooledGraph(pooled, actualOrder);
+        assertEquals(expectedOrder, actualOrder, "Order mismatch on " + label);
+        assertEquals(ref.getEdgeCount(), pooled.getEdgeCount(), "Kept edge count mismatch on " + label);
+        for (String u : ref.vertices()) {
+            for (String v : ref.targets(u)) {
+                assertTrue(pooled.contains(u, v), "Missing kept edge " + u + "->" + v + " on " + label);
+            }
+        }
     }
 
     private static void testArea2GraphOrderPerf() {
@@ -1450,6 +2143,89 @@ public final class PerfOptTests {
         GraphOrderPerf.orderPooledGraph(bypassGraph, bypassOut);
         assertEquals(Digraphs.toposort(bypassRef, false), bypassOut,
                 "Bypass path cycle must fall back to native MIN_WEIGHT FAS order");
+
+        // Multiple vertex-disjoint 2-cycles connected DAG-wise must match MIN_WEIGHT FAS order with 0 allocations
+        MapDigraph<String> multiRef = new MapDigraph<>();
+        GraphOrderPerf.PooledRenderDigraph<String> multiGraph = new GraphOrderPerf.PooledRenderDigraph<>();
+        for (String v : List.of("v0", "v1", "v2", "v3")) {
+            multiRef.add(v);
+            multiGraph.add(v);
+        }
+        multiRef.put("v0", "v1", 1);
+        multiRef.put("v1", "v0", 10);
+        multiRef.put("v1", "v2", 5);
+        multiRef.put("v2", "v3", 10);
+        multiRef.put("v3", "v2", 1);
+        multiGraph.put("v0", "v1", 1);
+        multiGraph.put("v1", "v0", 10);
+        multiGraph.put("v1", "v2", 5);
+        multiGraph.put("v2", "v3", 10);
+        multiGraph.put("v3", "v2", 1);
+        FeedbackArcSet<String> multiFas = new SimpleFeedbackArcSetProvider()
+                .getFeedbackArcSet(multiRef, multiRef, FeedbackArcSetPolicy.MIN_WEIGHT);
+        for (String s : multiFas.vertices()) {
+            for (String d : multiFas.targets(s)) {
+                multiRef.remove(s, d);
+            }
+        }
+        List<String> expectedMulti = Digraphs.toposort(multiRef, false);
+        List<String> multiOut = new ArrayList<>(8);
+        GraphOrderPerf.orderPooledGraph(multiGraph, multiOut);
+        assertEquals(expectedMulti, multiOut, "Disjoint 2-cycles must match MIN_WEIGHT FAS order");
+        long allocMulti = measureAllocBytes(() -> {
+            for (int i = 0; i < 500; i++) {
+                multiOut.clear();
+                GraphOrderPerf.orderPooledGraph(multiGraph, multiOut);
+            }
+        });
+        assertEquals(0L, allocMulti, "Disjoint 2-cycles must allocate 0 bytes, got " + allocMulti);
+
+        // Alternating 3-cycle graphs across shadow/main passes must hit 8-slot OrderCache with 0 allocations
+        MapDigraph<String> refA = new MapDigraph<>();
+        refA.put("a0", "a1", 2);
+        refA.put("a1", "a2", 2);
+        refA.put("a2", "a0", 1);
+        FeedbackArcSet<String> fasA = new SimpleFeedbackArcSetProvider()
+                .getFeedbackArcSet(refA, refA, FeedbackArcSetPolicy.MIN_WEIGHT);
+        for (String s : fasA.vertices()) for (String d : fasA.targets(s)) refA.remove(s, d);
+        List<String> expectedA = Digraphs.toposort(refA, false);
+
+        MapDigraph<String> refB = new MapDigraph<>();
+        refB.put("b0", "b1", 2);
+        refB.put("b1", "b2", 2);
+        refB.put("b2", "b0", 1);
+        FeedbackArcSet<String> fasB = new SimpleFeedbackArcSetProvider()
+                .getFeedbackArcSet(refB, refB, FeedbackArcSetPolicy.MIN_WEIGHT);
+        for (String s : fasB.vertices()) for (String d : fasB.targets(s)) refB.remove(s, d);
+        List<String> expectedB = Digraphs.toposort(refB, false);
+
+        GraphOrderPerf.PooledRenderDigraph<String> altGraph = new GraphOrderPerf.PooledRenderDigraph<>();
+        List<String> altOutA = new ArrayList<>(8);
+        List<String> altOutB = new ArrayList<>(8);
+        Runnable runAltCycle = () -> {
+            altGraph.clear();
+            altGraph.put("a0", "a1", 2);
+            altGraph.put("a1", "a2", 2);
+            altGraph.put("a2", "a0", 1);
+            altOutA.clear();
+            GraphOrderPerf.orderPooledGraph(altGraph, altOutA);
+
+            altGraph.clear();
+            altGraph.put("b0", "b1", 2);
+            altGraph.put("b1", "b2", 2);
+            altGraph.put("b2", "b0", 1);
+            altOutB.clear();
+            GraphOrderPerf.orderPooledGraph(altGraph, altOutB);
+        };
+        runAltCycle.run();
+        assertEquals(expectedA, altOutA, "Alternating 3-cycle A must match MIN_WEIGHT FAS order");
+        assertEquals(expectedB, altOutB, "Alternating 3-cycle B must match MIN_WEIGHT FAS order");
+        long allocAlt = measureAllocBytes(() -> {
+            for (int i = 0; i < 200; i++) {
+                runAltCycle.run();
+            }
+        });
+        assertEquals(0L, allocAlt, "Alternating 3-cycle graphs must hit 8-slot OrderCache with 0 allocations, got " + allocAlt);
     }
 
     private static void testArea3LogBegonePerf() throws Exception {
@@ -1627,6 +2403,34 @@ public final class PerfOptTests {
             customSubclass.strings = List.of(":smile:");
             assertTrue(EmojiRenderPerf.mayEmojiMatchClean(customSubclass, "no shortcode"),
                     "mayEmojiMatchClean must fall back conservatively for Emoji subclasses");
+
+            // Standard Emojiful subclasses (Twitmoji, Github, Emojipedia) must use exact fast path and reject single-colon noise
+            Constants.EMOJI_LIST.clear();
+            EmojiFromTwitmoji twit = new EmojiFromTwitmoji();
+            twit.strings = List.of(":twit:");
+            EmojiFromGithub git = new EmojiFromGithub();
+            git.strings = List.of(":git:");
+            EmojiFromEmojipedia eped = new EmojiFromEmojipedia();
+            eped.strings = List.of(":eped:");
+            Constants.EMOJI_LIST.addAll(List.of(twit, git, eped));
+            EmojiRenderPerf.invalidateIndex();
+            assertFalse(EmojiRenderPerf.mayEmojiMatchClean(twit, "no trigger"),
+                    "EmojiFromTwitmoji must use clean shortcode fast path");
+            assertTrue(EmojiRenderPerf.mayEmojiMatchClean(twit, "hi :twit:"),
+                    "EmojiFromTwitmoji must match when trigger present");
+            assertFalse(EmojiRenderPerf.mayEmojiMatchClean(git, "no trigger"),
+                    "EmojiFromGithub must use clean shortcode fast path");
+            assertTrue(EmojiRenderPerf.mayEmojiMatchClean(eped, "hi :eped:"),
+                    "EmojiFromEmojipedia must match when trigger present");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("a :twit: b"), "Single Twitmoji hit");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("a :git: b"), "Single Github hit");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("a :eped: b"), "Single Emojipedia hit");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("minecraft:stone"),
+                    "Single-colon resource location must be rejected");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("12:30"),
+                    "Single-colon timestamp must be rejected");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("FPS: 144"),
+                    "Single-colon HUD label must be rejected");
         } finally {
             Constants.EMOJI_LIST.clear();
             Constants.EMOJI_LIST.addAll(saved);
@@ -1673,6 +2477,10 @@ public final class PerfOptTests {
         assertNotNull(findMethod(emojiTarget, "sunlit$origWidthString(Ljava/lang/String;)I"), "origWidthString renamed");
         assertNotNull(findMethod(emojiTarget, "sunlit$origWidthSeq(Lnet/minecraft/util/FormattedCharSequence;)I"), "origWidthSeq renamed");
         assertEquals(null, findMethod(emojiTarget, "sunlit$fastWidthString(Ljava/lang/String;)I"), "fastWidthString swapped into m_92895_");
+        assertNotNull(findMethod(emojiTarget, "sunlit$origWidthText(Lnet/minecraft/network/chat/FormattedText;)I"),
+                "origWidthText renamed");
+        assertEquals(null, findMethod(emojiTarget, "sunlit$fastWidthText(Lnet/minecraft/network/chat/FormattedText;)I"),
+                "fastWidthText swapped into m_92852_");
         MethodNode getFormatted = findMethod(emojiTarget, "getEmojiFormattedString(Ljava/lang/String;)Lorg/apache/commons/lang3/tuple/Pair;");
         assertNotNull(getFormatted, "getEmojiFormattedString missing on EmojiFontRenderer");
         assertEquals(1, countMethodInvoke(getFormatted, "Ldev/sunlit/bettersunlit/client/EmojiRenderPerf;mightContainEmoji(Ljava/lang/CharSequence;)Z"),
@@ -1683,6 +2491,41 @@ public final class PerfOptTests {
         ClassWriter emojiWriter = new ClassWriter(0);
         emojiTarget.accept(emojiWriter);
         verifyBytecode(emojiTarget.name.replace('/', '.'), emojiWriter.toByteArray());
+
+        // 4. FormattedText extraction fast path (null on clean text, 0 alloc on clean FormattedText)
+        List<Emoji> savedTextTest = new ArrayList<>(Constants.EMOJI_LIST);
+        try {
+            Constants.EMOJI_LIST.clear();
+            Emoji smileText = new Emoji();
+            smileText.strings = List.of(":smile:");
+            Constants.EMOJI_LIST.add(smileText);
+            EmojiRenderPerf.invalidateIndex();
+            assertEquals(null, EmojiRenderPerf.extractIfMightContainEmoji(FormattedText.f_130760_),
+                    "EMPTY FormattedText must return null");
+            FormattedText cleanFormatted = FormattedText.m_130775_("FPS: 144 / minecraft:stone");
+            assertEquals(null, EmojiRenderPerf.extractIfMightContainEmoji(cleanFormatted),
+                    "Clean FormattedText must return null without allocating");
+            FormattedText compositeHit = FormattedText.m_130773_(
+                    FormattedText.m_130775_("hi "), FormattedText.m_130775_(":smile:"));
+            assertEquals("hi :smile:", EmojiRenderPerf.extractIfMightContainEmoji(compositeHit),
+                    "Composite FormattedText containing emoji trigger must return full text");
+            for (int i = 0; i < 1000; i++) {
+                EmojiRenderPerf.extractIfMightContainEmoji(cleanFormatted);
+            }
+            long allocFmtText = measureAllocBytes(() -> {
+                String acc = null;
+                for (int i = 0; i < 5000; i++) {
+                    acc = EmojiRenderPerf.extractIfMightContainEmoji(cleanFormatted);
+                }
+                if (acc != null && System.nanoTime() == 0) throw new AssertionError();
+            });
+            assertEquals(0L, allocFmtText,
+                    "Clean FormattedText fast check must allocate 0 bytes, got " + allocFmtText);
+        } finally {
+            Constants.EMOJI_LIST.clear();
+            Constants.EMOJI_LIST.addAll(savedTextTest);
+            EmojiRenderPerf.invalidateIndex();
+        }
     }
 
     private static void testArea1ChunkBuilderMeshingTaskPatch() throws Exception {
@@ -1771,6 +2614,83 @@ public final class PerfOptTests {
         verified.getDeclaredMethods();
         verified.getDeclaredFields();
         assertNotNull(verified.getDeclaredConstructor().newInstance(), "SynObeChunkTask must instantiate cleanly");
+
+        // Runtime MixinExtras-rewritten form: trailing LocalRef stripped from descriptor (paramSlots=5, modelVar=6)
+        ClassNode synTask4 = readClassNode("fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin");
+        String renamed4 = "dev/sunlit/bettersunlit/tests/perf/SynObeChunkTaskRuntime";
+        synTask4.name = renamed4;
+        synTask4.access &= ~Opcodes.ACC_ABSTRACT;
+        synTask4.visibleAnnotations = null;
+        synTask4.invisibleAnnotations = null;
+        synTask4.methods.removeIf(m -> !"<init>".equals(m.name) && !"obe$wrapRenderModel".equals(m.name));
+        synTask4.fields.clear();
+        for (MethodNode m : synTask4.methods) {
+            if ("obe$wrapRenderModel".equals(m.name)) {
+                m.desc = m.desc.replace("Lcom/llamalad7/mixinextras/sugar/ref/LocalRef;)", ")");
+                m.visibleParameterAnnotations = null;
+                m.invisibleParameterAnnotations = null;
+                m.visibleAnnotableParameterCount = 0;
+                m.invisibleAnnotableParameterCount = 0;
+                if (m.parameters != null && m.parameters.size() == 5) {
+                    m.parameters.remove(4);
+                }
+                InsnList initBe = new InsnList();
+                initBe.add(new InsnNode(Opcodes.ACONST_NULL));
+                initBe.add(new VarInsnNode(Opcodes.ASTORE, 5));
+                m.instructions.insert(initBe);
+            }
+            for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof FieldInsnNode fi && origInternal.equals(fi.owner)) {
+                    fi.owner = renamed4;
+                } else if (insn instanceof FrameNode fn) {
+                    if (fn.local != null) {
+                        for (int i = 0; i < fn.local.size(); i++) {
+                            if (origInternal.equals(fn.local.get(i))) fn.local.set(i, renamed4);
+                        }
+                    }
+                    if (fn.stack != null) {
+                        for (int i = 0; i < fn.stack.size(); i++) {
+                            if (origInternal.equals(fn.stack.get(i))) fn.stack.set(i, renamed4);
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(ClientPostApplyPatches.patchChunkBuilderMeshingTask(synTask4),
+                "patchChunkBuilderMeshingTask must succeed on 4-arg MixinExtras descriptor (paramSlots=5, modelVar=6)");
+        assertTrue(ClientPostApplyPatches.patchChunkBuilderMeshingTask(synTask4),
+                "4-arg runtime OBE patch must be idempotent");
+        MethodNode wrap4 = findMethod(synTask4,
+                "obe$wrapRenderModel(Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderer;Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext;Lme/jellysquid/mods/sodium/client/render/chunk/compile/ChunkBuildBuffers;Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;)V");
+        assertNotNull(wrap4, "4-arg obe$wrapRenderModel missing");
+        assertEquals(2, countMethodInvoke(wrap4, "Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext;model()Lnet/minecraft/client/resources/model/BakedModel;"),
+                "4-arg obe$wrapRenderModel must check ctx.model()");
+        FrameNode runtimeFrame = null;
+        for (AbstractInsnNode insn = wrap4.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof FrameNode fn && fn.type == Opcodes.F_FULL) {
+                runtimeFrame = fn;
+            }
+        }
+        assertNotNull(runtimeFrame, "4-arg runtime OBE patch must insert F_FULL frame");
+        assertEquals(5, runtimeFrame.local.size(), "4-arg runtime F_FULL must match 5 parameter slots");
+        ClassWriter cw4 = new ClassWriter(0);
+        synTask4.accept(cw4);
+        String synBinary4 = "dev.sunlit.bettersunlit.tests.perf.SynObeChunkTaskRuntime";
+        ClassLoader obeLoader4 = new ClassLoader(obeLoader) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (synBinary4.equals(name)) {
+                    byte[] b = cw4.toByteArray();
+                    Class<?> cls = defineClass(name, b, 0, b.length);
+                    if (resolve) resolveClass(cls);
+                    return cls;
+                }
+                return super.loadClass(name, resolve);
+            }
+        };
+        Class<?> verified4 = Class.forName(synBinary4, true, obeLoader4);
+        verified4.getDeclaredMethods();
+        assertNotNull(verified4.getDeclaredConstructor().newInstance(), "SynObeChunkTaskRuntime must instantiate cleanly");
     }
 
     private static byte[] buildInterfaceBytes(String internalName, String... nameDescPairs) {
@@ -1840,6 +2760,78 @@ public final class PerfOptTests {
 
         JeiRegistryPerf.invalidate();
         assertEquals(0, JeiRegistryPerf.size(), "JeiRegistryPerf.invalidate must clear cache");
+    }
+
+    private static void testTextureManagerThreadSafety() throws Exception {
+        ClassNode tmMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfTextureManagerMixin");
+        assertEquals("net.minecraft.client.renderer.texture.TextureManager", extractMixinTarget(tmMixin),
+                "PerfTextureManagerMixin target mismatch");
+
+        Set<Tickable> seedTickables = new java.util.HashSet<>();
+        Tickable t0 = () -> {};
+        seedTickables.add(t0);
+        Set<Tickable> concurrentTickables = TextureManagerPerf.concurrentTickables(seedTickables);
+        assertTrue(concurrentTickables.contains(t0), "Existing tickable must be preserved");
+        assertFalse(concurrentTickables.contains(null), "Null contains check must return false");
+        assertFalse(concurrentTickables.remove(null), "Null remove must return false");
+        assertFalse(concurrentTickables.add(null), "Null add must return false");
+
+        Map<ResourceLocation, AbstractTexture> byPath = TextureManagerPerf.concurrentByPath(new HashMap<>());
+        byPath.put(null, null);
+        assertTrue(byPath.containsKey(null), "Synchronized byPath map must tolerate null keys");
+        byPath.remove(null);
+
+        Map<String, Integer> prefixReg = TextureManagerPerf.concurrentPrefixRegister(Map.of("dyn", 2));
+        assertEquals(Integer.valueOf(2), prefixReg.get("dyn"), "Prefix register entries must be preserved");
+
+        // Concurrent Netty/worker add+remove + re-entrant mutation while ticking must never throw CME.
+        List<Throwable> errors = Collections.synchronizedList(new ArrayList<>());
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        AtomicInteger ticks = new AtomicInteger();
+        Thread mutator1 = new Thread(() -> {
+            try {
+                start.await();
+                for (int i = 0; i < 4000; i++) {
+                    Tickable item = () -> {};
+                    concurrentTickables.add(item);
+                    concurrentTickables.remove(item);
+                }
+            } catch (Throwable t) {
+                errors.add(t);
+            }
+        }, "tm-mutator-1");
+        Thread mutator2 = new Thread(() -> {
+            try {
+                start.await();
+                for (int i = 0; i < 4000; i++) {
+                    ResourceLocation key = new ResourceLocation("bettersunlit", "t_" + (i & 63));
+                    byPath.put(key, null);
+                    byPath.get(key);
+                    byPath.remove(key);
+                }
+            } catch (Throwable t) {
+                errors.add(t);
+            }
+        }, "tm-mutator-2");
+        mutator1.start();
+        mutator2.start();
+        start.countDown();
+        for (int frame = 0; frame < 2000; frame++) {
+            for (Tickable t : concurrentTickables) {
+                t.m_7673_();
+                ticks.incrementAndGet();
+                if ((frame & 31) == 0 && t == t0) {
+                    Tickable reentrant = () -> {};
+                    concurrentTickables.add(reentrant);
+                    concurrentTickables.remove(reentrant);
+                }
+            }
+        }
+        mutator1.join(5000);
+        mutator2.join(5000);
+        assertFalse(mutator1.isAlive() || mutator2.isAlive(), "Worker threads must finish within timeout");
+        assertTrue(errors.isEmpty(), "Concurrent TextureManager access must not fail: " + errors);
+        assertTrue(ticks.get() >= 2000, "Tick iteration must still run all frames");
     }
 
     private static void verifyBytecode(String binaryName, byte[] classBytes) throws Exception {
@@ -2076,15 +3068,98 @@ public final class PerfOptTests {
         return hits;
     }
 
+    private static int countNewType(MethodNode method, String internalType) {
+        int hits = 0;
+        for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof TypeInsnNode ti && ti.getOpcode() == Opcodes.NEW && internalType.equals(ti.desc)) {
+                hits++;
+            }
+        }
+        return hits;
+    }
+
+    private static MethodNode addPassableSynMethod(
+            ClassNode owner,
+            String methodName,
+            String methodDesc,
+            String handlerName,
+            boolean isFloat,
+            int cirVar,
+            boolean includeAfterFrame,
+            boolean useBoxedGetter) {
+        String bg = "net/minecraft/world/level/BlockGetter";
+        String bp = "net/minecraft/core/BlockPos";
+        String cir = EntryPostApplyPatches.CIR_INTERNAL;
+        String handlerDesc = "(L" + bg + ";L" + bp + ";L" + cir + ";)V";
+
+        MethodNode m = new MethodNode(Opcodes.ACC_PUBLIC, methodName, methodDesc, null, null);
+        LabelNode lAfter = new LabelNode();
+        m.instructions.add(new TypeInsnNode(Opcodes.NEW, cir));
+        m.instructions.add(new InsnNode(Opcodes.DUP));
+        m.instructions.add(new LdcInsnNode(methodName));
+        m.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        m.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, cir, "<init>", "(Ljava/lang/String;Z)V", false));
+        m.instructions.add(new VarInsnNode(Opcodes.ASTORE, cirVar));
+        m.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        m.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        m.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        m.instructions.add(new VarInsnNode(Opcodes.ALOAD, cirVar));
+        m.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, owner.name, handlerName, handlerDesc, false));
+        m.instructions.add(new VarInsnNode(Opcodes.ALOAD, cirVar));
+        m.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cir, "isCancelled", "()Z", false));
+        m.instructions.add(new JumpInsnNode(Opcodes.IFEQ, lAfter));
+        m.instructions.add(new VarInsnNode(Opcodes.ALOAD, cirVar));
+        if (useBoxedGetter) {
+            String boxed = isFloat ? "java/lang/Float" : "java/lang/Boolean";
+            String unboxName = isFloat ? "floatValue" : "booleanValue";
+            String unboxDesc = isFloat ? "()F" : "()Z";
+            m.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cir, "getReturnValue", "()Ljava/lang/Object;", false));
+            m.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, boxed));
+            m.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, boxed, unboxName, unboxDesc, false));
+        } else {
+            m.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cir,
+                    isFloat ? "getReturnValueF" : "getReturnValueZ", isFloat ? "()F" : "()Z", false));
+        }
+        m.instructions.add(new InsnNode(isFloat ? Opcodes.FRETURN : Opcodes.IRETURN));
+        m.instructions.add(lAfter);
+        if (includeAfterFrame) {
+            if (cirVar > 3) {
+                m.instructions.add(new FrameNode(Opcodes.F_FULL, 5,
+                        new Object[] { owner.name, bg, bp, Opcodes.TOP, cir }, 0, new Object[0]));
+            } else {
+                m.instructions.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] { cir }, 0, null));
+            }
+        }
+        m.instructions.add(new InsnNode(isFloat ? Opcodes.FCONST_1 : Opcodes.ICONST_1));
+        m.instructions.add(new InsnNode(isFloat ? Opcodes.FRETURN : Opcodes.IRETURN));
+        m.maxStack = 4;
+        m.maxLocals = cirVar + 1;
+        owner.methods.add(m);
+
+        MethodNode stub = new MethodNode(Opcodes.ACC_PRIVATE, handlerName, handlerDesc, null, null);
+        stub.instructions.add(new InsnNode(Opcodes.RETURN));
+        stub.maxStack = 1;
+        stub.maxLocals = 4;
+        owner.methods.add(stub);
+        return m;
+    }
+
     private static long measureAllocBytes(Runnable task) {
         THREAD_MX.getCurrentThreadAllocatedBytes();
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 6; i++) {
             task.run();
         }
-        long before = THREAD_MX.getCurrentThreadAllocatedBytes();
-        task.run();
-        long after = THREAD_MX.getCurrentThreadAllocatedBytes();
-        return after - before;
+        long min = Long.MAX_VALUE;
+        for (int i = 0; i < 3; i++) {
+            long before = THREAD_MX.getCurrentThreadAllocatedBytes();
+            task.run();
+            long after = THREAD_MX.getCurrentThreadAllocatedBytes();
+            long delta = after - before;
+            if (delta < min) {
+                min = delta;
+            }
+        }
+        return min;
     }
 
     private static void assertVerticesBitIdentical(RecordingVertexConsumer expected,
@@ -2174,6 +3249,358 @@ public final class PerfOptTests {
             }
             return super.loadClass(name, resolve);
         }
+    }
+
+    private static void testCompiledCubeAndSodiumVertexWriter() throws Exception {
+        Set<Direction> allDirs = EnumSet.allOf(Direction.class);
+        ModelPart.Cube cubeNormal = new ModelPart.Cube(0, 0, -2.0f, -3.5f, 1.0f, 5.0f, 7.0f, 4.0f,
+                0.25f, 0.5f, 0.75f, false, 64.0f, 64.0f, allDirs);
+        ModelPart.Cube cubeMirror = new ModelPart.Cube(8, 12, 1.0f, 0.0f, -4.0f, 6.0f, 3.0f, 5.0f,
+                0.0f, 0.0f, 0.0f, true, 32.0f, 64.0f, allDirs);
+        Field polyField = ModelPart.Cube.class.getDeclaredField("f_104341_");
+        polyField.setAccessible(true);
+        Object[] polysNormal = (Object[]) polyField.get(cubeNormal);
+        Object[] polysMirror = (Object[]) polyField.get(cubeMirror);
+
+        EmfRenderPerf.PolygonHolder holderNormal = new EmfRenderPerf.PolygonHolder() {
+            private EmfRenderPerf.CompiledCube compiled;
+            @Override public Object[] sunlit$polygons() { return polysNormal; }
+            @Override public EmfRenderPerf.CompiledCube sunlit$compiledCube() { return compiled; }
+            @Override public void sunlit$setCompiledCube(EmfRenderPerf.CompiledCube c) { this.compiled = c; }
+        };
+        EmfRenderPerf.PolygonHolder holderMirror = new EmfRenderPerf.PolygonHolder() {
+            private EmfRenderPerf.CompiledCube compiled;
+            @Override public Object[] sunlit$polygons() { return polysMirror; }
+            @Override public EmfRenderPerf.CompiledCube sunlit$compiledCube() { return compiled; }
+            @Override public void sunlit$setCompiledCube(EmfRenderPerf.CompiledCube c) { this.compiled = c; }
+        };
+        EmfRenderPerf.PolygonHolder holderEmpty = new EmfRenderPerf.PolygonHolder() {
+            private EmfRenderPerf.CompiledCube compiled;
+            @Override public Object[] sunlit$polygons() { return new Object[0]; }
+            @Override public EmfRenderPerf.CompiledCube sunlit$compiledCube() { return compiled; }
+            @Override public void sunlit$setCompiledCube(EmfRenderPerf.CompiledCube c) { this.compiled = c; }
+        };
+
+        PoseStack stack = new PoseStack();
+        PoseStack.Pose[] poses = new PoseStack.Pose[3];
+        poses[0] = stack.m_85850_();
+        stack.m_85836_();
+        stack.m_85850_().m_252922_().translate(1.5f, -2.25f, 0.75f).rotateXYZ(0.3f, -0.9f, 1.2f);
+        stack.m_85850_().m_252943_().rotateXYZ(0.3f, -0.9f, 1.2f);
+        poses[1] = stack.m_85850_();
+        stack.m_85836_();
+        stack.m_85850_().m_252922_().scale(1.25f, -0.75f, 2.0f).rotateY(0.75f);
+        stack.m_85850_().m_252943_().scale(1.0f, -1.0f, 1.0f).rotateY(0.75f);
+        poses[2] = stack.m_85850_();
+
+        net.caffeinemc.mods.sodium.api.vertex.format.VertexFormatDescription mockModelFormat =
+                new net.caffeinemc.mods.sodium.api.vertex.format.VertexFormatDescription() {
+                    @Override public boolean containsElement(net.caffeinemc.mods.sodium.api.vertex.attributes.CommonVertexAttribute el) { return true; }
+                    @Override public int getElementOffset(net.caffeinemc.mods.sodium.api.vertex.attributes.CommonVertexAttribute el) { return 0; }
+                    @Override public int id() { return 0; }
+                    @Override public int stride() { return 36; }
+                    @Override public boolean isSimpleFormat() { return true; }
+                };
+
+        RecordingVertexConsumer expectedVc = new RecordingVertexConsumer();
+        RecordingVertexConsumer scalarVc = new RecordingVertexConsumer();
+        RecordingWriterConsumer sodiumVc = new RecordingWriterConsumer(true, 64, mockModelFormat);
+        RecordingWriterConsumer disabledSodiumVc = new RecordingWriterConsumer(false, 64, mockModelFormat);
+
+        EmfRenderPerf.CompiledCube compiledNormal = EmfRenderPerf.getOrCompile(holderNormal);
+        EmfRenderPerf.CompiledCube compiledMirror = EmfRenderPerf.getOrCompile(holderMirror);
+
+        for (int p = 0; p < poses.length; p++) {
+            PoseStack.Pose pose = poses[p];
+            expectedVc.reset();
+            scalarVc.reset();
+            sodiumVc.reset();
+            disabledSodiumVc.reset();
+
+            cubeNormal.m_171332_(pose, expectedVc, 240, 655360, 0.9f, 0.8f, 0.7f, 0.6f);
+            EmfRenderPerf.compileCube(holderNormal, pose, scalarVc, 240, 655360, 0.9f, 0.8f, 0.7f, 0.6f);
+            assertTrue(EmfRenderPerf.emitCompiledQuadsNative(
+                    compiledNormal, pose, sodiumVc, mockModelFormat, 240, 655360, 0.9f, 0.8f, 0.7f, 0.6f),
+                    "emitCompiledQuadsNative must succeed for enabled writer");
+            EmfRenderPerf.compileCube(holderNormal, pose, disabledSodiumVc, 240, 655360, 0.9f, 0.8f, 0.7f, 0.6f);
+
+            assertVerticesBitIdentical(expectedVc, scalarVc, "compileCube scalar normal pose " + p);
+            assertVerticesBitIdentical(expectedVc, disabledSodiumVc.scalarFallback, "compileCube disabled VertexBufferWriter pose " + p);
+            assertEquals(expectedVc.count, sodiumVc.vertexCount, "Sodium VertexBufferWriter vertex count mismatch");
+            assertEquals(0, sodiumVc.scalarFallback.count, "Sodium fast path must bypass per-vertex scalar calls");
+            assertEquals(1, sodiumVc.pushCalls, "6-quad cube must push in 1 native batch");
+            for (int i = 0; i < expectedVc.count; i++) {
+                assertEquals(Float.floatToRawIntBits((float) expectedVc.x[i]), Float.floatToRawIntBits(sodiumVc.x[i]), "Sodium x[" + i + "]");
+                assertEquals(Float.floatToRawIntBits((float) expectedVc.y[i]), Float.floatToRawIntBits(sodiumVc.y[i]), "Sodium y[" + i + "]");
+                assertEquals(Float.floatToRawIntBits((float) expectedVc.z[i]), Float.floatToRawIntBits(sodiumVc.z[i]), "Sodium z[" + i + "]");
+                assertEquals(Float.floatToRawIntBits(expectedVc.u[i]), Float.floatToRawIntBits(sodiumVc.u[i]), "Sodium u[" + i + "]");
+                assertEquals(Float.floatToRawIntBits(expectedVc.v[i]), Float.floatToRawIntBits(sodiumVc.v[i]), "Sodium v[" + i + "]");
+                assertEquals(expectedVc.overlay[i], sodiumVc.overlay[i], "Sodium overlay[" + i + "]");
+                assertEquals(expectedVc.light[i], sodiumVc.light[i], "Sodium light[" + i + "]");
+                int expectedAbgr = net.caffeinemc.mods.sodium.api.util.ColorABGR.pack(0.9f, 0.8f, 0.7f, 0.6f);
+                assertEquals(expectedAbgr, sodiumVc.abgr[i], "Sodium colorABGR[" + i + "]");
+                int expectedNorm = net.caffeinemc.mods.sodium.api.util.NormI8.pack(expectedVc.nx[i], expectedVc.ny[i], expectedVc.nz[i]);
+                assertEquals(expectedNorm, sodiumVc.normPacked[i], "Sodium norm[" + i + "]");
+            }
+
+            expectedVc.reset();
+            scalarVc.reset();
+            sodiumVc.reset();
+            cubeMirror.m_171332_(pose, expectedVc, 240, 0, 1.0f, 0.5f, 0.25f, 1.0f);
+            EmfRenderPerf.compileCube(holderMirror, pose, scalarVc, 240, 0, 1.0f, 0.5f, 0.25f, 1.0f);
+            assertTrue(EmfRenderPerf.emitCompiledQuadsNative(
+                    compiledMirror, pose, sodiumVc, mockModelFormat, 240, 0, 1.0f, 0.5f, 0.25f, 1.0f),
+                    "emitCompiledQuadsNative mirror must succeed");
+            assertVerticesBitIdentical(expectedVc, scalarVc, "compileCube scalar mirror pose " + p);
+            assertEquals(expectedVc.count, sodiumVc.vertexCount, "Sodium mirror vertex count");
+        }
+
+        // Disabled VertexBufferWriter must return false from emitCompiledQuadsNative and compileCube must fail open cleanly
+        assertFalse(EmfRenderPerf.emitCompiledQuadsNative(
+                compiledNormal, poses[0], disabledSodiumVc, mockModelFormat, 240, 0, 1f, 1f, 1f, 1f),
+                "Disabled VertexBufferWriter must return false");
+
+        // Empty cube must emit 0 vertices and allocate nothing
+        sodiumVc.reset();
+        EmfRenderPerf.compileCube(holderEmpty, poses[0], scalarVc, 240, 0, 1f, 1f, 1f, 1f);
+        EmfRenderPerf.CompiledCube compiledEmpty = EmfRenderPerf.getOrCompile(holderEmpty);
+        assertTrue(EmfRenderPerf.emitCompiledQuadsNative(
+                compiledEmpty, poses[0], sodiumVc, mockModelFormat, 240, 0, 1f, 1f, 1f, 1f),
+                "Empty cube native emit returns true cleanly");
+        assertEquals(0, sodiumVc.vertexCount, "Empty cube must emit 0 vertices");
+        assertNotNull(holderEmpty.sunlit$compiledCube(), "Empty cube must cache CompiledCube.EMPTY");
+
+        // Large cube (>32 quads = 70 quads -> 3 native batches: 32 + 32 + 6)
+        Object[] largePolys = new Object[70];
+        for (int i = 0; i < largePolys.length; i++) {
+            largePolys[i] = polysNormal[i % polysNormal.length];
+        }
+        EmfRenderPerf.PolygonHolder holderLarge = new EmfRenderPerf.PolygonHolder() {
+            private EmfRenderPerf.CompiledCube compiled;
+            @Override public Object[] sunlit$polygons() { return largePolys; }
+            @Override public EmfRenderPerf.CompiledCube sunlit$compiledCube() { return compiled; }
+            @Override public void sunlit$setCompiledCube(EmfRenderPerf.CompiledCube c) { this.compiled = c; }
+        };
+        RecordingWriterConsumer largeSodiumVc = new RecordingWriterConsumer(true, 300, mockModelFormat);
+        EmfRenderPerf.CompiledCube compiledLarge = EmfRenderPerf.getOrCompile(holderLarge);
+        assertTrue(EmfRenderPerf.emitCompiledQuadsNative(
+                compiledLarge, poses[1], largeSodiumVc, mockModelFormat, 240, 0, 1f, 1f, 1f, 1f),
+                "Large cube native emit must succeed");
+        assertEquals(280, largeSodiumVc.vertexCount, "70-quad cube must emit 280 vertices");
+        assertEquals(3, largeSodiumVc.pushCalls, "70-quad cube must push in 3 batches (32+32+6)");
+
+        // Warm 0-alloc check for scalar compileCube and Sodium VertexBufferWriter MemoryStack path
+        PoseStack.Pose hotPose = poses[1];
+        for (int i = 0; i < 1000; i++) {
+            scalarVc.reset();
+            EmfRenderPerf.compileCube(holderNormal, hotPose, scalarVc, 240, 655360, 1f, 1f, 1f, 1f);
+            sodiumVc.reset();
+            EmfRenderPerf.emitCompiledQuadsNative(compiledNormal, hotPose, sodiumVc, mockModelFormat, 240, 655360, 1f, 1f, 1f, 1f);
+        }
+        long allocScalar = measureAllocBytes(() -> {
+            for (int i = 0; i < 2000; i++) {
+                scalarVc.reset();
+                EmfRenderPerf.compileCube(holderNormal, hotPose, scalarVc, 240, 655360, 1f, 1f, 1f, 1f);
+            }
+        });
+        assertEquals(0L, allocScalar, "Warm EmfRenderPerf.compileCube scalar path must allocate 0 bytes, got " + allocScalar);
+        long allocSodium = measureAllocBytes(() -> {
+            for (int i = 0; i < 2000; i++) {
+                sodiumVc.reset();
+                EmfRenderPerf.emitCompiledQuadsNative(compiledNormal, hotPose, sodiumVc, mockModelFormat, 240, 655360, 1f, 1f, 1f, 1f);
+            }
+        });
+        assertEquals(0L, allocSodium, "Warm EmfRenderPerf.emitCompiledQuadsNative must allocate 0 bytes, got " + allocSodium);
+    }
+
+    private static void testParticleRainWhitelistPaletteAndAirRay() throws Exception {
+        // 1. PerfWhitelistMixin ASM contract
+        ClassNode wlMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfWhitelistMixin");
+        MethodNode wlContains = findMethod(wlMixin, "contains(Lnet/minecraft/core/Holder;)Z");
+        assertNotNull(wlContains, "PerfWhitelistMixin.contains missing");
+        assertEquals(0, countMethodInvoke(wlContains, "Ljava/util/ArrayList;iterator()Ljava/util/Iterator;"),
+                "PerfWhitelistMixin.contains must not allocate ArrayList iterator");
+        assertEquals(1, countMethodInvoke(wlContains, "Lit/unimi/dsi/fastutil/objects/Reference2ByteOpenHashMap;getByte(Ljava/lang/Object;)B"),
+                "PerfWhitelistMixin.contains must query Reference2ByteOpenHashMap cache");
+        assertNotNull(findMethod(wlMixin, "sunlit$invalidateOnPopulate(Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V"),
+                "PerfWhitelistMixin must inject cache invalidation on populateInternalLists");
+
+        // 2. PalettedContainer postApply ASM patch + bytecode verification
+        ClassNode pcNode = readClassNode("net.minecraft.world.level.chunk.PalettedContainer");
+        pcNode.interfaces.add("dev/sunlit/bettersunlit/client/ParticleRainClientPerf$PalettedContainerBridge");
+        MethodNode rawPalette = new MethodNode(Opcodes.ACC_PRIVATE, "sunlit$rawPalette", "()Ljava/lang/Object;", null, null);
+        rawPalette.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        rawPalette.instructions.add(new InsnNode(Opcodes.ARETURN));
+        rawPalette.maxStack = 1;
+        rawPalette.maxLocals = 1;
+        pcNode.methods.add(rawPalette);
+        assertTrue(ClientPostApplyPatches.patchPalettedContainer(pcNode), "patchPalettedContainer must succeed");
+        assertTrue(ClientPostApplyPatches.patchPalettedContainer(pcNode), "patchPalettedContainer must be idempotent");
+        ClassWriter pcWriter = new ClassWriter(0);
+        pcNode.accept(pcWriter);
+        byte[] pcBytes = pcWriter.toByteArray();
+        ClassLoader pkgVerifier = new ClassLoader(PerfOptTests.class.getClassLoader()) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.equals("net.minecraft.world.level.chunk.PalettedContainer")) {
+                    Class<?> found = findLoadedClass(name);
+                    if (found == null) {
+                        found = defineClass(name, pcBytes, 0, pcBytes.length);
+                    }
+                    if (resolve) resolveClass(found);
+                    return found;
+                }
+                if (name.startsWith("net.minecraft.world.level.chunk.")) {
+                    Class<?> found = findLoadedClass(name);
+                    if (found == null) {
+                        try (InputStream in = getParent().getResourceAsStream(name.replace('.', '/') + ".class")) {
+                            if (in == null) {
+                                return super.loadClass(name, resolve);
+                            }
+                            byte[] bytes = in.readAllBytes();
+                            found = defineClass(name, bytes, 0, bytes.length);
+                        } catch (IOException e) {
+                            throw new ClassNotFoundException(name, e);
+                        }
+                    }
+                    if (resolve) resolveClass(found);
+                    return found;
+                }
+                return super.loadClass(name, resolve);
+            }
+        };
+        Class<?> verifiedPc = pkgVerifier.loadClass("net.minecraft.world.level.chunk.PalettedContainer");
+        assertNotNull(verifiedPc, "Verified PalettedContainer class missing");
+        verifiedPc.getDeclaredMethods();
+        verifiedPc.getDeclaredFields();
+
+        // 3. Whitelist cache epoch invalidation
+        int e0 = ParticleRainClientPerf.whitelistCacheEpoch();
+        ParticleRainClientPerf.invalidateWhitelistCaches();
+        assertEquals(e0 + 1, ParticleRainClientPerf.whitelistCacheEpoch(), "invalidateWhitelistCaches must increment epoch");
+
+        // 4. Air-ray geometry checks & getBlockFxCandidates per-tick caching
+        assertEquals(0, ParticleRainClientPerf.airRayKind(1, 64, 2, 1, 64, 2),
+                "Same voxel must classify as kind 0");
+        assertEquals(1, ParticleRainClientPerf.airRayKind(1, 64, 2, 1, 63, 2),
+                "Face-adjacent vertical voxel must classify as kind 1");
+        assertEquals(1, ParticleRainClientPerf.airRayKind(1, 64, 2, 2, 64, 2),
+                "Face-adjacent horizontal voxel must classify as kind 1");
+        assertEquals(-1, ParticleRainClientPerf.airRayKind(1, 64, 2, 2, 63, 2),
+                "Diagonal multi-axis step must defer to clip (-1)");
+        assertEquals(-1, ParticleRainClientPerf.airRayKind(1, 64, 2, 1, 62, 2),
+                "Multi-block vertical step must defer to clip (-1)");
+
+        Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        theUnsafeField.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) theUnsafeField.get(null);
+
+        // getBlockFxCandidates caches within same tick & map size and refreshes on tick/map size change
+        Map<String, pigcart.particlerain.config.ParticleData> prevMap = pigcart.particlerain.ParticleLoader.particles;
+        try {
+            Object levelKeyA = new Object();
+            Object levelKeyB = new Object();
+            pigcart.particlerain.ParticleLoader.particles = new java.util.HashMap<>();
+            ParticleRainClientPerf.Scratch spScratch = new ParticleRainClientPerf.Scratch();
+            var listA = ParticleRainClientPerf.getBlockFxCandidates(levelKeyA, 100L, spScratch);
+            var listB = ParticleRainClientPerf.getBlockFxCandidates(levelKeyA, 100L, spScratch);
+            assertSame(listA, listB, "getBlockFxCandidates must reuse per-tick cached list");
+            assertEquals(0, listA.size(), "Empty particle map yields 0 candidates");
+
+            pigcart.particlerain.config.ParticleData pd =
+                    (pigcart.particlerain.config.ParticleData) unsafe.allocateInstance(
+                            pigcart.particlerain.config.ParticleData.class);
+            pd.enabled = Boolean.TRUE;
+            pd.spawnPos = pigcart.particlerain.config.ParticleData.SpawnPos.BLOCK_TOP;
+            pd.weather = null;
+            pigcart.particlerain.ParticleLoader.particles.put("test", pd);
+            var listC = ParticleRainClientPerf.getBlockFxCandidates(levelKeyA, 100L, spScratch);
+            assertEquals(0, listC.size(), "Map size change triggers immediate refresh");
+            assertSame(listC, ParticleRainClientPerf.getBlockFxCandidates(levelKeyB, 101L, spScratch),
+                    "Tick/level switches must reuse scratch list cleanly");
+            assertEquals(101L, spScratch.cachedBlockFxTick, "Scratch tick must update to 101");
+            assertSame(levelKeyB, spScratch.cachedBlockFxLevel, "Scratch level key must update to levelKeyB");
+        } finally {
+            pigcart.particlerain.ParticleLoader.particles = prevMap;
+        }
+    }
+
+    private static final class RecordingWriterConsumer
+            implements VertexConsumer, net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter {
+        final RecordingVertexConsumer scalarFallback = new RecordingVertexConsumer();
+        final boolean intrinsics;
+        final float[] x;
+        final float[] y;
+        final float[] z;
+        final int[] abgr;
+        final float[] u;
+        final float[] v;
+        final int[] overlay;
+        final int[] light;
+        final int[] normPacked;
+        final net.caffeinemc.mods.sodium.api.vertex.format.VertexFormatDescription expectedFormat;
+        int vertexCount;
+        int pushCalls;
+
+        RecordingWriterConsumer(
+                boolean intrinsics,
+                int cap,
+                net.caffeinemc.mods.sodium.api.vertex.format.VertexFormatDescription expectedFormat) {
+            this.intrinsics = intrinsics;
+            this.expectedFormat = expectedFormat;
+            this.x = new float[cap];
+            this.y = new float[cap];
+            this.z = new float[cap];
+            this.abgr = new int[cap];
+            this.u = new float[cap];
+            this.v = new float[cap];
+            this.overlay = new int[cap];
+            this.light = new int[cap];
+            this.normPacked = new int[cap];
+        }
+
+        void reset() {
+            vertexCount = 0;
+            pushCalls = 0;
+            scalarFallback.reset();
+        }
+
+        @Override public boolean canUseIntrinsics() { return intrinsics; }
+
+        @Override
+        public void push(
+                org.lwjgl.system.MemoryStack stack,
+                long ptr,
+                int count,
+                net.caffeinemc.mods.sodium.api.vertex.format.VertexFormatDescription format) {
+            assertSame(expectedFormat, format, "Expected VertexFormatDescription");
+            pushCalls++;
+            int stride = 36;
+            for (int i = 0; i < count; i++) {
+                long vp = ptr + (long) i * stride;
+                int idx = vertexCount++;
+                x[idx] = org.lwjgl.system.MemoryUtil.memGetFloat(vp);
+                y[idx] = org.lwjgl.system.MemoryUtil.memGetFloat(vp + 4);
+                z[idx] = org.lwjgl.system.MemoryUtil.memGetFloat(vp + 8);
+                abgr[idx] = org.lwjgl.system.MemoryUtil.memGetInt(vp + 12);
+                u[idx] = org.lwjgl.system.MemoryUtil.memGetFloat(vp + 16);
+                v[idx] = org.lwjgl.system.MemoryUtil.memGetFloat(vp + 20);
+                overlay[idx] = org.lwjgl.system.MemoryUtil.memGetInt(vp + 24);
+                light[idx] = org.lwjgl.system.MemoryUtil.memGetInt(vp + 28);
+                normPacked[idx] = org.lwjgl.system.MemoryUtil.memGetInt(vp + 32);
+            }
+        }
+
+        @Override public VertexConsumer m_5483_(double vx, double vy, double vz) { return scalarFallback.m_5483_(vx, vy, vz); }
+        @Override public VertexConsumer m_6122_(int r, int g, int b, int a) { return scalarFallback.m_6122_(r, g, b, a); }
+        @Override public VertexConsumer m_7421_(float vu, float vv) { return scalarFallback.m_7421_(vu, vv); }
+        @Override public VertexConsumer m_7122_(int ou, int ov) { return scalarFallback.m_7122_(ou, ov); }
+        @Override public VertexConsumer m_7120_(int lu, int lv) { return scalarFallback.m_7120_(lu, lv); }
+        @Override public VertexConsumer m_85969_(int uv2) { return scalarFallback.m_85969_(uv2); }
+        @Override public VertexConsumer m_5601_(float xN, float yN, float zN) { return scalarFallback.m_5601_(xN, yN, zN); }
+        @Override public void m_5752_() { scalarFallback.m_5752_(); }
+        @Override public void m_7404_(int r, int g, int b, int a) {}
+        @Override public void m_141991_() {}
     }
 
     private static final class RecordingVertexConsumer implements VertexConsumer {

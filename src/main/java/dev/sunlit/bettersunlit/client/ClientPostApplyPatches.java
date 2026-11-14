@@ -193,6 +193,95 @@ public final class ClientPostApplyPatches {
     }
 
     /**
+     * Binds {@code sunlit$rawPalette()Object} on {@code PalettedContainer} to lock-free
+     * {@code this.f_188032_.f_188102_()} without compile-time visibility on package-private
+     * {@code PalettedContainer$Data}.
+     */
+    public static boolean patchPalettedContainer(ClassNode cn) {
+        if (cn == null) return false;
+        final String dataDesc = "Lnet/minecraft/world/level/chunk/PalettedContainer$Data;";
+        final String dataOwner = "net/minecraft/world/level/chunk/PalettedContainer$Data";
+        MethodNode getter = EntryPostApplyPatches.findMethod(cn, "sunlit$rawPalette", "()Ljava/lang/Object;");
+        if (getter == null || !EntryPostApplyPatches.hasField(cn, "f_188032_", dataDesc)) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: missing sunlit$rawPalette or f_188032_", cn.name);
+            return false;
+        }
+        AbstractInsnNode first = firstRealInsn(getter);
+        if (first instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == 0) {
+            AbstractInsnNode second = EntryPostApplyPatches.nextRealInsn(first);
+            if (second instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+                    && cn.name.equals(f.owner) && "f_188032_".equals(f.name) && dataDesc.equals(f.desc)) {
+                return true;
+            }
+        }
+        getter.instructions.clear();
+        if (getter.tryCatchBlocks != null) getter.tryCatchBlocks.clear();
+        if (getter.localVariables != null) getter.localVariables.clear();
+        LabelNode isNull = new LabelNode();
+        getter.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        getter.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, cn.name, "f_188032_", dataDesc));
+        getter.instructions.add(new VarInsnNode(Opcodes.ASTORE, 1));
+        getter.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        getter.instructions.add(new JumpInsnNode(Opcodes.IFNULL, isNull));
+        getter.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        getter.instructions.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                dataOwner,
+                "f_188102_",
+                "()Lnet/minecraft/world/level/chunk/Palette;",
+                false));
+        getter.instructions.add(new InsnNode(Opcodes.ARETURN));
+        getter.instructions.add(isNull);
+        getter.instructions.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] { dataOwner }, 0, new Object[0]));
+        getter.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        getter.instructions.add(new InsnNode(Opcodes.ARETURN));
+        getter.maxStack = 1;
+        getter.maxLocals = 2;
+        return true;
+    }
+
+    /**
+     * Binds {@code sunlit$cubes()List} on {@code EMFModelPart} to direct
+     * {@code GETFIELD f_104212_} ({@code ModelPart.cubes}) so {@code m_104290_}
+     * can traverse cubes by index without allocating an {@code ArrayList$Itr}.
+     */
+    public static boolean patchEmfModelPart(ClassNode cn) {
+        if (cn == null) return false;
+        MethodNode cubesGetter = EntryPostApplyPatches.findMethod(cn, "sunlit$cubes", "()Ljava/util/List;");
+        if (cubesGetter == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: missing sunlit$cubes", cn.name);
+            return false;
+        }
+        bindInstanceFieldGetter(cn, cubesGetter, "f_104212_", "Ljava/util/List;");
+        MethodNode childrenGetter = EntryPostApplyPatches.findMethod(cn, "sunlit$children", "()Ljava/util/Map;");
+        if (childrenGetter != null) {
+            bindInstanceFieldGetter(cn, childrenGetter, "f_104213_", "Ljava/util/Map;");
+        }
+        return true;
+    }
+
+    private static void bindInstanceFieldGetter(ClassNode cn, MethodNode getter, String fieldName, String fieldDesc) {
+        AbstractInsnNode first = firstRealInsn(getter);
+        if (first instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == 0) {
+            AbstractInsnNode second = EntryPostApplyPatches.nextRealInsn(first);
+            AbstractInsnNode third = EntryPostApplyPatches.nextRealInsn(second);
+            if (second instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+                    && cn.name.equals(f.owner) && fieldName.equals(f.name) && fieldDesc.equals(f.desc)
+                    && third != null && third.getOpcode() == Opcodes.ARETURN) {
+                return;
+            }
+        }
+        getter.instructions.clear();
+        if (getter.tryCatchBlocks != null) getter.tryCatchBlocks.clear();
+        if (getter.localVariables != null) getter.localVariables.clear();
+        getter.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        getter.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, cn.name, fieldName, fieldDesc));
+        getter.instructions.add(new InsnNode(Opcodes.ARETURN));
+        getter.maxStack = 1;
+        getter.maxLocals = 1;
+    }
+
+    /**
      * Replaces {@code expressionString.chars().mapToObj(c -> (char) c).iterator()} inside
      * {@code MathExpressionParser.<init>} with a direct allocation-minimal
      * {@code EmfRenderPerf.charIterator(String)} call.
@@ -280,41 +369,47 @@ public final class ClientPostApplyPatches {
 
         final String dWidthStr = "(Ljava/lang/String;)I";
         final String dWidthSeq = "(Lnet/minecraft/util/FormattedCharSequence;)I";
+        final String dWidthText = "(Lnet/minecraft/network/chat/FormattedText;)I";
         final String dDrawStr = "(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F";
         final String dDrawSeq = "(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)I";
 
         MethodNode superRender = EntryPostApplyPatches.findMethod(cn, "sunlit$superRenderText", dDrawStr);
         MethodNode origWidthStr = EntryPostApplyPatches.findMethod(cn, "m_92895_", dWidthStr);
         MethodNode origWidthSeq = EntryPostApplyPatches.findMethod(cn, "m_92724_", dWidthSeq);
+        MethodNode origWidthText = EntryPostApplyPatches.findMethod(cn, "m_92852_", dWidthText);
         MethodNode origDrawStr = EntryPostApplyPatches.findMethod(cn, "m_271978_", dDrawStr);
         MethodNode origDrawSeq = EntryPostApplyPatches.findMethod(cn, "m_272191_", dDrawSeq);
 
         MethodNode fastWidthStr = EntryPostApplyPatches.findMethod(cn, "sunlit$fastWidthString", dWidthStr);
         MethodNode fastWidthSeq = EntryPostApplyPatches.findMethod(cn, "sunlit$fastWidthSeq", dWidthSeq);
+        MethodNode fastWidthText = EntryPostApplyPatches.findMethod(cn, "sunlit$fastWidthText", dWidthText);
         MethodNode fastDrawStr = EntryPostApplyPatches.findMethod(cn, "sunlit$fastDrawString", dDrawStr);
         MethodNode fastDrawSeq = EntryPostApplyPatches.findMethod(cn, "sunlit$fastDrawSeq", dDrawSeq);
 
         MethodNode stubOrigWidthStr = EntryPostApplyPatches.findMethod(cn, "sunlit$origWidthString", dWidthStr);
         MethodNode stubOrigWidthSeq = EntryPostApplyPatches.findMethod(cn, "sunlit$origWidthSeq", dWidthSeq);
+        MethodNode stubOrigWidthText = EntryPostApplyPatches.findMethod(cn, "sunlit$origWidthText", dWidthText);
         MethodNode stubOrigDrawStr = EntryPostApplyPatches.findMethod(cn, "sunlit$origDrawString", dDrawStr);
         MethodNode stubOrigDrawSeq = EntryPostApplyPatches.findMethod(cn, "sunlit$origDrawSeq", dDrawSeq);
 
-        if (fastWidthStr == null && fastWidthSeq == null && fastDrawStr == null && fastDrawSeq == null
-                && stubOrigWidthStr == null && stubOrigWidthSeq == null
-                && stubOrigDrawStr == null && stubOrigDrawSeq == null
-                && EntryPostApplyPatches.findMethod(cn, "sunlit$origDrawSeq", dDrawSeq) == null
-                && EntryPostApplyPatches.findMethod(cn, "sunlit$origWidthString", dWidthStr) == null) {
+        if (fastWidthStr == null && fastWidthSeq == null && fastWidthText == null
+                && fastDrawStr == null && fastDrawSeq == null
+                && stubOrigWidthStr == null && stubOrigWidthSeq == null && stubOrigWidthText == null
+                && stubOrigDrawStr == null && stubOrigDrawSeq == null) {
             LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: missing merged fast methods", cn.name);
             return false;
         }
-        if (fastWidthStr == null && fastWidthSeq == null && fastDrawStr == null && fastDrawSeq == null
-                && EntryPostApplyPatches.findMethod(cn, "sunlit$origDrawSeq", dDrawSeq) != null) {
+        if (fastWidthStr == null && fastWidthSeq == null && fastWidthText == null
+                && fastDrawStr == null && fastDrawSeq == null
+                && stubOrigDrawSeq != null) {
             return patchGetEmojiFormattedString(cn);
         }
 
+        boolean hasWidthTextFast = fastWidthText != null || stubOrigWidthText != null;
         if (superRender == null || origWidthStr == null || origWidthSeq == null || origDrawStr == null || origDrawSeq == null
                 || fastWidthStr == null || fastWidthSeq == null || fastDrawStr == null || fastDrawSeq == null
-                || stubOrigWidthStr == null || stubOrigWidthSeq == null || stubOrigDrawStr == null || stubOrigDrawSeq == null) {
+                || stubOrigWidthStr == null || stubOrigWidthSeq == null || stubOrigDrawStr == null || stubOrigDrawSeq == null
+                || (hasWidthTextFast && (origWidthText == null || fastWidthText == null || stubOrigWidthText == null))) {
             LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: incomplete Mixin method set", cn.name);
             return false;
         }
@@ -349,6 +444,9 @@ public final class ClientPostApplyPatches {
 
         swapMethodWithFast(cn, origWidthStr, fastWidthStr, stubOrigWidthStr, "m_92895_", "sunlit$origWidthString");
         swapMethodWithFast(cn, origWidthSeq, fastWidthSeq, stubOrigWidthSeq, "m_92724_", "sunlit$origWidthSeq");
+        if (hasWidthTextFast) {
+            swapMethodWithFast(cn, origWidthText, fastWidthText, stubOrigWidthText, "m_92852_", "sunlit$origWidthText");
+        }
         swapMethodWithFast(cn, origDrawStr, fastDrawStr, stubOrigDrawStr, "m_271978_", "sunlit$origDrawString");
         swapMethodWithFast(cn, origDrawSeq, fastDrawSeq, stubOrigDrawSeq, "m_272191_", "sunlit$origDrawSeq");
         return true;
@@ -579,12 +677,6 @@ public final class ClientPostApplyPatches {
             LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: expected ALOAD original after update", cn.name);
             return false;
         }
-        for (AbstractInsnNode tail = afterUpdate; tail != null; tail = tail.getNext()) {
-            if (tail instanceof VarInsnNode v && v.var == originVar) {
-                LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: origin local {} used after update", cn.name, originVar);
-                return false;
-            }
-        }
 
         // Locate ctxVar parameter slot and construct exact self-contained F_FULL frame at afterUpdate.
         boolean isStatic = (target.access & Opcodes.ACC_STATIC) != 0;
@@ -602,12 +694,18 @@ public final class ClientPostApplyPatches {
             fullLocals.add(asmFrameType(argType));
             slot += argType.getSize();
         }
-        if (ctxVar < 0 || slot != modelVar) {
+        if (ctxVar < 0 || modelVar < slot) {
             LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: param slot mismatch (ctxVar={}, paramSlots={}, modelVar={})",
                     cn.name, ctxVar, slot, modelVar);
             return false;
         }
-        fullLocals.add(BAKED_MODEL);
+        for (AbstractInsnNode tail = afterUpdate; tail != null; tail = tail.getNext()) {
+            if (tail instanceof VarInsnNode v && v.var >= slot) {
+                LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: local {} >= paramSlots {} used after update",
+                        cn.name, v.var, slot);
+                return false;
+            }
+        }
 
         LabelNode skipUpdateLabel = new LabelNode();
         InsnList guard = new InsnList();
