@@ -36,6 +36,11 @@ public abstract class PerfWeatherParticleMixin extends TextureSheetParticle impl
     }
 
     @Override
+    public void sunlit$setDoCollisionAnim(boolean value) {
+        this.doCollisionAnim = value;
+    }
+
+    @Override
     public void sunlit$setOQuadSize(float value) {
         this.oQuadSize = value;
     }

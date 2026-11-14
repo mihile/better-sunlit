@@ -6,6 +6,7 @@ import dev.sunlit.bettersunlit.client.EmojiRenderPerf;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.font.FontSet;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import org.apache.commons.lang3.tuple.Pair;
@@ -68,6 +69,11 @@ public abstract class PerfEmojiFontRendererMixin extends Font {
     }
 
     @Unique
+    public int sunlit$origWidthText(FormattedText text) {
+        throw new AssertionError("Patched in postApply");
+    }
+
+    @Unique
     public float sunlit$origDrawString(
             String text,
             float x,
@@ -114,6 +120,18 @@ public abstract class PerfEmojiFontRendererMixin extends Font {
         String candidate = EmojiRenderPerf.extractIfMightContainEmoji(seq);
         if (candidate == null) {
             return super.m_92724_(seq);
+        }
+        return this.m_92895_(candidate);
+    }
+
+    @Unique
+    public int sunlit$fastWidthText(FormattedText text) {
+        if (text == null || !EmojiRenderPerf.isRenderEmojiEnabled()) {
+            return super.m_92852_(text);
+        }
+        String candidate = EmojiRenderPerf.extractIfMightContainEmoji(text);
+        if (candidate == null) {
+            return super.m_92852_(text);
         }
         return this.m_92895_(candidate);
     }

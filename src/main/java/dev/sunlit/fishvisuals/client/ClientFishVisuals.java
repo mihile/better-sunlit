@@ -34,6 +34,9 @@ public final class ClientFishVisuals {
         ClientLevel level = Minecraft.m_91087_().f_91073_;
         if (level != currentLevel) {
             VISUALS.clear();
+            if (currentLevel != null) {
+                dev.sunlit.bettersunlit.client.EmfRenderPerf.clearLodTimers();
+            }
             currentLevel = level;
         }
     }
