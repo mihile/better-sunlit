@@ -11,7 +11,7 @@ cp += [str(p) for p in (libraries/'com/google/guava/failureaccess/1.0.1').glob('
 out=root/'build/world-entry/tests';out.mkdir(parents=True,exist_ok=True)
 options=['--release','17','-proc:none','-encoding','UTF-8','-cp',os.pathsep.join(cp),'-d',out,*sorted((root/'tests/entry').glob('*.java'))]
 argfile=out/'javac.args';argfile.write_text('\n'.join('"'+str(a).replace('\\','/').replace('"','\\"')+'"' for a in options),encoding='utf8')
-subprocess.run([jdk/'javac.exe','@'+str(argfile)],check=True)
+subprocess.run([jdk/'javac.exe','-J-Dfile.encoding=UTF-8','@'+str(argfile)],check=True)
 urls=' '.join(Path(p).resolve().as_uri()+('/' if Path(p).is_dir() else '') for p in [out,*cp]);line='Class-Path: '+urls;wrapped=[line[:70]];line=line[70:]
 while line:wrapped.append(' '+line[:69]);line=line[69:]
 bridge=out/'classpath.jar'
