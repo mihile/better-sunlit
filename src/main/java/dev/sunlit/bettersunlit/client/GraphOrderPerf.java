@@ -138,18 +138,85 @@ public final class GraphOrderPerf {
             appendToposort(graph, out, scratch);
             return;
         }
+        if (provider != null && provider.getClass() == SimpleFeedbackArcSetProvider.class
+                && tryOrderSimpleCycleFast(graph, out, scratch)) {
+            return;
+        }
         // Preserve native MIN_WEIGHT decisions and insertion-order tie breaking. Reuse the
         // result only when every vertex, edge, weight and provider still matches exactly.
         OrderCache cache = graph.orderCache;
-        if (!cache.matches(graph, provider)) cache.compute(graph, provider);
+        if (!cache.matches(graph, provider)) cache.compute(graph, provider, scratch);
         cache.apply(graph, out);
     }
 
-    private static <V> boolean hasMutualTwoNodeCycle(PooledRenderDigraph<V> g) {
-        return g.hasEdgeIndex(0, 1) && g.hasEdgeIndex(1, 0);
+    private static <V> boolean tryOrderSimpleCycleFast(PooledRenderDigraph<V> g, List<V> out, Scratch s) {
+        int n = g.vertexCount;
+        if (n == 2) {
+            int slot01 = findEdgeSlot(g, 0, 1);
+            int slot10 = findEdgeSlot(g, 1, 0);
+            if (slot01 < 0 || slot10 < 0) return false;
+            int w01 = g.outWeights[0][slot01];
+            int w10 = g.outWeights[1][slot10];
+            if (w01 == w10) return false;
+            if (w01 < w10) {
+                g.removeEdgeSlot(0, slot01);
+            } else {
+                g.removeEdgeSlot(1, slot10);
+            }
+            appendToposort(g, out, s);
+            return true;
+        }
+        if (n > 64) return false;
+        int pairU = -1, pairV = -1, slotUV = -1, slotVU = -1;
+        for (int u = 0; u < n; u++) {
+            int deg = g.outDegree[u];
+            int[] targets = g.outTargets[u];
+            for (int e = 0; e < deg; e++) {
+                int v = targets[e];
+                if (v <= u) continue;
+                int backSlot = findEdgeSlot(g, v, u);
+                if (backSlot < 0) continue;
+                if (pairU >= 0) return false;
+                pairU = u;
+                pairV = v;
+                slotUV = e;
+                slotVU = backSlot;
+            }
+        }
+        if (pairU < 0) return false;
+        int wUV = g.outWeights[pairU][slotUV];
+        int wVU = g.outWeights[pairV][slotVU];
+        if (wUV == wVU) return false;
+        int lightFrom, lightTo, lightSlot;
+        if (wUV < wVU) {
+            lightFrom = pairU;
+            lightTo = pairV;
+            lightSlot = slotUV;
+        } else {
+            lightFrom = pairV;
+            lightTo = pairU;
+            lightSlot = slotVU;
+        }
+        if (hasNonSelfCycleSkippingEdge(g, lightFrom, lightSlot, s)
+                || reachesViaOtherPath(g, lightTo, lightFrom, s)) {
+            return false;
+        }
+        g.removeEdgeSlot(lightFrom, lightSlot);
+        appendToposort(g, out, s);
+        return true;
     }
 
-    private static <V> boolean hasNonSelfCycle(PooledRenderDigraph<V> g, Scratch s) {
+    private static <V> int findEdgeSlot(PooledRenderDigraph<V> g, int uIdx, int vIdx) {
+        int deg = g.outDegree[uIdx];
+        int[] targets = g.outTargets[uIdx];
+        for (int i = 0; i < deg; i++) {
+            if (targets[i] == vIdx) return i;
+        }
+        return -1;
+    }
+
+    private static <V> boolean hasNonSelfCycleSkippingEdge(PooledRenderDigraph<V> g,
+                                                           int skipU, int skipSlot, Scratch s) {
         int n = g.vertexCount;
         int[] color = s.color;
         int[] dfsNode = s.dfsNode;
@@ -157,9 +224,7 @@ public final class GraphOrderPerf {
         Arrays.fill(color, 0, n, 0);
 
         for (int start = 0; start < n; start++) {
-            if (color[start] != 0) {
-                continue;
-            }
+            if (color[start] != 0) continue;
             int sp = 0;
             color[start] = 1;
             dfsNode[0] = start;
@@ -171,14 +236,11 @@ public final class GraphOrderPerf {
                 int deg = g.outDegree[u];
                 if (ei < deg) {
                     dfsEdge[sp] = ei + 1;
+                    if (u == skipU && ei == skipSlot) continue;
                     int v = g.outTargets[u][ei];
-                    if (v == u) {
-                        continue;
-                    }
+                    if (v == u) continue;
                     int vc = color[v];
-                    if (vc == 1) {
-                        return true;
-                    }
+                    if (vc == 1) return true;
                     if (vc == 0) {
                         color[v] = 1;
                         sp++;
@@ -192,6 +254,46 @@ public final class GraphOrderPerf {
             }
         }
         return false;
+    }
+
+    private static <V> boolean reachesViaOtherPath(PooledRenderDigraph<V> g,
+                                                   int start, int target, Scratch s) {
+        int n = g.vertexCount;
+        int[] color = s.color;
+        int[] stack = s.dfsNode;
+        Arrays.fill(color, 0, n, 0);
+        color[start] = 1;
+        int sp = 0;
+        int startDeg = g.outDegree[start];
+        int[] startTargets = g.outTargets[start];
+        for (int i = 0; i < startDeg; i++) {
+            int w = startTargets[i];
+            if (w == start || w == target || color[w] != 0) continue;
+            color[w] = 1;
+            stack[sp++] = w;
+        }
+        while (sp > 0) {
+            int curr = stack[--sp];
+            int deg = g.outDegree[curr];
+            int[] targets = g.outTargets[curr];
+            for (int i = 0; i < deg; i++) {
+                int next = targets[i];
+                if (next == target) return true;
+                if (next != curr && color[next] == 0) {
+                    color[next] = 1;
+                    stack[sp++] = next;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static <V> boolean hasMutualTwoNodeCycle(PooledRenderDigraph<V> g) {
+        return g.hasEdgeIndex(0, 1) && g.hasEdgeIndex(1, 0);
+    }
+
+    private static <V> boolean hasNonSelfCycle(PooledRenderDigraph<V> g, Scratch s) {
+        return hasNonSelfCycleSkippingEdge(g, -1, -1, s);
     }
 
     private static <V> void appendToposort(PooledRenderDigraph<V> g, List<V> out, Scratch s) {
@@ -745,7 +847,7 @@ public final class GraphOrderPerf {
             return true;
         }
 
-        <V> void compute(PooledRenderDigraph<V> graph, FeedbackArcSetProvider provider) {
+        <V> void compute(PooledRenderDigraph<V> graph, FeedbackArcSetProvider provider, Scratch scratch) {
             valid = false;
             int n = graph.vertexCount;
             Object[] nextVertices = Arrays.copyOf(graph.vertices, n);
@@ -764,12 +866,12 @@ public final class GraphOrderPerf {
             }
             FeedbackArcSet<V> fas = provider.getFeedbackArcSet(reference, reference, FeedbackArcSetPolicy.MIN_WEIGHT);
             for (V src : fas.vertices()) for (V dst : fas.targets(src)) reference.remove(src, dst);
-            Object[] nextOrder = Digraphs.toposort(reference, false).toArray();
             int[][] nextKeptTargets = new int[n][], nextKeptWeights = new int[n][];
             for (int u = 0; u < n; u++) {
                 @SuppressWarnings("unchecked") V src = (V) nextVertices[u];
                 int kept = reference.getOutDegree(src), i = 0;
-                nextKeptTargets[u] = new int[kept]; nextKeptWeights[u] = new int[kept];
+                nextKeptTargets[u] = kept == 0 ? IntArrays.EMPTY_ARRAY : new int[kept];
+                nextKeptWeights[u] = kept == 0 ? IntArrays.EMPTY_ARRAY : new int[kept];
                 for (int e = 0; e < nextTargets[u].length; e++) {
                     int v = nextTargets[u][e];
                     @SuppressWarnings("unchecked") V dst = (V) nextVertices[v];
@@ -778,9 +880,54 @@ public final class GraphOrderPerf {
                     }
                 }
             }
+            Object[] nextOrder = toposortKeptVertices(nextVertices, nextKeptTargets, scratch);
             vertices = nextVertices; targets = nextTargets; weights = nextWeights;
             keptTargets = nextKeptTargets; keptWeights = nextKeptWeights;
             order = nextOrder; owner = provider; valid = true;
+        }
+
+        private static Object[] toposortKeptVertices(Object[] vertices, int[][] keptTargets, Scratch s) {
+            int n = vertices.length;
+            s.ensureVertexCap(n);
+            int[] color = s.color;
+            int[] dfsNode = s.dfsNode;
+            int[] dfsEdge = s.dfsEdge;
+            int[] post = s.postOrder;
+            Arrays.fill(color, 0, n, 0);
+
+            int count = 0;
+            for (int start = 0; start < n; start++) {
+                if (color[start] != 0) continue;
+                int sp = 0;
+                color[start] = 1;
+                dfsNode[0] = start;
+                dfsEdge[0] = 0;
+                while (sp >= 0) {
+                    int u = dfsNode[sp];
+                    int ei = dfsEdge[sp];
+                    int[] targets = keptTargets[u];
+                    if (ei < targets.length) {
+                        dfsEdge[sp] = ei + 1;
+                        int v = targets[ei];
+                        if (v != u && color[v] == 0) {
+                            color[v] = 1;
+                            sp++;
+                            dfsNode[sp] = v;
+                            dfsEdge[sp] = 0;
+                        }
+                    } else {
+                        color[u] = 2;
+                        post[count++] = u;
+                        sp--;
+                    }
+                }
+            }
+
+            Object[] result = new Object[count];
+            for (int i = count - 1, dst = 0; i >= 0; i--) {
+                result[dst++] = vertices[post[i]];
+            }
+            return result;
         }
 
         <V> void apply(PooledRenderDigraph<V> graph, List<V> out) {

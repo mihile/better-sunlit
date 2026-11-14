@@ -154,7 +154,13 @@ public final class PerfOptTests {
             "net.irisshaders.iris.pipeline.transform.TransformPatcher$2",
             "io.github.douira.glsl_transformer.parser.CachingParser",
             "io.github.douira.glsl_transformer.ast.data.TypedTreeCache",
-            "mezz.jei.forge.platform.RegistryWrapper"
+            "mezz.jei.forge.platform.RegistryWrapper",
+            "net.raphimc.immediatelyfast.feature.core.BatchableBufferSource",
+            "net.raphimc.immediatelyfast.compat.IrisCompat",
+            "traben.entity_model_features.models.animation.math.variables.factories.ModelPartVariableFactory",
+            "me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderMeshingTask",
+            "fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin",
+            "fr.madu59.obe.client.util.meshing.SectionMeshingUtil"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -193,7 +199,10 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin",
             "dev.sunlit.fishvisuals.mixin.PerfPipelineManagerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfTransformPatcherMixin",
-            "dev.sunlit.fishvisuals.mixin.PerfJeiRegistryWrapperMixin"
+            "dev.sunlit.fishvisuals.mixin.PerfJeiRegistryWrapperMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfBatchableBufferSourceMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfEmfModelPartVariableMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfChunkBuilderMeshingTaskMixin"
     );
 
     public static void main(String[] args) throws Exception {
@@ -207,6 +216,7 @@ public final class PerfOptTests {
         testIrisDimensionCanonicalization();
         testJeiSortingPerf();
         testArea1BlockOcclusionAndModelShaperPatches();
+        testArea1ChunkBuilderMeshingTaskPatch();
         testArea2EmfRenderPerfAndPatches();
         testArea2GraphOrderPerf();
         testArea3LogBegonePerf();
@@ -342,6 +352,25 @@ public final class PerfOptTests {
                 assertFalse((Boolean)gated.getClass().getMethod("canApplyGate", String.class, String.class)
                         .invoke(gated, target, "dev.sunlit.fishvisuals.mixin." + mixin), "AST owner dependency must fail closed: " + dependency);
             }
+        }
+
+        TamperPluginLoader irisCompatTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "net/raphimc/immediatelyfast/compat/IrisCompat.class");
+        Object irisCompatPlugin = irisCompatTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) irisCompatPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                irisCompatPlugin, "net.raphimc.immediatelyfast.feature.core.BatchableBufferSource",
+                "dev.sunlit.fishvisuals.mixin.PerfBatchableBufferSourceMixin"),
+                "Tampered IrisCompat must fail-closed PerfBatchableBufferSourceMixin");
+
+        for (String dependency : List.of(
+                "fr/madu59/obe/client/mixin/renderer/compat/sodium/ChunkBuilderMeshingTaskMixin.class",
+                "fr/madu59/obe/client/util/meshing/SectionMeshingUtil.class")) {
+            TamperPluginLoader loader = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object gated = loader.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            assertFalse((Boolean) gated.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                    gated, "me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderMeshingTask",
+                    "dev.sunlit.fishvisuals.mixin.PerfChunkBuilderMeshingTaskMixin"),
+                    "OBE dependency must fail-closed PerfChunkBuilderMeshingTaskMixin: " + dependency);
         }
 
         for (String mixinClass : ALL_PERF_MIXINS) {
@@ -1148,6 +1177,39 @@ public final class PerfOptTests {
         ClassWriter cubeWriter = new ClassWriter(0);
         cubeNode.accept(cubeWriter);
         verifyBytecode(cubeNode.name.replace('/', '.'), cubeWriter.toByteArray());
+
+        // EmfRenderPerf.matchesModelPartVariableSyntax parity + 0-alloc check
+        Pattern modelPartRef = Pattern.compile("[a-zA-Z0-9_]+\\.([trs][xyz]$|visible$|visible_boxes$)");
+        List<String> varSamples = new ArrayList<>(List.of(
+                "", ".", ".tx", "a.", "a.t", "a.txx", "a.t x", "a.b.tx", "a.visible_box",
+                "a.visible_boxes2", "body-1.rx", "\ud55c\uae00.tx", "render.tx", "render.x",
+                "_0Z.rz", "head_1.visible", "wing_L2.visible_boxes", "a.tx_extra", "123.sy"
+        ));
+        for (char c0 : new char[] { 't', 'r', 's', 'u' }) {
+            for (char c1 : new char[] { 'x', 'y', 'z', 'w' }) {
+                varSamples.add("part_A9." + c0 + c1);
+            }
+        }
+        assertFalse(EmfRenderPerf.matchesModelPartVariableSyntax(null), "null model part var must be false");
+        for (String sample : varSamples) {
+            assertEquals(modelPartRef.matcher(sample).matches(), EmfRenderPerf.matchesModelPartVariableSyntax(sample),
+                    "Model part variable regex mismatch on: " + sample);
+        }
+        for (int i = 0; i < 1000; i++) {
+            EmfRenderPerf.matchesModelPartVariableSyntax("head.rx");
+            EmfRenderPerf.matchesModelPartVariableSyntax("wing_L.visible_boxes");
+            EmfRenderPerf.matchesModelPartVariableSyntax("render.shadow_size");
+        }
+        long allocVarSyntax = measureAllocBytes(() -> {
+            boolean acc = false;
+            for (int i = 0; i < 5000; i++) {
+                acc ^= EmfRenderPerf.matchesModelPartVariableSyntax("head.rx");
+                acc ^= EmfRenderPerf.matchesModelPartVariableSyntax("wing_L.visible_boxes");
+                acc ^= EmfRenderPerf.matchesModelPartVariableSyntax("invalid-part.tx");
+            }
+            if (acc && System.nanoTime() == 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocVarSyntax, "matchesModelPartVariableSyntax must allocate 0 bytes, got " + allocVarSyntax);
     }
 
     private static void testArea2GraphOrderPerf() {
@@ -1312,6 +1374,82 @@ public final class PerfOptTests {
             if (acc < 0) throw new AssertionError();
         });
         assertEquals(0L, allocGraph, "PooledRenderDigraph frame reuse + toposort must allocate 0 bytes, got " + allocGraph);
+
+        // Zero-alloc 2-node and n>=3 single-mutual-pair cycles with fluctuating weights + self-loops
+        for (int warm = 0; warm < 500; warm++) {
+            int wA = (warm & 1) == 0 ? 10 + warm : 1;
+            int wB = (warm & 1) == 0 ? 2 : 20 + warm;
+            frameGraph.clear();
+            frameOut.clear();
+            frameGraph.put(rt[0], rt[0], 99);
+            frameGraph.put(rt[0], rt[1], wA);
+            frameGraph.put(rt[1], rt[1], 88);
+            frameGraph.put(rt[1], rt[0], wB);
+            GraphOrderPerf.orderPooledGraph(frameGraph, frameOut);
+
+            frameGraph.clear();
+            frameOut.clear();
+            frameGraph.put(rt[0], rt[1], 4);
+            frameGraph.put(rt[1], rt[1], 77);
+            frameGraph.put(rt[1], rt[2], wA);
+            frameGraph.put(rt[2], rt[1], wB);
+            frameGraph.put(rt[2], rt[3], 5);
+            GraphOrderPerf.orderPooledGraph(frameGraph, frameOut);
+        }
+        long allocSimpleCycle = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int i = 0; i < 1000; i++) {
+                int wA = (i & 1) == 0 ? 15 + i : 3;
+                int wB = (i & 1) == 0 ? 1 : 25 + i;
+                frameGraph.clear();
+                frameOut.clear();
+                frameGraph.put(rt[0], rt[0], 99);
+                frameGraph.put(rt[0], rt[1], wA);
+                frameGraph.put(rt[1], rt[1], 88);
+                frameGraph.put(rt[1], rt[0], wB);
+                GraphOrderPerf.orderPooledGraph(frameGraph, frameOut);
+                acc += frameOut.size();
+
+                frameGraph.clear();
+                frameOut.clear();
+                frameGraph.put(rt[0], rt[1], 4);
+                frameGraph.put(rt[1], rt[1], 77);
+                frameGraph.put(rt[1], rt[2], wA);
+                frameGraph.put(rt[2], rt[1], wB);
+                frameGraph.put(rt[2], rt[3], 5);
+                GraphOrderPerf.orderPooledGraph(frameGraph, frameOut);
+                acc += frameOut.size();
+            }
+            if (acc < 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocSimpleCycle, "Unequal 2-cycle and single-mutual-pair cycles must allocate 0 bytes, got " + allocSimpleCycle);
+
+        // Indirect bypass path through a third vertex must decline 2-cycle fast path and match native FAS order
+        MapDigraph<String> bypassRef = new MapDigraph<>();
+        GraphOrderPerf.PooledRenderDigraph<String> bypassGraph = new GraphOrderPerf.PooledRenderDigraph<>();
+        for (String v : List.of("v0", "v1", "v2", "v3")) {
+            bypassRef.add(v);
+            bypassGraph.add(v);
+        }
+        bypassRef.put("v1", "v2", 1);
+        bypassRef.put("v2", "v1", 10);
+        bypassRef.put("v2", "v3", 3);
+        bypassRef.put("v3", "v1", 3);
+        bypassGraph.put("v1", "v2", 1);
+        bypassGraph.put("v2", "v1", 10);
+        bypassGraph.put("v2", "v3", 3);
+        bypassGraph.put("v3", "v1", 3);
+        FeedbackArcSet<String> bypassFas = new SimpleFeedbackArcSetProvider()
+                .getFeedbackArcSet(bypassRef, bypassRef, FeedbackArcSetPolicy.MIN_WEIGHT);
+        for (String s : bypassFas.vertices()) {
+            for (String d : bypassFas.targets(s)) {
+                bypassRef.remove(s, d);
+            }
+        }
+        List<String> bypassOut = new ArrayList<>();
+        GraphOrderPerf.orderPooledGraph(bypassGraph, bypassOut);
+        assertEquals(Digraphs.toposort(bypassRef, false), bypassOut,
+                "Bypass path cycle must fall back to native MIN_WEIGHT FAS order");
     }
 
     private static void testArea3LogBegonePerf() throws Exception {
@@ -1447,6 +1585,48 @@ public final class PerfOptTests {
             EmojiRenderPerf.invalidateIndex();
             assertTrue(EmojiRenderPerf.mightContainEmoji("anything falls back safely"),
                     "Unindexable regex must fall back conservatively");
+
+            // Korean Hangul strings must not false-trigger when non-ASCII emoji pairs are registered
+            Constants.EMOJI_LIST.clear();
+            Emoji unicodeEmoji = new Emoji();
+            unicodeEmoji.strings = List.of("\u2764\ufe0f", "\ud83d\ude00");
+            Constants.EMOJI_LIST.add(unicodeEmoji);
+            Emoji asciiEmoji = new Emoji();
+            asciiEmoji.strings = List.of(":smile:");
+            Constants.EMOJI_LIST.add(asciiEmoji);
+            EmojiRenderPerf.invalidateIndex();
+            assertFalse(EmojiRenderPerf.mightContainEmoji("\uc120\ub9bf\ubc38\ub9ac \ud14c\uc2a4\ud2b8 123"),
+                    "Korean Hangul must not trigger non-ASCII emoji pair filter");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("\uc120\ub9bf\ubc38\ub9ac \u2764\ufe0f"),
+                    "Actual unicode emoji inside Hangul text must still trigger");
+
+            // >64 emoji list rotating cursor version check + mayEmojiMatchClean pre-check
+            Constants.EMOJI_LIST.clear();
+            for (int i = 0; i < 80; i++) {
+                Emoji e = new Emoji();
+                e.strings = List.of(":e" + i + ":");
+                Constants.EMOJI_LIST.add(e);
+            }
+            EmojiRenderPerf.invalidateIndex();
+            assertTrue(EmojiRenderPerf.mightContainEmoji("gg :e40:"), "Large emoji list hit");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("plain text"), "Large emoji list miss");
+            Constants.EMOJI_LIST.get(40).strings = List.of(":e40:", ":mutated40:");
+            for (int i = 0; i < 32; i++) {
+                EmojiRenderPerf.mightContainEmoji("plain text");
+            }
+            assertTrue(EmojiRenderPerf.mightContainEmoji("got :mutated40:!"),
+                    "Rotating cursor check must detect late in-place mutation in >64 emoji lists");
+
+            assertFalse(EmojiRenderPerf.mayEmojiMatchClean(asciiEmoji, "no trigger here"),
+                    "mayEmojiMatchClean must reject clean string lacking shortcode");
+            assertTrue(EmojiRenderPerf.mayEmojiMatchClean(asciiEmoji, "hi :smile:"),
+                    "mayEmojiMatchClean must allow clean string containing shortcode");
+            assertTrue(EmojiRenderPerf.mayEmojiMatchClean(wildcardEmoji, "anything"),
+                    "mayEmojiMatchClean must fall back conservatively for unescaped regex metachars");
+            Emoji customSubclass = new Emoji() { };
+            customSubclass.strings = List.of(":smile:");
+            assertTrue(EmojiRenderPerf.mayEmojiMatchClean(customSubclass, "no shortcode"),
+                    "mayEmojiMatchClean must fall back conservatively for Emoji subclasses");
         } finally {
             Constants.EMOJI_LIST.clear();
             Constants.EMOJI_LIST.addAll(saved);
@@ -1493,10 +1673,115 @@ public final class PerfOptTests {
         assertNotNull(findMethod(emojiTarget, "sunlit$origWidthString(Ljava/lang/String;)I"), "origWidthString renamed");
         assertNotNull(findMethod(emojiTarget, "sunlit$origWidthSeq(Lnet/minecraft/util/FormattedCharSequence;)I"), "origWidthSeq renamed");
         assertEquals(null, findMethod(emojiTarget, "sunlit$fastWidthString(Ljava/lang/String;)I"), "fastWidthString swapped into m_92895_");
+        MethodNode getFormatted = findMethod(emojiTarget, "getEmojiFormattedString(Ljava/lang/String;)Lorg/apache/commons/lang3/tuple/Pair;");
+        assertNotNull(getFormatted, "getEmojiFormattedString missing on EmojiFontRenderer");
+        assertEquals(1, countMethodInvoke(getFormatted, "Ldev/sunlit/bettersunlit/client/EmojiRenderPerf;mightContainEmoji(Ljava/lang/CharSequence;)Z"),
+                "getEmojiFormattedString must guard loop with EmojiRenderPerf.mightContainEmoji");
+        assertEquals(1, countMethodInvoke(getFormatted, "Ldev/sunlit/bettersunlit/client/EmojiRenderPerf;mayEmojiMatchClean(Lcom/hrznstudio/emojiful/api/Emoji;Ljava/lang/String;)Z"),
+                "getEmojiFormattedString must guard per-emoji regex match with EmojiRenderPerf.mayEmojiMatchClean");
 
         ClassWriter emojiWriter = new ClassWriter(0);
         emojiTarget.accept(emojiWriter);
         verifyBytecode(emojiTarget.name.replace('/', '.'), emojiWriter.toByteArray());
+    }
+
+    private static void testArea1ChunkBuilderMeshingTaskPatch() throws Exception {
+        String origInternal = "fr/madu59/obe/client/mixin/renderer/compat/sodium/ChunkBuilderMeshingTaskMixin";
+        String renamedInternal = "dev/sunlit/bettersunlit/tests/perf/SynObeChunkTask";
+        ClassNode synTask = readClassNode("fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin");
+        synTask.name = renamedInternal;
+        synTask.access &= ~Opcodes.ACC_ABSTRACT;
+        synTask.visibleAnnotations = null;
+        synTask.invisibleAnnotations = null;
+        synTask.methods.removeIf(m -> !"<init>".equals(m.name) && !"obe$wrapRenderModel".equals(m.name));
+        synTask.fields.clear();
+        for (MethodNode m : synTask.methods) {
+            for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof FieldInsnNode fi && origInternal.equals(fi.owner)) {
+                    fi.owner = renamedInternal;
+                } else if (insn instanceof FrameNode fn) {
+                    if (fn.local != null) {
+                        for (int i = 0; i < fn.local.size(); i++) {
+                            if (origInternal.equals(fn.local.get(i))) fn.local.set(i, renamedInternal);
+                        }
+                    }
+                    if (fn.stack != null) {
+                        for (int i = 0; i < fn.stack.size(); i++) {
+                            if (origInternal.equals(fn.stack.get(i))) fn.stack.set(i, renamedInternal);
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(ClientPostApplyPatches.patchChunkBuilderMeshingTask(synTask),
+                "patchChunkBuilderMeshingTask must succeed on OBE obe$wrapRenderModel");
+        assertTrue(ClientPostApplyPatches.patchChunkBuilderMeshingTask(synTask),
+                "patchChunkBuilderMeshingTask must be idempotent");
+        MethodNode wrap = findMethod(synTask,
+                "obe$wrapRenderModel(Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderer;Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext;Lme/jellysquid/mods/sodium/client/render/chunk/compile/ChunkBuildBuffers;Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;Lcom/llamalad7/mixinextras/sugar/ref/LocalRef;)V");
+        assertNotNull(wrap, "obe$wrapRenderModel missing on SynObeChunkTask");
+        assertEquals(2, countMethodInvoke(wrap, "Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext;model()Lnet/minecraft/client/resources/model/BakedModel;"),
+                "obe$wrapRenderModel must check ctx.model() against correctedModel");
+        int frames = 0;
+        boolean hasAcmpeq = false;
+        for (AbstractInsnNode insn = wrap.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof FrameNode fn && fn.type == Opcodes.F_FULL) frames++;
+            if (insn.getOpcode() == Opcodes.IF_ACMPEQ) hasAcmpeq = true;
+        }
+        assertTrue(hasAcmpeq, "obe$wrapRenderModel must branch with IF_ACMPEQ when model unchanged");
+        assertEquals(1, frames, "obe$wrapRenderModel must insert 1 F_FULL frame before post-update resume");
+
+        ClassWriter cw = new ClassWriter(0);
+        synTask.accept(cw);
+        byte[] synBytes = cw.toByteArray();
+        String synBinary = "dev.sunlit.bettersunlit.tests.perf.SynObeChunkTask";
+        ClassLoader obeLoader = new ClassLoader(PerfOptTests.class.getClassLoader()) {
+            private final Map<String, byte[]> extraDefs = new HashMap<>();
+            {
+                extraDefs.put(synBinary, synBytes);
+                extraDefs.put("com.llamalad7.mixinextras.injector.wrapoperation.Operation",
+                        buildInterfaceBytes("com/llamalad7/mixinextras/injector/wrapoperation/Operation",
+                                "call", "([Ljava/lang/Object;)Ljava/lang/Object;"));
+                extraDefs.put("com.llamalad7.mixinextras.sugar.ref.LocalRef",
+                        buildInterfaceBytes("com/llamalad7/mixinextras/sugar/ref/LocalRef",
+                                "get", "()Ljava/lang/Object;",
+                                "set", "(Ljava/lang/Object;)V"));
+            }
+
+            private final Map<String, Class<?>> loaded = new HashMap<>();
+
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                Class<?> existing = loaded.get(name);
+                if (existing != null) {
+                    if (resolve) resolveClass(existing);
+                    return existing;
+                }
+                byte[] bytes = extraDefs.get(name);
+                if (bytes != null) {
+                    Class<?> cls = defineClass(name, bytes, 0, bytes.length);
+                    loaded.put(name, cls);
+                    if (resolve) resolveClass(cls);
+                    return cls;
+                }
+                return super.loadClass(name, resolve);
+            }
+        };
+        Class<?> verified = Class.forName(synBinary, true, obeLoader);
+        verified.getDeclaredMethods();
+        verified.getDeclaredFields();
+        assertNotNull(verified.getDeclaredConstructor().newInstance(), "SynObeChunkTask must instantiate cleanly");
+    }
+
+    private static byte[] buildInterfaceBytes(String internalName, String... nameDescPairs) {
+        ClassWriter cw = new ClassWriter(0);
+        cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_INTERFACE | Opcodes.ACC_ABSTRACT,
+                internalName, null, "java/lang/Object", null);
+        for (int i = 0; i < nameDescPairs.length; i += 2) {
+            cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, nameDescPairs[i], nameDescPairs[i + 1], null, null).visitEnd();
+        }
+        cw.visitEnd();
+        return cw.toByteArray();
     }
 
     private static void testArea4IrisAstCachePerf() {
