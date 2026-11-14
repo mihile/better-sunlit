@@ -1,39 +1,74 @@
 package dev.sunlit.bettersunlit.tests.perf;
 
 import com.cicada.longwings.entity.ButterflyVariant;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.HashMultimap;
+import com.hrznstudio.emojiful.Constants;
+import com.hrznstudio.emojiful.api.Emoji;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.sun.management.ThreadMXBean;
+import de.odysseus.ithaka.digraph.Digraph;
+import de.odysseus.ithaka.digraph.Digraphs;
+import de.odysseus.ithaka.digraph.MapDigraph;
+import de.odysseus.ithaka.digraph.util.fas.FeedbackArcSet;
+import de.odysseus.ithaka.digraph.util.fas.FeedbackArcSetPolicy;
+import de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider;
 import dev.sunlit.bettersunlit.client.AmbientSoundsClientPerf;
+import dev.sunlit.bettersunlit.client.ClientPostApplyPatches;
+import dev.sunlit.bettersunlit.client.EmfRenderPerf;
+import dev.sunlit.bettersunlit.client.EmojiRenderPerf;
+import dev.sunlit.bettersunlit.client.GraphOrderPerf;
+import dev.sunlit.bettersunlit.client.IrisAstCachePerf;
 import dev.sunlit.bettersunlit.client.IrisDimensionPerf;
+import dev.sunlit.bettersunlit.client.JeiRegistryPerf;
 import dev.sunlit.bettersunlit.client.JeiSortingPerf;
 import dev.sunlit.bettersunlit.client.LongwingsClientPerf;
 import dev.sunlit.bettersunlit.client.ParticleRainClientPerf;
 import dev.sunlit.bettersunlit.client.SeasonColorPerf;
 import dev.sunlit.bettersunlit.inline.EntryMixinPlugin;
+import dev.sunlit.bettersunlit.inline.EntryPostApplyPatches;
+import dev.sunlit.bettersunlit.perf.BlockOcclusionPerf;
+import dev.sunlit.bettersunlit.perf.LogBegonePerf;
 import dev.sunlit.bettersunlit.perf.LongwingsVariantPerf;
 import dev.sunlit.bettersunlit.perf.SeasonPerf;
+import io.github.douira.glsl_transformer.ast.transform.ASTParser;
+import mezz.jei.common.platform.IPlatformRegistry;
 import net.irisshaders.iris.shaderpack.DimensionId;
 import net.irisshaders.iris.shaderpack.materialmap.NamespacedId;
+import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
+import org.apache.commons.lang3.tuple.Pair;
 import org.joml.AxisAngle4d;
 import org.joml.AxisAngle4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.FrameNode;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.LabelNode;
+import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TypeInsnNode;
+import org.objectweb.asm.tree.VarInsnNode;
 import sereneseasons.season.SeasonColorHandlers;
 import sereneseasons.season.SeasonTime;
 import sereneseasons.util.SeasonColorUtil;
@@ -42,18 +77,27 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public final class PerfOptTests {
     private static final ThreadMXBean THREAD_MX = (ThreadMXBean) ManagementFactory.getThreadMXBean();
@@ -82,7 +126,35 @@ public final class PerfOptTests {
             "team.creative.ambientsounds.environment.BiomeEnvironment$BiomeArea",
             "team.creative.ambientsounds.environment.pocket.AirPocketScanner",
             "net.irisshaders.iris.Iris",
-            "mezz.jei.common.config.sorting.SortingConfig"
+            "mezz.jei.common.config.sorting.SortingConfig",
+            "net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase",
+            "com.copycatsplus.copycats.mixin.foundation.copycat.BlockStateBaseMixin",
+            "snownee.passablefoliage.mixin.BlockStateMixin",
+            "snownee.passablefoliage.PassableFoliage",
+            "net.minecraft.client.renderer.block.BlockModelShaper",
+            "fr.madu59.obe.client.mixin.BlockStateModelSetMixin",
+            "net.minecraft.client.model.geom.ModelPart$Cube",
+            "traben.entity_model_features.models.parts.EMFModelPart",
+            "traben.entity_model_features.models.parts.EMFModelPartCustom$EMFCube",
+            "traben.entity_model_features.models.animation.math.expression_tree.MathExpressionParser",
+            "com.mojang.blaze3d.vertex.PoseStack",
+            "org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack",
+            "net.irisshaders.batchedentityrendering.impl.ordering.GraphTranslucencyRenderOrderManager",
+            "de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider",
+            "mod.azure.logbegone.LogBegoneMod",
+            "mod.azure.logbegone.LogBegoneConfig",
+            "mod.azure.logbegone.LogBegoneConfig$Common",
+            "com.hrznstudio.emojiful.render.EmojiFontRenderer",
+            "com.hrznstudio.emojiful.Constants",
+            "com.hrznstudio.emojiful.api.Emoji",
+            "net.irisshaders.iris.pipeline.PipelineManager",
+            "io.github.douira.glsl_transformer.ast.transform.ASTParser",
+
+            "net.irisshaders.iris.pipeline.transform.TransformPatcher",
+            "net.irisshaders.iris.pipeline.transform.TransformPatcher$2",
+            "io.github.douira.glsl_transformer.parser.CachingParser",
+            "io.github.douira.glsl_transformer.ast.data.TypedTreeCache",
+            "mezz.jei.forge.platform.RegistryWrapper"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -91,6 +163,8 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfSeasonsConfigMixin",
             "dev.sunlit.fishvisuals.mixin.PerfSeasonHandlerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfSeasonHooksMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfBlockOcclusionMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfLogBegoneMixin",
             "dev.sunlit.fishvisuals.mixin.PerfButterflyRendererMixin",
             "dev.sunlit.fishvisuals.mixin.PerfMothRendererMixin",
             "dev.sunlit.fishvisuals.mixin.PerfButterflyModelMixin",
@@ -109,7 +183,17 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfAmbientBiomeAreaMixin",
             "dev.sunlit.fishvisuals.mixin.PerfAmbientAirPocketScannerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfIrisDimensionMixin",
-            "dev.sunlit.fishvisuals.mixin.PerfJeiSortingConfigMixin"
+            "dev.sunlit.fishvisuals.mixin.PerfJeiSortingConfigMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfObeModelMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfModelPartCubeMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfEmfCubeMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfEmfModelPartMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfEmfMathParserMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfGraphOrderMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfPipelineManagerMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfTransformPatcherMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfJeiRegistryWrapperMixin"
     );
 
     public static void main(String[] args) throws Exception {
@@ -122,6 +206,14 @@ public final class PerfOptTests {
         testAmbientSoundsWildcards();
         testIrisDimensionCanonicalization();
         testJeiSortingPerf();
+        testArea1BlockOcclusionAndModelShaperPatches();
+        testArea2EmfRenderPerfAndPatches();
+        testArea2GraphOrderPerf();
+        testArea3LogBegonePerf();
+        testArea3EmojiRenderPerfAndPatch();
+        testArea4IrisAstCachePerf();
+        testArea4JeiRegistryPerf();
+        ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
     }
 
@@ -174,6 +266,83 @@ public final class PerfOptTests {
         assertFalse(plugin.canApplyGate("com.cicada.longwings.entity.ButterflyVariant",
                 "dev.sunlit.fishvisuals.mixin.UnknownMixin"),
                 "Unknown mixin name must fail closed");
+
+        TamperPluginLoader poseTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "com/mojang/blaze3d/vertex/PoseStack.class");
+        Object posePlugin = poseTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        java.lang.reflect.Method poseGate = posePlugin.getClass().getMethod("canApplyGate", String.class, String.class);
+        assertFalse((Boolean) poseGate.invoke(posePlugin, "net.minecraft.client.model.geom.ModelPart$Cube",
+                "dev.sunlit.fishvisuals.mixin.PerfModelPartCubeMixin"),
+                "Tampered PoseStack must fail-closed PerfModelPartCubeMixin");
+        assertFalse((Boolean) poseGate.invoke(posePlugin, "traben.entity_model_features.models.parts.EMFModelPartCustom$EMFCube",
+                "dev.sunlit.fishvisuals.mixin.PerfEmfCubeMixin"),
+                "Tampered PoseStack must fail-closed PerfEmfCubeMixin");
+        assertFalse((Boolean) poseGate.invoke(posePlugin, "traben.entity_model_features.models.parts.EMFModelPart",
+                "dev.sunlit.fishvisuals.mixin.PerfEmfModelPartMixin"),
+                "Tampered PoseStack must fail-closed PerfEmfModelPartMixin");
+
+        TamperPluginLoader obeTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "fr/madu59/obe/client/mixin/BlockStateModelSetMixin.class");
+        Object obePlugin = obeTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) obePlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                obePlugin, "net.minecraft.client.renderer.block.BlockModelShaper",
+                "dev.sunlit.fishvisuals.mixin.PerfObeModelMixin"),
+                "Tampered OBE mixin must fail-closed PerfObeModelMixin");
+
+        TamperPluginLoader pfTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "snownee/passablefoliage/PassableFoliage.class");
+        Object pfPlugin = pfTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) pfPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                pfPlugin, "net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase",
+                "dev.sunlit.fishvisuals.mixin.PerfBlockOcclusionMixin"),
+                "Tampered PassableFoliage must fail-closed PerfBlockOcclusionMixin");
+
+        TamperPluginLoader fasTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "de/odysseus/ithaka/digraph/util/fas/SimpleFeedbackArcSetProvider.class");
+        Object fasPlugin = fasTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) fasPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                fasPlugin, "net.irisshaders.batchedentityrendering.impl.ordering.GraphTranslucencyRenderOrderManager",
+                "dev.sunlit.fishvisuals.mixin.PerfGraphOrderMixin"),
+                "Tampered SimpleFeedbackArcSetProvider must fail-closed PerfGraphOrderMixin");
+
+        TamperPluginLoader logTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "mod/azure/logbegone/LogBegoneConfig$Common.class");
+        Object logPlugin = logTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) logPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                logPlugin, "mod.azure.logbegone.LogBegoneMod",
+                "dev.sunlit.fishvisuals.mixin.PerfLogBegoneMixin"),
+                "Tampered LogBegoneConfig$Common must fail-closed PerfLogBegoneMixin");
+
+        TamperPluginLoader emojiTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "com/hrznstudio/emojiful/api/Emoji.class");
+        Object emojiPlugin = emojiTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) emojiPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                emojiPlugin, "com.hrznstudio.emojiful.render.EmojiFontRenderer",
+                "dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin"),
+                "Tampered Emoji must fail-closed PerfEmojiFontRendererMixin");
+
+        TamperPluginLoader astTampered = new TamperPluginLoader(
+                EntryMixinPlugin.class.getClassLoader(), "io/github/douira/glsl_transformer/ast/transform/ASTParser.class");
+        Object astPlugin = astTampered.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) astPlugin.getClass().getMethod("canApplyGate", String.class, String.class).invoke(
+                astPlugin, "net.irisshaders.iris.pipeline.PipelineManager",
+                "dev.sunlit.fishvisuals.mixin.PerfPipelineManagerMixin"),
+                "Tampered ASTParser must fail-closed PerfPipelineManagerMixin");
+
+        for (String dependency : List.of(
+                "net/irisshaders/iris/pipeline/transform/TransformPatcher.class",
+                "net/irisshaders/iris/pipeline/transform/TransformPatcher$2.class",
+                "io/github/douira/glsl_transformer/parser/CachingParser.class",
+                "io/github/douira/glsl_transformer/ast/data/TypedTreeCache.class")) {
+            TamperPluginLoader loader = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(), dependency);
+            Object gated = loader.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+            for (String mixin : List.of("PerfPipelineManagerMixin", "PerfTransformPatcherMixin")) {
+                String target = mixin.equals("PerfPipelineManagerMixin") ? "net.irisshaders.iris.pipeline.PipelineManager"
+                        : "net.irisshaders.iris.pipeline.transform.TransformPatcher";
+                assertFalse((Boolean)gated.getClass().getMethod("canApplyGate", String.class, String.class)
+                        .invoke(gated, target, "dev.sunlit.fishvisuals.mixin." + mixin), "AST owner dependency must fail closed: " + dependency);
+            }
+        }
 
         for (String mixinClass : ALL_PERF_MIXINS) {
             ClassNode node = readClassNode(mixinClass);
@@ -755,6 +924,663 @@ public final class PerfOptTests {
         assertEquals(expectedFile, actualFile, "fileOrderThenDefault must preserve tie-breaker order");
     }
 
+    private static void testArea1BlockOcclusionAndModelShaperPatches() throws Exception {
+        int g0 = BlockOcclusionPerf.generation;
+        assertTrue(g0 > 0, "BlockOcclusionPerf initial generation must be non-zero");
+        BlockOcclusionPerf.incrementGeneration();
+        int g1 = BlockOcclusionPerf.generation;
+        assertTrue(g1 > 0 && g1 != g0, "BlockOcclusionPerf generation must advance");
+        BlockOcclusionPerf.generation = 0x3FFFFFFF;
+        BlockOcclusionPerf.incrementGeneration();
+        assertEquals(1, BlockOcclusionPerf.generation, "Generation wraparound must skip zero");
+        BlockOcclusionPerf.generation = g1;
+
+        assertFalse(EntryPostApplyPatches.patchBlockOcclusion(null), "Null ClassNode must fail closed");
+        ClassNode badOcc = new ClassNode();
+        badOcc.version = Opcodes.V17;
+        badOcc.access = Opcodes.ACC_PUBLIC;
+        badOcc.name = "dev/sunlit/bettersunlit/tests/perf/BadOccState";
+        badOcc.superName = "net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase";
+        assertFalse(EntryPostApplyPatches.patchBlockOcclusion(badOcc), "Missing m_60815_ must fail closed");
+
+        ClassNode synOcc = new ClassNode();
+        synOcc.version = Opcodes.V17;
+        synOcc.access = Opcodes.ACC_PUBLIC;
+        synOcc.name = "dev/sunlit/bettersunlit/tests/perf/DynOccState";
+        synOcc.superName = "net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase";
+        synOcc.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "f_60601_", "Z", null, null));
+        synOcc.fields.add(new FieldNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_VOLATILE, "sunlit$occCache", "I", null, null));
+        MethodNode m60815 = new MethodNode(Opcodes.ACC_PUBLIC, "m_60815_", "()Z", null, null);
+        String cirDesc = "(L" + EntryPostApplyPatches.CIR_INTERNAL + ";)V";
+        m60815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        m60815.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        m60815.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, synOcc.name, "handler$zz1$customOcclusion", cirDesc, false));
+        m60815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        m60815.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        m60815.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, synOcc.name, "handler$zz2$pfoliage_canOcclude", cirDesc, false));
+        m60815.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        m60815.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, synOcc.name, "f_60601_", "Z"));
+        m60815.instructions.add(new InsnNode(Opcodes.IRETURN));
+        synOcc.methods.add(m60815);
+        synOcc.methods.add(new MethodNode(Opcodes.ACC_PRIVATE, "handler$zz1$customOcclusion", cirDesc, null, null));
+        synOcc.methods.add(new MethodNode(Opcodes.ACC_PRIVATE, "handler$zz2$pfoliage_canOcclude", cirDesc, null, null));
+        for (MethodNode stub : Arrays.asList(synOcc.methods.get(1), synOcc.methods.get(2))) {
+            stub.instructions.add(new InsnNode(Opcodes.RETURN));
+            stub.maxStack = 1;
+            stub.maxLocals = 2;
+        }
+        assertTrue(EntryPostApplyPatches.patchBlockOcclusion(synOcc), "Valid occlusion structure must patch");
+        assertTrue(EntryPostApplyPatches.patchBlockOcclusion(synOcc), "Idempotent occlusion re-patch must succeed");
+        ClassWriter occWriter = new ClassWriter(0);
+        synOcc.accept(occWriter);
+        verifyBytecode(synOcc.name.replace('/', '.'), occWriter.toByteArray());
+
+        // Unexpected third-party callback must abort fail-closed without mutating instructions
+        ClassNode unexpectedOcc = new ClassNode();
+        unexpectedOcc.version = Opcodes.V17;
+        unexpectedOcc.access = Opcodes.ACC_PUBLIC;
+        unexpectedOcc.name = "dev/sunlit/bettersunlit/tests/perf/UnexpectedOccState";
+        unexpectedOcc.superName = "net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase";
+        unexpectedOcc.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "f_60601_", "Z", null, null));
+        unexpectedOcc.fields.add(new FieldNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_VOLATILE, "sunlit$occCache", "I", null, null));
+        MethodNode badMethod = new MethodNode(Opcodes.ACC_PUBLIC, "m_60815_", "()Z", null, null);
+        badMethod.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, unexpectedOcc.name, "otherModHook", "()Z", false));
+        badMethod.instructions.add(new InsnNode(Opcodes.IRETURN));
+        unexpectedOcc.methods.add(badMethod);
+        int insnsBefore = badMethod.instructions.size();
+        assertFalse(EntryPostApplyPatches.patchBlockOcclusion(unexpectedOcc), "Unexpected call must abort fail-closed");
+        assertEquals(insnsBefore, badMethod.instructions.size(), "Aborted patch must leave instructions untouched");
+
+        // BlockModelShaper OBE CIR guard patch + verification
+        assertFalse(ClientPostApplyPatches.patchBlockModelShaper(null), "Null BlockModelShaper must fail closed");
+        ClassNode synShaper = new ClassNode();
+        synShaper.version = Opcodes.V17;
+        synShaper.access = Opcodes.ACC_PUBLIC;
+        synShaper.name = "dev/sunlit/bettersunlit/tests/perf/DynModelShaper";
+        synShaper.superName = "net/minecraft/client/renderer/block/BlockModelShaper";
+        String stateDesc = "Lnet/minecraft/world/level/block/state/BlockState;";
+        String bakedDesc = "Lnet/minecraft/client/resources/model/BakedModel;";
+        String getModelDesc = "(" + stateDesc + ")" + bakedDesc;
+        String obeCbDesc = "(" + stateDesc + "L" + EntryPostApplyPatches.CIR_INTERNAL + ";)V";
+        MethodNode m110893 = new MethodNode(Opcodes.ACC_PUBLIC, "m_110893_", getModelDesc, null, null);
+        LabelNode lAfterObe = new LabelNode();
+        m110893.instructions.add(new TypeInsnNode(Opcodes.NEW, EntryPostApplyPatches.CIR_INTERNAL));
+        m110893.instructions.add(new InsnNode(Opcodes.DUP));
+        m110893.instructions.add(new LdcInsnNode("m_110893_"));
+        m110893.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        m110893.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, EntryPostApplyPatches.CIR_INTERNAL, "<init>", "(Ljava/lang/String;Z)V", false));
+        m110893.instructions.add(new VarInsnNode(Opcodes.ASTORE, 2));
+        m110893.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        m110893.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        m110893.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        m110893.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, synShaper.name, "handler$zz1$obe$getBlockStateModel", obeCbDesc, false));
+        m110893.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        m110893.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, EntryPostApplyPatches.CIR_INTERNAL, "isCancelled", "()Z", false));
+        m110893.instructions.add(new JumpInsnNode(Opcodes.IFEQ, lAfterObe));
+        m110893.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        m110893.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, EntryPostApplyPatches.CIR_INTERNAL, "getReturnValue", "()Ljava/lang/Object;", false));
+        m110893.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraft/client/resources/model/BakedModel"));
+        m110893.instructions.add(new InsnNode(Opcodes.ARETURN));
+        m110893.instructions.add(lAfterObe);
+        m110893.instructions.add(new FrameNode(Opcodes.F_FULL, 3,
+                new Object[] { synShaper.name, "net/minecraft/world/level/block/state/BlockState", EntryPostApplyPatches.CIR_INTERNAL },
+                0, new Object[0]));
+        m110893.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        m110893.instructions.add(new InsnNode(Opcodes.ARETURN));
+        m110893.maxStack = 4;
+        m110893.maxLocals = 3;
+        synShaper.methods.add(m110893);
+        MethodNode obeStub = new MethodNode(Opcodes.ACC_PRIVATE, "handler$zz1$obe$getBlockStateModel", obeCbDesc, null, null);
+        obeStub.instructions.add(new InsnNode(Opcodes.RETURN));
+        obeStub.maxStack = 1;
+        obeStub.maxLocals = 3;
+        synShaper.methods.add(obeStub);
+        assertTrue(ClientPostApplyPatches.patchBlockModelShaper(synShaper), "OBE BlockModelShaper guard must patch");
+        assertTrue(ClientPostApplyPatches.patchBlockModelShaper(synShaper), "OBE BlockModelShaper re-patch must be idempotent");
+        ClassWriter shaperWriter = new ClassWriter(0);
+        synShaper.accept(shaperWriter);
+        verifyBytecode(synShaper.name.replace('/', '.'), shaperWriter.toByteArray());
+    }
+
+    private static void testArea2EmfRenderPerfAndPatches() throws Exception {
+        Set<Direction> allDirs = EnumSet.allOf(Direction.class);
+        ModelPart.Cube cubeNormal = new ModelPart.Cube(0, 0, -2.0f, -3.5f, 1.0f, 5.0f, 7.0f, 4.0f,
+                0.25f, 0.5f, 0.75f, false, 64.0f, 64.0f, allDirs);
+        ModelPart.Cube cubeMirror = new ModelPart.Cube(8, 12, 1.0f, 0.0f, -4.0f, 6.0f, 3.0f, 5.0f,
+                0.0f, 0.0f, 0.0f, true, 32.0f, 64.0f, allDirs);
+        Field polyField = ModelPart.Cube.class.getDeclaredField("f_104341_");
+        polyField.setAccessible(true);
+        Object[] polysNormal = (Object[]) polyField.get(cubeNormal);
+        Object[] polysMirror = (Object[]) polyField.get(cubeMirror);
+
+        PoseStack stack = new PoseStack();
+        PoseStack.Pose[] poses = new PoseStack.Pose[4];
+        poses[0] = stack.m_85850_();
+        stack.m_85836_();
+        stack.m_85850_().m_252922_().translate(1.5f, -2.25f, 0.75f).rotateXYZ(0.3f, -0.9f, 1.2f);
+        stack.m_85850_().m_252943_().rotateXYZ(0.3f, -0.9f, 1.2f);
+        poses[1] = stack.m_85850_();
+        stack.m_85836_();
+        stack.m_85850_().m_252922_().scale(1.25f, -0.75f, 2.0f).rotateY(0.75f);
+        stack.m_85850_().m_252943_().scale(1.0f, -1.0f, 1.0f).rotateY(0.75f);
+        poses[2] = stack.m_85850_();
+        stack.m_85836_();
+        stack.m_85850_().m_252922_().translate(-12.5f, 48.125f, -0.0625f).rotateYXZ(2.1f, -0.45f, 0.15f);
+        stack.m_85850_().m_252943_().rotateYXZ(2.1f, -0.45f, 0.15f);
+        poses[3] = stack.m_85850_();
+
+        RecordingVertexConsumer expectedVc = new RecordingVertexConsumer();
+        RecordingVertexConsumer actualVc = new RecordingVertexConsumer();
+        for (int p = 0; p < poses.length; p++) {
+            PoseStack.Pose pose = poses[p];
+            expectedVc.reset();
+            actualVc.reset();
+            cubeNormal.m_171332_(pose, expectedVc, 15728880, 655360, 0.9f, 0.8f, 0.7f, 0.95f);
+            EmfRenderPerf.compilePolygons(polysNormal, pose, actualVc, 15728880, 655360, 0.9f, 0.8f, 0.7f, 0.95f);
+            assertVerticesBitIdentical(expectedVc, actualVc, "ModelPart.Cube normal pose " + p);
+
+            expectedVc.reset();
+            actualVc.reset();
+            cubeMirror.m_171332_(pose, expectedVc, 240, 0, 1.0f, 0.5f, 0.25f, 1.0f);
+            EmfRenderPerf.compilePolygons(polysMirror, pose, actualVc, 240, 0, 1.0f, 0.5f, 0.25f, 1.0f);
+            assertVerticesBitIdentical(expectedVc, actualVc, "ModelPart.Cube mirror pose " + p);
+        }
+
+        // Zero-allocation check for EmfRenderPerf.compilePolygons
+        RecordingVertexConsumer sinkVc = new RecordingVertexConsumer();
+        PoseStack.Pose hotPose = poses[1];
+        for (int i = 0; i < 1000; i++) {
+            sinkVc.reset();
+            EmfRenderPerf.compilePolygons(polysNormal, hotPose, sinkVc, 240, 655360, 1f, 1f, 1f, 1f);
+        }
+        long allocCube = measureAllocBytes(() -> {
+            for (int i = 0; i < 2000; i++) {
+                sinkVc.reset();
+                EmfRenderPerf.compilePolygons(polysNormal, hotPose, sinkVc, 240, 655360, 1f, 1f, 1f, 1f);
+            }
+        });
+        assertEquals(0L, allocCube, "EmfRenderPerf.compilePolygons must allocate 0 bytes, got " + allocCube);
+
+        // PoseStack helper safety on non-caching PoseStack
+        PoseStack plainStack = new PoseStack();
+        EmfRenderPerf.pushWithPoseCaching(plainStack);
+        assertFalse(plainStack.m_85851_(), "pushWithPoseCaching must push PoseStack");
+        EmfRenderPerf.popWithPoseCaching(plainStack);
+        assertTrue(plainStack.m_85851_(), "popWithPoseCaching must pop PoseStack");
+
+        // charIterator equivalence vs expr.chars().mapToObj(c -> (char) c).iterator()
+        for (String expr : List.of("", "0", "a + b * sin(time / 20)", "x\u3042y")) {
+            Iterator<Character> expectedIt = expr.chars().mapToObj(c -> (char) c).iterator();
+            Iterator<Character> actualIt = EmfRenderPerf.charIterator(expr);
+            while (expectedIt.hasNext()) {
+                assertTrue(actualIt.hasNext(), "charIterator ended early on: " + expr);
+                assertEquals(expectedIt.next(), actualIt.next(), "charIterator char mismatch on: " + expr);
+            }
+            assertFalse(actualIt.hasNext(), "charIterator had extra elements on: " + expr);
+            assertThrows(NoSuchElementException.class, actualIt::next);
+        }
+
+        // Real MathExpressionParser.<init> post-apply ASM rewrite + JVM verification
+        ClassNode mathNode = readClassNode("traben.entity_model_features.models.animation.math.expression_tree.MathExpressionParser");
+        assertTrue(ClientPostApplyPatches.patchMathExpressionParser(mathNode), "patchMathExpressionParser must succeed");
+        assertTrue(ClientPostApplyPatches.patchMathExpressionParser(mathNode), "patchMathExpressionParser must be idempotent");
+        MethodNode mathCtor = findMethod(mathNode, "<init>(Ljava/lang/String;ZLtraben/entity_model_features/models/animation/AnimSetupContext;Z)V");
+        assertNotNull(mathCtor, "MathExpressionParser ctor missing");
+        assertEquals(0, countMethodInvoke(mathCtor, "Ljava/util/stream/IntStream;mapToObj(Ljava/util/function/IntFunction;)Ljava/util/stream/Stream;"),
+                "IntStream.mapToObj call must be replaced");
+        assertEquals(1, countMethodInvoke(mathCtor, "Ldev/sunlit/bettersunlit/client/EmfRenderPerf;charIterator(Ljava/lang/String;)Ljava/util/Iterator;"),
+                "EmfRenderPerf.charIterator call must be inserted");
+        ClassWriter mathWriter = new ClassWriter(0);
+        mathNode.accept(mathWriter);
+        verifyBytecode(mathNode.name.replace('/', '.'), mathWriter.toByteArray());
+
+        // Real ModelPart$Cube + sunlit$polygons post-apply ASM rewrite + JVM verification
+        ClassNode cubeNode = readClassNode("net.minecraft.client.model.geom.ModelPart$Cube");
+        cubeNode.interfaces.add("dev/sunlit/bettersunlit/client/EmfRenderPerf$PolygonHolder");
+        MethodNode polyMethod = new MethodNode(Opcodes.ACC_PUBLIC, "sunlit$polygons", "()[Ljava/lang/Object;", null, null);
+        polyMethod.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        polyMethod.instructions.add(new InsnNode(Opcodes.ARETURN));
+        polyMethod.maxStack = 1;
+        polyMethod.maxLocals = 1;
+        cubeNode.methods.add(polyMethod);
+        assertTrue(ClientPostApplyPatches.patchModelPartCube(cubeNode), "patchModelPartCube must succeed");
+        assertTrue(ClientPostApplyPatches.patchModelPartCube(cubeNode), "patchModelPartCube must be idempotent");
+        ClassWriter cubeWriter = new ClassWriter(0);
+        cubeNode.accept(cubeWriter);
+        verifyBytecode(cubeNode.name.replace('/', '.'), cubeWriter.toByteArray());
+    }
+
+    private static void testArea2GraphOrderPerf() {
+        // 1. Digraph interface parity vs MapDigraph
+        GraphOrderPerf.PooledRenderDigraph<String> pooled = new GraphOrderPerf.PooledRenderDigraph<>();
+        MapDigraph<String> ref = new MapDigraph<>();
+        for (int round = 0; round < 3; round++) {
+            pooled.clear();
+            ref = new MapDigraph<>();
+            List<String> keys = new ArrayList<>();
+            for (int i = 0; i < 20; i++) {
+                keys.add("node_" + i);
+            }
+            for (String k : keys) {
+                assertEquals(ref.add(k), pooled.add(k), "add mismatch " + k);
+            }
+            for (int i = 0; i < 20; i++) {
+                String u = keys.get(i);
+                String v = keys.get((i + 3) % 20);
+                String w = keys.get((i * 7) % 20);
+                assertEquals(ref.put(u, v, i + 1), pooled.put(u, v, i + 1), "put u->v mismatch");
+                assertEquals(ref.put(u, w, (i % 5) + 1), pooled.put(u, w, (i % 5) + 1), "put u->w mismatch");
+            }
+            assertEquals(ref.getVertexCount(), pooled.getVertexCount(), "vertexCount mismatch");
+            assertEquals(ref.getEdgeCount(), pooled.getEdgeCount(), "edgeCount mismatch");
+            for (String u : keys) {
+                for (String v : keys) {
+                    assertEquals(ref.get(u, v), pooled.get(u, v), "get edge mismatch " + u + "->" + v);
+                }
+            }
+            assertEquals(ref.remove("node_4", "node_7"), pooled.remove("node_4", "node_7"), "edge remove mismatch");
+            assertEquals(ref.remove("node_12"), pooled.remove("node_12"), "vertex remove mismatch");
+            assertEquals(ref.getVertexCount(), pooled.getVertexCount(), "vertexCount after remove");
+            assertEquals(ref.getEdgeCount(), pooled.getEdgeCount(), "edgeCount after remove");
+
+            Digraph<String> refRev = ref.reverse();
+            Digraph<String> poolRev = pooled.reverse();
+            assertEquals(refRev.getVertexCount(), poolRev.getVertexCount(), "reverse vertexCount");
+            assertEquals(refRev.getEdgeCount(), poolRev.getEdgeCount(), "reverse edgeCount");
+            for (String u : pooled.vertices()) {
+                for (String v : pooled.targets(u)) {
+                    assertEquals(refRev.get(v, u), poolRev.get(v, u), "reverse edge mismatch");
+                }
+            }
+
+            Set<String> subSet = Set.of("node_0", "node_1", "node_3", "node_6", "node_9");
+            Digraph<String> refSub = ref.subgraph(subSet);
+            Digraph<String> poolSub = pooled.subgraph(subSet);
+            assertEquals(refSub.getVertexCount(), poolSub.getVertexCount(), "subgraph vertexCount");
+            assertEquals(refSub.getEdgeCount(), poolSub.getEdgeCount(), "subgraph edgeCount");
+        }
+
+        // 2. Topological sort on DAG with self-loops + cross edges matches Ithaka Digraphs.toposort validity
+        GraphOrderPerf.PooledRenderDigraph<String> dag = new GraphOrderPerf.PooledRenderDigraph<>();
+        dag.put("A", "B", 1);
+        dag.put("A", "C", 2);
+        dag.put("B", "D", 3);
+        dag.put("C", "D", 4);
+        dag.put("C", "C", 9); // self-loop allowed
+        dag.add("ISOLATED");
+        List<String> dagOrder = new ArrayList<>();
+        GraphOrderPerf.orderPooledGraph(dag, dagOrder);
+        assertEquals(dag.getVertexCount(), dagOrder.size(), "DAG order size");
+        assertTrue(dagOrder.indexOf("A") < dagOrder.indexOf("B"), "DAG order A < B");
+        assertTrue(dagOrder.indexOf("A") < dagOrder.indexOf("C"), "DAG order A < C");
+        assertTrue(dagOrder.indexOf("B") < dagOrder.indexOf("D"), "DAG order B < D");
+        assertTrue(dagOrder.indexOf("C") < dagOrder.indexOf("D"), "DAG order C < D");
+
+        // 3. Random cyclic graphs with multiple SCCs & unequal weights: every vertex preserved & FAS weight matches
+        SimpleFeedbackArcSetProvider fasProv = new SimpleFeedbackArcSetProvider();
+        Random rng = new Random(20261114L);
+        for (int trial = 0; trial < 40; trial++) {
+            int n = 2 + rng.nextInt(14);
+            GraphOrderPerf.PooledRenderDigraph<String> pg = new GraphOrderPerf.PooledRenderDigraph<>();
+            MapDigraph<String> mg = new MapDigraph<>();
+            List<String> verts = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                String v = "v" + i;
+                verts.add(v);
+                pg.add(v);
+                mg.add(v);
+            }
+            for (int e = 0; e < n * 2; e++) {
+                String u = verts.get(rng.nextInt(n));
+                String v = verts.get(rng.nextInt(n));
+                if (u.equals(v)) continue;
+                int w = 1 + rng.nextInt(20);
+                pg.put(u, v, w);
+                mg.put(u, v, w);
+            }
+            Map<String, Map<String,Integer>> originalEdges = new HashMap<>();
+            for (String u : verts) {
+                Map<String,Integer> row = new HashMap<>();
+                for (String v : mg.targets(u)) row.put(v, mg.get(u,v).orElseThrow());
+                originalEdges.put(u, row);
+            }
+            List<String> pOrder = new ArrayList<>(n);
+            GraphOrderPerf.orderPooledGraph(pg, pOrder);
+            assertEquals(n, pOrder.size(), "Cyclic trial " + trial + " vertex count");
+            assertEquals(Set.copyOf(verts), Set.copyOf(pOrder), "Cyclic trial " + trial + " vertex set");
+
+            FeedbackArcSet<String> refFas = fasProv.getFeedbackArcSet(mg, mg, FeedbackArcSetPolicy.MIN_WEIGHT);
+            long refFasWeight = 0;
+            for (String src : refFas.vertices()) {
+                for (String dst : refFas.targets(src)) {
+                    refFasWeight += mg.get(src, dst).orElse(0);
+                    mg.remove(src, dst);
+                }
+            }
+            assertTrue(mg.isAcyclic(), "Reference graph after FAS removal must be acyclic");
+            Map<String, Integer> posMap = new HashMap<>();
+            for (int i = 0; i < pOrder.size(); i++) {
+                posMap.put(pOrder.get(i), i);
+            }
+            long pooledFasWeight = 0;
+            for (String u : verts) {
+                for (var edge : originalEdges.get(u).entrySet()) {
+                    String v = edge.getKey();
+                    if (!u.equals(v) && posMap.get(u) > posMap.get(v)) {
+                        pooledFasWeight += edge.getValue();
+                    }
+                }
+            }
+            assertEquals(Digraphs.toposort(mg, false), pOrder, "Native MIN_WEIGHT final order trial " + trial);
+            assertTrue(pooledFasWeight <= refFasWeight,
+                    "Pooled FAS weight " + pooledFasWeight + " exceeded reference MIN_WEIGHT FAS " + refFasWeight + " on trial " + trial);
+        }
+
+        // Mutual 2-cycle must drop the lighter edge so heavier u->v wins
+        GraphOrderPerf.PooledRenderDigraph<String> twoCycle = new GraphOrderPerf.PooledRenderDigraph<>();
+        twoCycle.put("HEAVY", "LIGHT", 10);
+        twoCycle.put("LIGHT", "HEAVY", 1);
+        List<String> twoOrder = new ArrayList<>();
+        GraphOrderPerf.orderPooledGraph(twoCycle, twoOrder);
+        assertEquals(List.of("HEAVY", "LIGHT"), twoOrder, "2-cycle must preserve heavier edge direction");
+
+        // Zero-alloc reuse of PooledRenderDigraph + out list across frames
+        GraphOrderPerf.PooledRenderDigraph<String> frameGraph = new GraphOrderPerf.PooledRenderDigraph<>();
+        List<String> frameOut = new ArrayList<>(8);
+        String[] rt = { "t0", "t1", "t2", "t3", "t4" };
+        for (int warm = 0; warm < 500; warm++) {
+            frameGraph.clear();
+            frameOut.clear();
+            frameGraph.put(rt[0], rt[1], 2);
+            frameGraph.put(rt[1], rt[2], 3);
+            frameGraph.put(rt[2], rt[3], 1);
+            frameGraph.put(rt[3], rt[4], 5);
+            GraphOrderPerf.orderPooledGraph(frameGraph, frameOut);
+        }
+        long allocGraph = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int i = 0; i < 1000; i++) {
+                frameGraph.clear();
+                frameOut.clear();
+                frameGraph.put(rt[0], rt[1], 2);
+                frameGraph.put(rt[1], rt[2], 3);
+                frameGraph.put(rt[2], rt[3], 1);
+                frameGraph.put(rt[3], rt[4], 5);
+                GraphOrderPerf.orderPooledGraph(frameGraph, frameOut);
+                acc += frameOut.size();
+            }
+            if (acc < 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocGraph, "PooledRenderDigraph frame reuse + toposort must allocate 0 bytes, got " + allocGraph);
+    }
+
+    private static void testArea3LogBegonePerf() throws Exception {
+        LogBegonePerf.invalidate();
+        List<String> phrases = new ArrayList<>(Arrays.asList("Ignoring unknown attribute", "OpenGL debug message", null));
+        List<String> regexes = new ArrayList<>(Arrays.asList("^\\[WARN\\] Duplicate.*", "ExactOnly"));
+
+        assertTrue(LogBegonePerf.shouldFilter(null, phrases, regexes), "null message must filter (return true)");
+        assertTrue(LogBegonePerf.shouldFilter("Prefix: Ignoring unknown attribute foo", phrases, regexes), "phrase substring hit");
+        assertTrue(LogBegonePerf.shouldFilter("[WARN] Duplicate model key", phrases, regexes), "regex matches hit");
+        assertFalse(LogBegonePerf.shouldFilter("prefix ExactOnly suffix", phrases, regexes), "Matcher.matches() must be full-string");
+        assertTrue(LogBegonePerf.shouldFilter("ExactOnly", phrases, regexes), "Full-string regex match");
+        assertFalse(LogBegonePerf.shouldFilter("Normal chat message", phrases, regexes), "Unmatched log line");
+
+        // Dynamic config mutation (size change + invalidate)
+        phrases.add("Added dynamic phrase");
+        assertTrue(LogBegonePerf.shouldFilter("hit Added dynamic phrase here", phrases, regexes), "Dynamic list growth invalidated snapshot");
+        regexes.set(0, "^NEW_REGEX$");
+        LogBegonePerf.invalidate();
+        assertTrue(LogBegonePerf.shouldFilter("NEW_REGEX", phrases, regexes), "Manual invalidate picked up regex edit");
+        assertFalse(LogBegonePerf.shouldFilter("[WARN] Duplicate model key", phrases, regexes), "Old regex gone after invalidate");
+
+        // Concurrent thread safety across two threads
+        AtomicInteger failures = new AtomicInteger();
+        Runnable worker = () -> {
+            for (int i = 0; i < 2000; i++) {
+                if (!LogBegonePerf.shouldFilter("OpenGL debug message", phrases, regexes)) failures.incrementAndGet();
+                if (LogBegonePerf.shouldFilter("Completely fine line", phrases, regexes)) failures.incrementAndGet();
+            }
+        };
+        Thread t1 = new Thread(worker);
+        Thread t2 = new Thread(worker);
+        t1.start();
+        t2.start();
+        t1.join();
+        t2.join();
+        assertEquals(0, failures.get(), "LogBegonePerf concurrent filtering failures");
+
+        for (int i = 0; i < 1000; i++) {
+            LogBegonePerf.shouldFilter("Clean log entry 12345", phrases, regexes);
+        }
+        long allocLog = measureAllocBytes(() -> {
+            boolean acc = false;
+            for (int i = 0; i < 5000; i++) {
+                acc ^= LogBegonePerf.shouldFilter("Clean log entry 12345", phrases, regexes);
+            }
+            if (acc && System.nanoTime() == 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocLog, "LogBegonePerf hot path must allocate 0 bytes, got " + allocLog);
+        LogBegonePerf.invalidate();
+    }
+
+    private static void testArea3EmojiRenderPerfAndPatch() throws Exception {
+        // 1. Bounded cache eviction cap (<= 4096 entries)
+        LoadingCache<String, Pair<String, HashMap<Integer, Emoji>>> cache = EmojiRenderPerf.createBoundedCache();
+        Pair<String, HashMap<Integer, Emoji>> dummy = Pair.of("x", new HashMap<>());
+        for (int i = 0; i < 5000; i++) {
+            cache.put("k_" + i, dummy);
+        }
+        cache.cleanUp();
+        assertTrue(cache.size() <= EmojiRenderPerf.MAX_CACHE_SIZE,
+                "RECENT_STRINGS cache size must stay bounded <= 4096, was " + cache.size());
+
+        // 2. EmojiIndex pre-filter & formatting-code transparency
+        List<Emoji> saved = new ArrayList<>(Constants.EMOJI_LIST);
+        try {
+            Constants.EMOJI_LIST.clear();
+            EmojiRenderPerf.invalidateIndex();
+            assertFalse(EmojiRenderPerf.mightContainEmoji("142 FPS"), "Empty emoji list never triggers");
+
+            Emoji smile = new Emoji();
+            smile.strings = List.of(":smile:", ":)");
+            Emoji heart = new Emoji();
+            heart.strings = List.of("<3", ":heart:");
+            Constants.EMOJI_LIST.add(smile);
+            Constants.EMOJI_LIST.add(heart);
+            EmojiRenderPerf.invalidateIndex();
+
+            assertFalse(EmojiRenderPerf.mightContainEmoji(null), "null text");
+            assertFalse(EmojiRenderPerf.mightContainEmoji(""), "empty text");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("142 FPS"), "plain FPS HUD string");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("Coords: 100, 64, -200"), "plain coords HUD");
+            assertFalse(EmojiRenderPerf.mightContainEmoji("hello world without emojis"), "plain prose");
+            assertTrue(EmojiRenderPerf.mightContainEmoji(":smile:"), "exact shortcode");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("gg :)"), "emoticon suffix");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("gg \u00a7a:\u00a7r)"), "formatting code split trigger");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("i <3 u"), "ASCII symbol emoticon");
+
+            // FormattedCharSequence ThreadLocal extraction + zero-alloc fast reject
+            FormattedCharSequence plainSeq = FormattedCharSequence.m_13714_("Coords: 100, 64", Style.f_131099_);
+            FormattedCharSequence emojiSeq = FormattedCharSequence.m_13714_("gg :smile:!", Style.f_131099_);
+            for (int i = 0; i < 1000; i++) {
+                EmojiRenderPerf.extractIfMightContainEmoji(plainSeq);
+                EmojiRenderPerf.mightContainEmoji("Coords: 100, 64");
+            }
+            assertEquals(null, EmojiRenderPerf.extractIfMightContainEmoji(plainSeq), "Plain seq must return null");
+            assertEquals("gg :smile:!", EmojiRenderPerf.extractIfMightContainEmoji(emojiSeq), "Emoji seq candidate mismatch");
+
+            // Nested re-entrancy test for ThreadLocal StringBuilder lease
+            FormattedCharSequence reentrantOuter = sink -> {
+                assertEquals("inner :heart:", EmojiRenderPerf.extractIfMightContainEmoji(
+                        FormattedCharSequence.m_13714_("inner :heart:", Style.f_131099_)), "Reentrant inner extract");
+                String txt = "outer :smile:";
+                for (int i = 0; i < txt.length(); i++) {
+                    if (!sink.m_6411_(i, Style.f_131099_, txt.charAt(i))) return false;
+                }
+                return true;
+            };
+            assertEquals("outer :smile:", EmojiRenderPerf.extractIfMightContainEmoji(reentrantOuter),
+                    "Outer StringBuilder must remain uncorrupted on nested extract");
+
+            long allocEmoji = measureAllocBytes(() -> {
+                boolean acc = false;
+                for (int i = 0; i < 5000; i++) {
+                    acc ^= EmojiRenderPerf.extractIfMightContainEmoji(plainSeq) != null;
+                    acc ^= EmojiRenderPerf.mightContainEmoji("142 FPS");
+                }
+                if (acc && System.nanoTime() == 0) throw new AssertionError();
+            });
+            assertEquals(0L, allocEmoji, "Emoji pre-filter non-emoji path must allocate 0 bytes, got " + allocEmoji);
+
+            Emoji wordEmoji = new Emoji();
+            wordEmoji.strings = List.of("kappa");
+            Constants.EMOJI_LIST.add(wordEmoji);
+            EmojiRenderPerf.invalidateIndex();
+            assertFalse(EmojiRenderPerf.mightContainEmoji("142 FPS"), "Word-boundary emoji must keep pre-filter active");
+            assertTrue(EmojiRenderPerf.mightContainEmoji("gg kappa!"), "Word-boundary emoji trigger must match");
+
+            // Real Emojiful Regex unindexable fallback trigger test (`.` is left unescaped by EmojiUtil)
+            Emoji wildcardEmoji = new Emoji();
+            wildcardEmoji.strings = List.of("a.b");
+            Constants.EMOJI_LIST.add(wildcardEmoji);
+            EmojiRenderPerf.invalidateIndex();
+            assertTrue(EmojiRenderPerf.mightContainEmoji("anything falls back safely"),
+                    "Unindexable regex must fall back conservatively");
+        } finally {
+            Constants.EMOJI_LIST.clear();
+            Constants.EMOJI_LIST.addAll(saved);
+            EmojiRenderPerf.invalidateIndex();
+        }
+
+        // 3. Real EmojiFontRenderer + PerfEmojiFontRendererMixin merge simulation + patchEmojiFontRenderer
+        ClassNode emojiTarget = readClassNode("com.hrznstudio.emojiful.render.EmojiFontRenderer");
+        ClassNode emojiMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfEmojiFontRendererMixin");
+        String mixinInternal = "dev/sunlit/fishvisuals/mixin/PerfEmojiFontRendererMixin";
+        for (MethodNode m : emojiMixin.methods) {
+            if (m.name.startsWith("sunlit$")) {
+                MethodNode copy = new MethodNode(m.access, m.name, m.desc, m.signature, null);
+                m.accept(copy);
+                for (AbstractInsnNode insn = copy.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                    if (insn instanceof MethodInsnNode mi && mixinInternal.equals(mi.owner)) {
+                        mi.owner = emojiTarget.name;
+                    } else if (insn instanceof FieldInsnNode fi && mixinInternal.equals(fi.owner)) {
+                        fi.owner = emojiTarget.name;
+                    } else if (insn instanceof FrameNode fn) {
+                        if (fn.local != null) {
+                            for (int i = 0; i < fn.local.size(); i++) {
+                                if (mixinInternal.equals(fn.local.get(i))) fn.local.set(i, emojiTarget.name);
+                            }
+                        }
+                        if (fn.stack != null) {
+                            for (int i = 0; i < fn.stack.size(); i++) {
+                                if (mixinInternal.equals(fn.stack.get(i))) fn.stack.set(i, emojiTarget.name);
+                            }
+                        }
+                    }
+                }
+                emojiTarget.methods.add(copy);
+            }
+        }
+        assertTrue(ClientPostApplyPatches.patchEmojiFontRenderer(emojiTarget), "patchEmojiFontRenderer must succeed");
+        assertTrue(ClientPostApplyPatches.patchEmojiFontRenderer(emojiTarget), "patchEmojiFontRenderer must be idempotent");
+        MethodNode superRender = findMethod(emojiTarget,
+                "sunlit$superRenderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F");
+        assertNotNull(superRender, "sunlit$superRenderText missing after patch");
+        assertEquals(1, countMethodInvoke(superRender,
+                "Lnet/minecraft/client/gui/Font;m_271978_(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F"),
+                "sunlit$superRenderText must bind INVOKESPECIAL Font.m_271978_");
+        assertNotNull(findMethod(emojiTarget, "sunlit$origWidthString(Ljava/lang/String;)I"), "origWidthString renamed");
+        assertNotNull(findMethod(emojiTarget, "sunlit$origWidthSeq(Lnet/minecraft/util/FormattedCharSequence;)I"), "origWidthSeq renamed");
+        assertEquals(null, findMethod(emojiTarget, "sunlit$fastWidthString(Ljava/lang/String;)I"), "fastWidthString swapped into m_92895_");
+
+        ClassWriter emojiWriter = new ClassWriter(0);
+        emojiTarget.accept(emojiWriter);
+        verifyBytecode(emojiTarget.name.replace('/', '.'), emojiWriter.toByteArray());
+    }
+
+    private static void testArea4IrisAstCachePerf() {
+        IrisAstCachePerf.trimParser(null);
+        ASTParser parser = ASTParser._getInternalInstance();
+        assertNotNull(parser, "ASTParser._getInternalInstance() must be available");
+        IrisAstCachePerf.trimAstCaches();
+        IrisAstCachePerf.trimParser(parser);
+    }
+
+    private static void testArea4JeiRegistryPerf() throws Exception {
+        JeiRegistryPerf.invalidate();
+        java.lang.reflect.Method createKey = ResourceKey.class.getDeclaredMethod(
+                "m_135790_", ResourceLocation.class, ResourceLocation.class);
+        createKey.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ResourceKey<Registry<String>> keyReg = (ResourceKey<Registry<String>>) createKey.invoke(
+                null, new ResourceLocation("minecraft", "root"), new ResourceLocation("bettersunlit", "test_reg"));
+        ResourceKey<String> key1 = ResourceKey.m_135785_(keyReg, new ResourceLocation("bettersunlit", "alpha"));
+
+        Object backingA = new Object();
+        Object backingB = new Object();
+        AtomicInteger factoryCalls = new AtomicInteger();
+        Function<Object, IPlatformRegistry<String>> factory = b -> {
+            factoryCalls.incrementAndGet();
+            return new IPlatformRegistry<>() {
+                @Override public Stream<String> getValues() { return Stream.empty(); }
+                @Override public Optional<String> getValue(ResourceLocation rl) { return Optional.empty(); }
+                @Override public int getId(String entry) { return -1; }
+                @Override public Optional<String> getValue(int id) { return Optional.empty(); }
+                @Override public boolean contains(String entry) { return false; }
+                @Override public Optional<ResourceLocation> getRegistryName(String entry) { return Optional.empty(); }
+            };
+        };
+
+        IPlatformRegistry<String> w1 = JeiRegistryPerf.getOrCreate(key1, backingA, factory);
+        IPlatformRegistry<String> w2 = JeiRegistryPerf.getOrCreate(key1, backingA, factory);
+        assertSame(w1, w2, "Same backing registry instance must return cached wrapper");
+        assertEquals(1, factoryCalls.get(), "Second lookup must not invoke factory");
+
+        for (int i = 0; i < 1000; i++) {
+            JeiRegistryPerf.getOrCreate(key1, backingA, factory);
+        }
+        long allocJeiReg = measureAllocBytes(() -> {
+            int acc = 0;
+            for (int i = 0; i < 5000; i++) {
+                if (JeiRegistryPerf.getOrCreate(key1, backingA, factory) != null) acc++;
+            }
+            if (acc < 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocJeiReg, "JeiRegistryPerf cache hit must allocate 0 bytes, got " + allocJeiReg);
+
+        IPlatformRegistry<String> w3 = JeiRegistryPerf.getOrCreate(key1, backingB, factory);
+        assertTrue(w3 != w1, "Changed backing registry identity must invalidate and rebuild wrapper");
+        assertEquals(2, factoryCalls.get(), "Backing change must call factory once");
+
+        JeiRegistryPerf.invalidate();
+        assertEquals(0, JeiRegistryPerf.size(), "JeiRegistryPerf.invalidate must clear cache");
+    }
+
+    private static void verifyBytecode(String binaryName, byte[] classBytes) throws Exception {
+        ClassLoader verifier = new ClassLoader(PerfOptTests.class.getClassLoader()) {
+            private Class<?> defined;
+
+            Class<?> loadBytes() {
+                defined = defineClass(binaryName, classBytes, 0, classBytes.length);
+                return defined;
+            }
+
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.equals(binaryName) && defined != null) {
+                    if (resolve) resolveClass(defined);
+                    return defined;
+                }
+                return super.loadClass(name, resolve);
+            }
+        };
+        Class<?> cls = verifier.getClass().getDeclaredMethod("loadBytes").invoke(verifier) instanceof Class<?> c ? c : null;
+        assertNotNull(cls, "Defined class missing: " + binaryName);
+        cls.getDeclaredMethods();
+        cls.getDeclaredFields();
+    }
+
     // ---- Reference original ParticleRain computations for exact comparison ----
 
     private static Quaternionf refTurnBackface(Quaternionf q, Vector3f posToCam) {
@@ -987,7 +1813,11 @@ public final class PerfOptTests {
             assertEquals(Float.floatToRawIntBits(expected.u[i]), Float.floatToRawIntBits(actual.u[i]), label + " u[" + i + "]");
             assertEquals(Float.floatToRawIntBits(expected.v[i]), Float.floatToRawIntBits(actual.v[i]), label + " v[" + i + "]");
             assertEquals(expected.rgba[i], actual.rgba[i], label + " rgba[" + i + "]");
+            assertEquals(expected.overlay[i], actual.overlay[i], label + " overlay[" + i + "]");
             assertEquals(expected.light[i], actual.light[i], label + " light[" + i + "]");
+            assertEquals(Float.floatToRawIntBits(expected.nx[i]), Float.floatToRawIntBits(actual.nx[i]), label + " nx[" + i + "]");
+            assertEquals(Float.floatToRawIntBits(expected.ny[i]), Float.floatToRawIntBits(actual.ny[i]), label + " ny[" + i + "]");
+            assertEquals(Float.floatToRawIntBits(expected.nz[i]), Float.floatToRawIntBits(actual.nz[i]), label + " nz[" + i + "]");
         }
     }
 
@@ -1062,13 +1892,18 @@ public final class PerfOptTests {
     }
 
     private static final class RecordingVertexConsumer implements VertexConsumer {
-        final double[] x = new double[8];
-        final double[] y = new double[8];
-        final double[] z = new double[8];
-        final float[] u = new float[8];
-        final float[] v = new float[8];
-        final int[] rgba = new int[8];
-        final int[] light = new int[8];
+        private static final int CAP = 64;
+        final double[] x = new double[CAP];
+        final double[] y = new double[CAP];
+        final double[] z = new double[CAP];
+        final float[] u = new float[CAP];
+        final float[] v = new float[CAP];
+        final int[] rgba = new int[CAP];
+        final int[] overlay = new int[CAP];
+        final int[] light = new int[CAP];
+        final float[] nx = new float[CAP];
+        final float[] ny = new float[CAP];
+        final float[] nz = new float[CAP];
         int count = 0;
 
         void reset() { count = 0; }
@@ -1082,10 +1917,10 @@ public final class PerfOptTests {
             return this;
         }
         @Override public VertexConsumer m_7421_(float vu, float vv) { u[count] = vu; v[count] = vv; return this; }
-        @Override public VertexConsumer m_7122_(int u, int v) { return this; }
+        @Override public VertexConsumer m_7122_(int u, int v) { overlay[count] = (u & 0xFFFF) | ((v & 0xFFFF) << 16); return this; }
         @Override public VertexConsumer m_7120_(int u, int v) { light[count] = (u & 0xFFFF) | ((v & 0xFFFF) << 16); return this; }
         @Override public VertexConsumer m_85969_(int uv2) { light[count] = uv2; return this; }
-        @Override public VertexConsumer m_5601_(float nx, float ny, float nz) { return this; }
+        @Override public VertexConsumer m_5601_(float xN, float yN, float zN) { nx[count] = xN; ny[count] = yN; nz[count] = zN; return this; }
         @Override public void m_5752_() { count++; }
         @Override public void m_7404_(int r, int g, int b, int a) {}
         @Override public void m_141991_() {}

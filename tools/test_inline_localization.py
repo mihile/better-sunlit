@@ -29,7 +29,7 @@ for side in ['client', 'server']:
                    '-d', out, *sorted((root/'tests/inline').glob('*.java'))]
         argfile = out/'javac.args'
         argfile.write_text('\n'.join('"'+str(a).replace('\\','/').replace('"','\\"')+'"' for a in options), encoding='utf8')
-        subprocess.run([jdk/'javac.exe', '@'+str(argfile)], check=True)
+        subprocess.run([jdk/'javac.exe', '-J-Dfile.encoding=UTF-8', '@'+str(argfile)], check=True)
     urls = ' '.join(Path(p).resolve().as_uri()+('/' if Path(p).is_dir() else '') for p in cp)
     line = 'Class-Path: '+urls
     wrapped = [line[:70]]

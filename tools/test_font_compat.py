@@ -23,7 +23,7 @@ def run(tool, arguments):
     argfile = out / (tool + '.args')
     argfile.write_text('\n'.join('"' + str(a).replace('\\', '/').replace('"', '\\"') + '"'
                                  for a in arguments), encoding='utf8')
-    subprocess.run([jdk / (tool + '.exe'), '@' + str(argfile)],
+    subprocess.run([jdk / (tool + '.exe'), *(['-J-Dfile.encoding=UTF-8'] if tool == 'javac' else []), '@' + str(argfile)],
                    cwd=root / 'build/client', check=True)
 
 run('javac', ['--release', '17', '-proc:none', '-encoding', 'UTF-8', '-cp', classpath,
