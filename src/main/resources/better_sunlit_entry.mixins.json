@@ -45,7 +45,10 @@
     "PerfEmojiFontRendererMixin",
     "PerfPipelineManagerMixin",
     "PerfTransformPatcherMixin",
-    "PerfJeiRegistryWrapperMixin"
+    "PerfJeiRegistryWrapperMixin",
+    "PerfBatchableBufferSourceMixin",
+    "PerfEmfModelPartVariableMixin",
+    "PerfChunkBuilderMeshingTaskMixin"
   ],
   "injectors": {
     "defaultRequire": 1

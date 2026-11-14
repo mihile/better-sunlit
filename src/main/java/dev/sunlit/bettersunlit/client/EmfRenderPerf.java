@@ -173,6 +173,44 @@ public final class EmfRenderPerf {
      * Direct {@code Character} iterator over a {@link String} replacing
      * {@code str.chars().mapToObj(c -> (char) c).iterator()} pipeline allocations.
      */
+    /**
+     * Zero-allocation replacement for {@code [a-zA-Z0-9_]+\.([trs][xyz]$|visible$|visible_boxes$)}
+     * used in {@code ModelPartVariableFactory.createsThisVariable}.
+     */
+    public static boolean matchesModelPartVariableSyntax(String s) {
+        if (s == null) {
+            return false;
+        }
+        int dot = s.indexOf('.');
+        if (dot <= 0) {
+            return false;
+        }
+        for (int i = 0; i < dot; i++) {
+            char c = s.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '_';
+            if (!ok) {
+                return false;
+            }
+        }
+        int start = dot + 1;
+        int suffixLen = s.length() - start;
+        if (suffixLen == 2) {
+            char c0 = s.charAt(start);
+            char c1 = s.charAt(start + 1);
+            return (c0 == 't' || c0 == 'r' || c0 == 's') && (c1 == 'x' || c1 == 'y' || c1 == 'z');
+        }
+        if (suffixLen == 7) {
+            return s.regionMatches(start, "visible", 0, 7);
+        }
+        if (suffixLen == 13) {
+            return s.regionMatches(start, "visible_boxes", 0, 13);
+        }
+        return false;
+    }
+
     public static Iterator<Character> charIterator(String expr) {
         return new CharSequenceIterator(expr);
     }

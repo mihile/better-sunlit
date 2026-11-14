@@ -62,7 +62,13 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.irisshaders.iris.pipeline.transform.TransformPatcher$2","1adb3ae6c90b0262f72d23d43526c618eb20cf2ac548ce10826290b82439e74a"),
         Map.entry("io.github.douira.glsl_transformer.parser.CachingParser","6297e0a4b12a47b3914696cf32c6700dcf7d7dadf24e1f846c0901c449464ef6"),
         Map.entry("io.github.douira.glsl_transformer.ast.data.TypedTreeCache","5dbfbc8ef8c082cc70187167f96de72f1e8077867ae2a16515d6843898956593"),
-        Map.entry("mezz.jei.forge.platform.RegistryWrapper","ea5c1c04c8d50b45f2498f9dc1c66264f3d530f6c52e0a3b14d14eb936f84f93"));
+        Map.entry("mezz.jei.forge.platform.RegistryWrapper","ea5c1c04c8d50b45f2498f9dc1c66264f3d530f6c52e0a3b14d14eb936f84f93"),
+        Map.entry("net.raphimc.immediatelyfast.feature.core.BatchableBufferSource","43448e373a68f3c2d74861dc74d2ee651c0187786d1c311f5bce36e59fd07510"),
+        Map.entry("net.raphimc.immediatelyfast.compat.IrisCompat","ccb86c53b9c33c9444d60d1d95d0108c0b6b47158c00d0f34d7bcf55d634c46f"),
+        Map.entry("traben.entity_model_features.models.animation.math.variables.factories.ModelPartVariableFactory","11f616e07ad2b295994d86eb58f777252ade02d0ec27b6b3422f1d1054b83a38"),
+        Map.entry("me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderMeshingTask","d99368baf1bc732371b9794754ddbb6a6c294166ecf422939b599230ee431743"),
+        Map.entry("fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin","3ca9e9cba21051a4875a620f415ef445224151128bf260371b4c91002f5fc864"),
+        Map.entry("fr.madu59.obe.client.util.meshing.SectionMeshingUtil","d8266f95151a83ffbb555b441c25eb9713dc5ef41b95d6f935642cc2893cf075"));
     private static final Map<String,String> ALT_HASHES=Map.ofEntries(
         Map.entry("net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase","2d0e63e450caead1710a462bc66ce913083a8c22e25be23e4e1cdaddb5d73e12"),
         Map.entry("net.minecraft.client.renderer.block.BlockModelShaper","2f56551223f6b64b195d9cb898877019cc7ca084aaa83a5eca60381cbd80936d"),
@@ -95,7 +101,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  "PerfSeasonColorUtilMixin", "PerfAmbientBiomeAreaMixin",
                  "PerfAmbientAirPocketScannerMixin", "PerfIrisDimensionMixin",
                  "PerfJeiSortingConfigMixin", "PerfEmfMathParserMixin",
-                 "PerfJeiRegistryWrapperMixin" -> matches(target);
+                 "PerfJeiRegistryWrapperMixin", "PerfEmfModelPartVariableMixin" -> matches(target);
             case "PerfBlockOcclusionMixin" ->
                  matches(target)&&matches("com.copycatsplus.copycats.mixin.foundation.copycat.BlockStateBaseMixin")
                  &&matches("snownee.passablefoliage.mixin.BlockStateMixin")&&matches("snownee.passablefoliage.PassableFoliage");
@@ -133,6 +139,11 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  matches(target)&&matches("pigcart.particlerain.particle.WeatherParticle");
             case "PerfSeasonColorHandlersMixin" ->
                  matches(target)&&matches("sereneseasons.util.SeasonColorUtil")&&matches("sereneseasons.season.SeasonHandler");
+            case "PerfBatchableBufferSourceMixin" ->
+                 matches(target)&&matches("net.raphimc.immediatelyfast.compat.IrisCompat");
+            case "PerfChunkBuilderMeshingTaskMixin" ->
+                 matches(target)&&matches("fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin")
+                 &&matches("fr.madu59.obe.client.util.meshing.SectionMeshingUtil");
             default -> false;
         };
     }
@@ -150,6 +161,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfModelPartCubeMixin"->applyClientPatch("patchModelPartCube",targetClass);
             case "PerfEmfMathParserMixin"->applyClientPatch("patchMathExpressionParser",targetClass);
             case "PerfEmojiFontRendererMixin"->applyClientPatch("patchEmojiFontRenderer",targetClass);
+            case "PerfChunkBuilderMeshingTaskMixin"->applyClientPatch("patchChunkBuilderMeshingTask",targetClass);
             default->{}
         }
     }

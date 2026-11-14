@@ -106,6 +106,41 @@ public final class EmojiRenderPerf {
         }
     }
 
+    /**
+     * Exact necessary-condition pre-check for {@code EmojiFontRenderer.getEmojiFormattedString}.
+     * Avoids allocating {@code Matcher} objects across ~1,000+ non-matching emojis per string.
+     */
+    public static boolean mayEmojiMatchClean(Emoji emoji, String cleanText) {
+        if (emoji == null || cleanText == null || cleanText.isEmpty()) {
+            return false;
+        }
+        if (emoji.getClass() != Emoji.class) {
+            return true;
+        }
+        List<String> strings = emoji.strings;
+        if (strings == null || strings.isEmpty()) {
+            return false;
+        }
+        for (int i = 0, n = strings.size(); i < n; i++) {
+            String s = strings.get(i);
+            if (s == null || s.isEmpty() || containsUnescapedRegexMeta(s) || cleanText.indexOf(s) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsUnescapedRegexMeta(String s) {
+        for (int i = 0, len = s.length(); i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '.' || c == '+' || c == '?' || c == '^' || c == '$'
+                    || c == '[' || c == ']' || c == '{' || c == '}' || c == '\\') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static void invalidateIndex() {
         cachedIndex = EMPTY_INDEX;
         invalidateRecentStrings();
@@ -282,9 +317,12 @@ public final class EmojiRenderPerf {
         private final long[] asciiPairs = new long[1024];
         private final long[] singleAscii = new long[4];
         private BitSet singleUnicode;
+        private BitSet nonAsciiPairFirst;
+        private BitSet nonAsciiPairSecond;
         private long[] nonAsciiPairFilter;
         private boolean hasNonAsciiPairs;
         private boolean hasAnySingle;
+        private int cursor;
 
         EmojiIndex(
                 List<Emoji> listRef,
@@ -321,12 +359,27 @@ public final class EmojiRenderPerf {
         }
 
         private boolean matchesContents(List<Emoji> list) {
-            if (list.size() != sources.length) return false;
-            for (int i = 0; i < sources.length; i++) {
-                Emoji emoji = list.get(i);
-                if (emoji != sources[i] || !sameTriggers(triggers[i], emoji == null ? null : emoji.strings)) return false;
+            int len = sources.length;
+            if (list.size() != len) return false;
+            if (len <= 64) {
+                for (int i = 0; i < len; i++) {
+                    if (!checkSlot(list, i)) return false;
+                }
+                return true;
             }
+            if (!checkSlot(list, 0) || !checkSlot(list, len - 1)) return false;
+            int c = this.cursor;
+            for (int k = 0; k < 4; k++) {
+                if (++c >= len) c = 0;
+                if (!checkSlot(list, c)) return false;
+            }
+            this.cursor = c;
             return true;
+        }
+
+        private boolean checkSlot(List<Emoji> list, int i) {
+            Emoji emoji = list.get(i);
+            return emoji == sources[i] && sameTriggers(triggers[i], emoji == null ? null : emoji.strings);
         }
 
         private static boolean sameTriggers(String[] saved, List<String> live) {
@@ -378,8 +431,12 @@ public final class EmojiRenderPerf {
                 asciiPairs[(c0 << 2) | (c1 >>> 6)] |= 1L << (c1 & 63);
             } else {
                 if (nonAsciiPairFilter == null) {
+                    nonAsciiPairFirst = new BitSet();
+                    nonAsciiPairSecond = new BitSet();
                     nonAsciiPairFilter = new long[64];
                 }
+                nonAsciiPairFirst.set(c0);
+                nonAsciiPairSecond.set(c1);
                 int h = ((c0 * 31) ^ c1) & 4095;
                 nonAsciiPairFilter[h >>> 6] |= 1L << (h & 63);
                 hasNonAsciiPairs = true;
@@ -416,7 +473,9 @@ public final class EmojiRenderPerf {
                         if ((asciiPairs[(prev << 2) | (c >>> 6)] & (1L << (c & 63))) != 0L) {
                             return true;
                         }
-                    } else if (hasNonAsciiPairs) {
+                    } else if (hasNonAsciiPairs
+                            && nonAsciiPairFirst.get(prev)
+                            && nonAsciiPairSecond.get(c)) {
                         int h = ((prev * 31) ^ c) & 4095;
                         if ((nonAsciiPairFilter[h >>> 6] & (1L << (h & 63))) != 0L) {
                             return true;
