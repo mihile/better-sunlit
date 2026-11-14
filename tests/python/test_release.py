@@ -213,6 +213,16 @@ class ReleaseGitTests(unittest.TestCase):
         self.assertTrue(path.is_file())
         self.assertTrue((self.root/'releases/20261114.1.json').is_file())
 
+    def test_new_version_preserves_changelog_entries(self):
+        path = self.root/'releases/20261114.1.json'
+        data = json.loads(path.read_text())
+        data['changes'] = data.pop('features')
+        data['changes'][0]['title'] = 'Fixed startup hang'
+        path.write_text(json.dumps(data), encoding='utf8')
+        _, selected = release.choose_release(['client'], {'client': 2026111401})
+        self.assertEqual(selected['changes'][0]['title'], 'Fixed startup hang')
+        self.assertNotIn('features', selected)
+
     def test_remote_versions_include_drafts_and_tags_without_releases(self):
         pages = [[{'tag_name': 'client-build-2026.11.14.1', 'draft': True}],
                  [{'tag_name': 'server-build-2026.11.08.4', 'draft': False}]]
