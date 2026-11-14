@@ -48,7 +48,14 @@
     "PerfJeiRegistryWrapperMixin",
     "PerfBatchableBufferSourceMixin",
     "PerfEmfModelPartVariableMixin",
-    "PerfChunkBuilderMeshingTaskMixin"
+    "PerfChunkBuilderMeshingTaskMixin",
+    "PerfAmbientBlockGroupMixin",
+    "PerfEmfLodHandlerMixin",
+    "PerfTextureManagerMixin",
+    "PerfLevelRendererWeatherMixin",
+    "PerfWhitelistMixin",
+    "PerfSingleValuePaletteMixin",
+    "PerfPalettedContainerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

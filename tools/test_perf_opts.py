@@ -19,7 +19,7 @@ mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.j
 common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
 assert len(common_mixins) == 7, common_mixins
-assert len(client_mixins) == 35, client_mixins
+assert len(client_mixins) == 42, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
@@ -76,6 +76,14 @@ subprocess.run([str(JDK / 'javac.exe'), '-J-Dfile.encoding=UTF-8', '@' + to_cmd_
 extra_runtime_jars = [str(p) for p in sorted((LIBRARIES / 'com/ibm/icu/icu4j').glob('71.1/icu4j-*.jar')) if p.is_file()]
 if not extra_runtime_jars:
     extra_runtime_jars = [str(p) for p in sorted((LIBRARIES / 'com/ibm/icu/icu4j').glob('*/icu4j-*.jar'))[:1] if p.is_file()]
+for entry in filtered_entries:
+    ep = Path(entry)
+    if ep.name.startswith('lwjgl-') and ep.name.endswith('.jar') and 'natives' not in ep.name:
+        ver = ep.parent.name
+        nat = LIBRARIES / 'org/lwjgl/lwjgl-natives-windows' / ver / f'lwjgl-natives-windows-{ver}.jar'
+        if nat.is_file():
+            extra_runtime_jars.append(str(nat))
+            break
 run_cp = os.pathsep.join([to_cmd_path(str(OUT_CLASSES)), test_cp] + [to_cmd_path(p) for p in extra_runtime_jars])
 run_argfile = ROOT / 'build/test-perf-java.args'
 run_argfile.write_text('\n'.join([

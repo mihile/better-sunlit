@@ -16,10 +16,25 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(value = ModelPart.Cube.class, priority = 900, remap = false)
 public abstract class PerfModelPartCubeMixin implements EmfRenderPerf.PolygonHolder {
 
+    @Unique
+    private EmfRenderPerf.CompiledCube sunlit$compiledCube;
+
     @Override
     @Unique
     public Object[] sunlit$polygons() {
         throw new AssertionError("Patched in postApply");
+    }
+
+    @Override
+    @Unique
+    public EmfRenderPerf.CompiledCube sunlit$compiledCube() {
+        return this.sunlit$compiledCube;
+    }
+
+    @Override
+    @Unique
+    public void sunlit$setCompiledCube(EmfRenderPerf.CompiledCube compiled) {
+        this.sunlit$compiledCube = compiled;
     }
 
     /**
@@ -36,8 +51,8 @@ public abstract class PerfModelPartCubeMixin implements EmfRenderPerf.PolygonHol
             float green,
             float blue,
             float alpha) {
-        EmfRenderPerf.compilePolygons(
-                this.sunlit$polygons(),
+        EmfRenderPerf.compileCube(
+                this,
                 pose,
                 consumer,
                 packedLight,
