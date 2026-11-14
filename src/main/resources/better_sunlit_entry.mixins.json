@@ -9,7 +9,9 @@
     "PerfButterflyEntityMixin",
     "PerfSeasonsConfigMixin",
     "PerfSeasonHandlerMixin",
-    "PerfSeasonHooksMixin"
+    "PerfSeasonHooksMixin",
+    "PerfBlockOcclusionMixin",
+    "PerfLogBegoneMixin"
   ],
   "client": [
     "EntryJeiIngredientScopeMixin",
@@ -33,7 +35,19 @@
     "PerfAmbientAirPocketScannerMixin",
     "PerfWindManagerMixin",
     "PerfIrisDimensionMixin",
-    "PerfJeiSortingConfigMixin"
+    "PerfJeiSortingConfigMixin",
+    "PerfObeModelMixin",
+    "PerfModelPartCubeMixin",
+    "PerfEmfCubeMixin",
+    "PerfEmfModelPartMixin",
+    "PerfEmfMathParserMixin",
+    "PerfGraphOrderMixin",
+    "PerfEmojiFontRendererMixin",
+    "PerfPipelineManagerMixin",
+    "PerfTransformPatcherMixin",
+    "PerfJeiRegistryWrapperMixin"
   ],
-  "injectors": {"defaultRequire": 1}
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

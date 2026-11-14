@@ -19,10 +19,12 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.sounds.SoundSource;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.TagsUpdatedEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
@@ -78,6 +80,10 @@ public final class SunlitFishVisuals {
         MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::left);
         MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::tracking);
         MinecraftForge.EVENT_BUS.addListener(FishingSettings::register);
+        MinecraftForge.EVENT_BUS.addListener(EventPriority.LOWEST,
+                dev.sunlit.bettersunlit.perf.BlockOcclusionPerf::onTagsUpdated);
+        net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus()
+                .addListener(dev.sunlit.bettersunlit.perf.LogBegonePerf::onConfigEvent);
         FishingSettings.load();
         LOG.info("Sunlit Fishing Visuals 1.2.4: pickup allowed when fading begins; {}",FishingSettings.current().description());
     }
