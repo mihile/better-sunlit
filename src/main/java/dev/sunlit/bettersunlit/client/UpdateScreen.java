@@ -17,6 +17,7 @@ public final class UpdateScreen extends Screen {
     Button apply, retry, close, automatic;
     List<String> displayed = List.of();
     List<Row> cachedRows;
+    private static final List<String> INSTALLED_NOTES = ReleaseNotes.read(Build.META);
 
     public UpdateScreen(Screen parent) {
         super(Component.m_237113_("Better Sunlit"));
@@ -25,21 +26,13 @@ public final class UpdateScreen extends Screen {
     }
 
     static List<String> installedNotes() {
-        List<String> list = new ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            String v = Build.META.getProperty("notes." + i);
-            if (v == null) break;
-            list.add(v);
-        }
-        return list.isEmpty()
-            ? List.of("자연스러운 낚시 연출 :: 낚은 물고기가 땅에서 펄떡이다가 점점 힘이 빠지고 멈춥니다. 약해지기 시작하면 가까이 가서 원래 별 등급과 수량 그대로 회수할 수 있어요. /realfishing으로 활발한 시간과 약해지는 시간을 설정할 수 있습니다.")
-            : List.copyOf(list);
+        return INSTALLED_NOTES;
     }
 
     List<String> notes() {
-        return UpdateClient.release != null && UpdateClient.release.build() > Build.NUMBER
-            ? UpdateClient.release.notes()
-            : installedNotes();
+        SignedRelease release = UpdateClient.release;
+        return ReleaseNotes.latest(Build.NUMBER, installedNotes(),
+                release == null ? -1 : release.build(), release == null ? null : release.notes());
     }
 
     private List<Row> rows() {
@@ -69,7 +62,7 @@ public final class UpdateScreen extends Screen {
         boxH = Math.min(216, f_96544_ - 24);
         x = (f_96543_ - boxW) / 2;
         y = (f_96544_ - boxH) / 2;
-        notesTop = y + 58;
+        notesTop = y + 69;
         notesBottom = y + boxH - 58;
         buttonsY = y + boxH - 28;
         btnW = (boxW - 36) / 3;
@@ -104,6 +97,7 @@ public final class UpdateScreen extends Screen {
         String verLine = hasUpdate ? (Build.LABEL + "  →  " + rel.label()) : ("현재 버전 " + Build.LABEL);
         g.m_280488_(f_96547_, verLine, x + 14, y + 31, 0xFFACA6B8);
         g.m_280509_(x + 12, y + 49, x + boxW - 12, y + 50, 0xFF494153);
+        g.m_280488_(f_96547_, "최근 변경 내역", x + 14, y + 55, 0xFFB8A6D2);
 
         List<Row> list = rows();
         int visible = notesBottom - notesTop;
