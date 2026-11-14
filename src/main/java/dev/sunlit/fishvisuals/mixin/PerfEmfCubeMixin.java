@@ -29,8 +29,8 @@ public abstract class PerfEmfCubeMixin {
             float green,
             float blue,
             float alpha) {
-        EmfRenderPerf.compilePolygons(
-                ((EmfRenderPerf.PolygonHolder) (Object) this).sunlit$polygons(),
+        EmfRenderPerf.compileCube(
+                (EmfRenderPerf.PolygonHolder) (Object) this,
                 pose,
                 consumer,
                 packedLight,

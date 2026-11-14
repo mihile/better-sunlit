@@ -6,7 +6,10 @@ import dev.sunlit.bettersunlit.client.WeatherParticleBridge;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.Holder;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -18,6 +21,8 @@ import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import pigcart.particlerain.VersionUtil;
 import pigcart.particlerain.WindManager;
+import pigcart.particlerain.config.ConfigData;
+import pigcart.particlerain.config.ConfigManager;
 import pigcart.particlerain.config.ParticleData;
 import pigcart.particlerain.particle.WeatherParticle;
 
@@ -40,6 +45,9 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
     float rotationVariation;
 
     @Shadow
+    float baseTemp;
+
+    @Shadow
     float distance;
 
     protected PerfCustomParticleMixin(ClientLevel level, double x, double y, double z) {
@@ -48,9 +56,6 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
 
     @Shadow
     public abstract void tickFading();
-
-    @Shadow
-    public abstract void onPositionUpdate();
 
     @Shadow
     public abstract void onCollision(BlockHitResult result);
@@ -111,7 +116,30 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
     }
 
     @Overwrite(remap = false)
+    public void onPositionUpdate() {
+        ConfigData.CompatibilityOptions compat = ConfigManager.getConfig().compat;
+        if (!compat.crossBiomeBorder) {
+            Holder<Biome> biomeHolder = ParticleRainClientPerf.getBiomeFast(this.f_107208_, this.pos);
+            if (biomeHolder.m_203334_().m_47554_() != this.baseTemp
+                    && !this.data.precipitation.contains(
+                            VersionUtil.getPrecipitationAt(this.f_107208_, biomeHolder, this.pos))) {
+                ((WeatherParticleBridge) (Object) this).sunlit$setDoCollisionAnim(true);
+                return;
+            }
+        }
+        BlockState state = this.f_107208_.m_8055_(this.pos);
+        if (!state.m_60795_()
+                && state.m_60838_(this.f_107208_, this.pos)
+                && (!compat.weatherIgnoreBlocks.contains(state.m_222976_()) || !state.m_60819_().m_76178_())) {
+            this.m_107274_();
+        }
+    }
+
+    @Overwrite(remap = false)
     public void tickCollisions() {
+        if (((WeatherParticleBridge) (Object) this).sunlit$doCollisionAnim()) {
+            return;
+        }
         double vx = this.f_107215_;
         double vy = this.f_107216_;
         double vz = this.f_107217_;
@@ -120,14 +148,23 @@ public abstract class PerfCustomParticleMixin extends WeatherParticle {
         double nx = len < 1.0E-4D ? 0.0D : vx / len;
         double ny = len < 1.0E-4D ? 0.0D : vy / len;
         double nz = len < 1.0E-4D ? 0.0D : vz / len;
-        Vec3 start = new Vec3(this.f_107212_, this.f_107213_, this.f_107214_);
-        Vec3 end = new Vec3(
-                nx * (double) reach + this.f_107212_,
-                ny * (double) reach + this.f_107213_,
-                nz * (double) reach + this.f_107214_);
+        double sx = this.f_107212_;
+        double sy = this.f_107213_;
+        double sz = this.f_107214_;
+        double ex = nx * (double) reach + sx;
+        double ey = ny * (double) reach + sy;
+        double ez = nz * (double) reach + sz;
+        if (ParticleRainClientPerf.isClearAirRay(
+                this.f_107208_,
+                ParticleRainClientPerf.scratch().rayPos,
+                sx, sy, sz,
+                ex, ey, ez)) {
+            return;
+        }
+        Vec3 start = new Vec3(sx, sy, sz);
+        Vec3 end = new Vec3(ex, ey, ez);
         BlockHitResult hit = this.f_107208_.m_45547_(VersionUtil.getClipContext(start, end));
-        if (hit.m_6662_() != HitResult.Type.MISS
-                && !((WeatherParticleBridge) (Object) this).sunlit$doCollisionAnim()) {
+        if (hit.m_6662_() != HitResult.Type.MISS) {
             this.onCollision(hit);
         }
     }

@@ -94,27 +94,12 @@ public abstract class PerfParticleSpawnerMixin {
         ParticleSpawner.spawnAttemptsUntilBlockFXIdle--;
 
         ParticleRainClientPerf.Scratch scratch = ParticleRainClientPerf.scratch();
-        ArrayList<ParticleData> candidates = scratch.candidates;
-        candidates.clear();
-        for (ParticleData data : ParticleLoader.particles.values()) {
-            if (!Boolean.TRUE.equals(data.enabled)) {
-                continue;
-            }
-            ParticleData.SpawnPos sp = data.spawnPos;
-            if (sp != ParticleData.SpawnPos.BLOCK_SIDES
-                    && sp != ParticleData.SpawnPos.BLOCK_BOTTOM
-                    && sp != ParticleData.SpawnPos.BLOCK_TOP) {
-                continue;
-            }
-            if (data.weather != null && Boolean.TRUE.equals(data.weather.isCurrent(level))) {
-                candidates.add(data);
-            }
-        }
+        ArrayList<ParticleData> candidates = ParticleRainClientPerf.getBlockFxCandidates(level, scratch);
         if (candidates.isEmpty()) {
             return;
         }
 
-        if (!originState.m_60812_(level, origin).m_83281_() && !ParticleSpawner.isIgnored(originState)) {
+        if (!originState.m_60812_(level, origin).m_83281_()) {
             return;
         }
 
@@ -157,7 +142,7 @@ public abstract class PerfParticleSpawnerMixin {
             }
             if (!(density(data) > random.m_188501_())) continue;
             if (biome == null) {
-                biome = level.m_204166_(origin);
+                biome = ParticleRainClientPerf.getBiomeFast(level, origin);
                 precip = VersionUtil.getPrecipitationAt(level, biome, origin);
             }
             if (!data.precipitation.contains(precip)) continue;

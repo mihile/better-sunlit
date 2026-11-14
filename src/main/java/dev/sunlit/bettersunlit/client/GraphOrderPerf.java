@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.Random;
 import de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider;
 import java.util.Set;
 
@@ -143,10 +144,27 @@ public final class GraphOrderPerf {
             return;
         }
         // Preserve native MIN_WEIGHT decisions and insertion-order tie breaking. Reuse the
-        // result only when every vertex, edge, weight and provider still matches exactly.
-        OrderCache cache = graph.orderCache;
-        if (!cache.matches(graph, provider)) cache.compute(graph, provider, scratch);
-        cache.apply(graph, out);
+        // result across up to 8 cyclic subgraphs (e.g., shadow vs main pass) when exact match hits.
+        OrderCache hit = null;
+        OrderCache[] caches = graph.orderCaches;
+        for (int i = 0; i < PooledRenderDigraph.ORDER_CACHE_SLOTS; i++) {
+            OrderCache cand = caches[i];
+            if (cand != null && cand.matches(graph, provider)) {
+                hit = cand;
+                break;
+            }
+        }
+        if (hit == null) {
+            int slot = graph.orderCacheCursor;
+            graph.orderCacheCursor = (slot + 1) & (PooledRenderDigraph.ORDER_CACHE_SLOTS - 1);
+            hit = caches[slot];
+            if (hit == null) {
+                hit = new OrderCache();
+                caches[slot] = hit;
+            }
+            hit.compute(graph, provider, scratch);
+        }
+        hit.apply(graph, out);
     }
 
     private static <V> boolean tryOrderSimpleCycleFast(PooledRenderDigraph<V> g, List<V> out, Scratch s) {
@@ -167,7 +185,12 @@ public final class GraphOrderPerf {
             return true;
         }
         if (n > 64) return false;
-        int pairU = -1, pairV = -1, slotUV = -1, slotVU = -1;
+        int[] partner = s.partner;
+        int[] droppedSlot = s.droppedSlot;
+        Arrays.fill(partner, 0, n, -1);
+        Arrays.fill(droppedSlot, 0, n, -1);
+        int pairCount = 0;
+
         for (int u = 0; u < n; u++) {
             int deg = g.outDegree[u];
             int[] targets = g.outTargets[u];
@@ -176,34 +199,71 @@ public final class GraphOrderPerf {
                 if (v <= u) continue;
                 int backSlot = findEdgeSlot(g, v, u);
                 if (backSlot < 0) continue;
-                if (pairU >= 0) return false;
-                pairU = u;
-                pairV = v;
-                slotUV = e;
-                slotVU = backSlot;
+                int wUV = g.outWeights[u][e];
+                int wVU = g.outWeights[v][backSlot];
+                if (wUV == wVU || partner[u] != -1 || partner[v] != -1) {
+                    return false;
+                }
+                partner[u] = v;
+                partner[v] = u;
+                if (wUV < wVU) {
+                    droppedSlot[u] = e;
+                } else {
+                    droppedSlot[v] = backSlot;
+                }
+                pairCount++;
             }
         }
-        if (pairU < 0) return false;
-        int wUV = g.outWeights[pairU][slotUV];
-        int wVU = g.outWeights[pairV][slotVU];
-        if (wUV == wVU) return false;
-        int lightFrom, lightTo, lightSlot;
-        if (wUV < wVU) {
-            lightFrom = pairU;
-            lightTo = pairV;
-            lightSlot = slotUV;
-        } else {
-            lightFrom = pairV;
-            lightTo = pairU;
-            lightSlot = slotVU;
-        }
-        if (hasNonSelfCycleSkippingEdge(g, lightFrom, lightSlot, s)
-                || reachesViaOtherPath(g, lightTo, lightFrom, s)) {
+        if (pairCount == 0 || hasQuotientCycle(g, partner, s)) {
             return false;
         }
-        g.removeEdgeSlot(lightFrom, lightSlot);
+        for (int u = 0; u < n; u++) {
+            if (droppedSlot[u] >= 0) {
+                g.removeEdgeSlot(u, droppedSlot[u]);
+            }
+        }
         appendToposort(g, out, s);
         return true;
+    }
+
+    private static <V> boolean hasQuotientCycle(PooledRenderDigraph<V> g, int[] partner, Scratch s) {
+        int n = g.vertexCount;
+        int[] color = s.color;
+        Arrays.fill(color, 0, n, 0);
+        for (int start = 0; start < n; start++) {
+            int repStart = (partner[start] >= 0 && partner[start] < start) ? partner[start] : start;
+            if (start == repStart && color[repStart] == 0 && quotientDfs(g, repStart, partner, color)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static <V> boolean quotientDfs(PooledRenderDigraph<V> g, int repU, int[] partner, int[] color) {
+        color[repU] = 1;
+        if (scanQuotientEdges(g, repU, repU, partner, color)) {
+            return true;
+        }
+        int p = partner[repU];
+        if (p >= 0 && scanQuotientEdges(g, p, repU, partner, color)) {
+            return true;
+        }
+        color[repU] = 2;
+        return false;
+    }
+
+    private static <V> boolean scanQuotientEdges(PooledRenderDigraph<V> g, int u, int repU, int[] partner, int[] color) {
+        int deg = g.outDegree[u];
+        int[] targets = g.outTargets[u];
+        for (int i = 0; i < deg; i++) {
+            int v = targets[i];
+            int repV = (partner[v] >= 0 && partner[v] < v) ? partner[v] : v;
+            if (repV == repU) continue;
+            int c = color[repV];
+            if (c == 1) return true;
+            if (c == 0 && quotientDfs(g, repV, partner, color)) return true;
+        }
+        return false;
     }
 
     private static <V> int findEdgeSlot(PooledRenderDigraph<V> g, int uIdx, int vIdx) {
@@ -215,8 +275,7 @@ public final class GraphOrderPerf {
         return -1;
     }
 
-    private static <V> boolean hasNonSelfCycleSkippingEdge(PooledRenderDigraph<V> g,
-                                                           int skipU, int skipSlot, Scratch s) {
+    private static <V> boolean hasNonSelfCycle(PooledRenderDigraph<V> g, Scratch s) {
         int n = g.vertexCount;
         int[] color = s.color;
         int[] dfsNode = s.dfsNode;
@@ -236,7 +295,6 @@ public final class GraphOrderPerf {
                 int deg = g.outDegree[u];
                 if (ei < deg) {
                     dfsEdge[sp] = ei + 1;
-                    if (u == skipU && ei == skipSlot) continue;
                     int v = g.outTargets[u][ei];
                     if (v == u) continue;
                     int vc = color[v];
@@ -254,46 +312,6 @@ public final class GraphOrderPerf {
             }
         }
         return false;
-    }
-
-    private static <V> boolean reachesViaOtherPath(PooledRenderDigraph<V> g,
-                                                   int start, int target, Scratch s) {
-        int n = g.vertexCount;
-        int[] color = s.color;
-        int[] stack = s.dfsNode;
-        Arrays.fill(color, 0, n, 0);
-        color[start] = 1;
-        int sp = 0;
-        int startDeg = g.outDegree[start];
-        int[] startTargets = g.outTargets[start];
-        for (int i = 0; i < startDeg; i++) {
-            int w = startTargets[i];
-            if (w == start || w == target || color[w] != 0) continue;
-            color[w] = 1;
-            stack[sp++] = w;
-        }
-        while (sp > 0) {
-            int curr = stack[--sp];
-            int deg = g.outDegree[curr];
-            int[] targets = g.outTargets[curr];
-            for (int i = 0; i < deg; i++) {
-                int next = targets[i];
-                if (next == target) return true;
-                if (next != curr && color[next] == 0) {
-                    color[next] = 1;
-                    stack[sp++] = next;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static <V> boolean hasMutualTwoNodeCycle(PooledRenderDigraph<V> g) {
-        return g.hasEdgeIndex(0, 1) && g.hasEdgeIndex(1, 0);
-    }
-
-    private static <V> boolean hasNonSelfCycle(PooledRenderDigraph<V> g, Scratch s) {
-        return hasNonSelfCycleSkippingEdge(g, -1, -1, s);
     }
 
     private static <V> void appendToposort(PooledRenderDigraph<V> g, List<V> out, Scratch s) {
@@ -355,7 +373,9 @@ public final class GraphOrderPerf {
         int[][] outWeights = new int[INITIAL_VERTEX_CAP][];
         int vertexCount;
         int edgeCount;
-        private final OrderCache orderCache = new OrderCache();
+        static final int ORDER_CACHE_SLOTS = 8;
+        final OrderCache[] orderCaches = new OrderCache[ORDER_CACHE_SLOTS];
+        int orderCacheCursor;
 
         // Open-addressing hash map used only when vertexCount exceeds LINEAR_SCAN_THRESHOLD.
         private Object[] hashKeys;
@@ -827,21 +847,77 @@ public final class GraphOrderPerf {
     }
 
     private static final class OrderCache {
+        private int cachedVertexCount;
         private Object[] vertices = new Object[0];
+        private int[] edgeCounts = IntArrays.EMPTY_ARRAY;
         private int[][] targets = new int[0][];
         private int[][] weights = new int[0][];
+        private int[] keptEdgeCounts = IntArrays.EMPTY_ARRAY;
         private int[][] keptTargets = new int[0][];
         private int[][] keptWeights = new int[0][];
         private Object[] order = new Object[0];
+        private int cachedOrderCount;
         private FeedbackArcSetProvider owner;
         private boolean valid;
 
+        private void ensureVertexStorage(int n) {
+            if (vertices.length < n) {
+                int cap = Math.max(n, Math.max(8, vertices.length * 2));
+                int oldLen = vertices.length;
+                vertices = Arrays.copyOf(vertices, cap);
+                edgeCounts = Arrays.copyOf(edgeCounts, cap);
+                targets = Arrays.copyOf(targets, cap);
+                weights = Arrays.copyOf(weights, cap);
+                keptEdgeCounts = Arrays.copyOf(keptEdgeCounts, cap);
+                keptTargets = Arrays.copyOf(keptTargets, cap);
+                keptWeights = Arrays.copyOf(keptWeights, cap);
+                order = Arrays.copyOf(order, cap);
+                for (int u = oldLen; u < cap; u++) {
+                    targets[u] = IntArrays.EMPTY_ARRAY;
+                    weights[u] = IntArrays.EMPTY_ARRAY;
+                    keptTargets[u] = IntArrays.EMPTY_ARRAY;
+                    keptWeights[u] = IntArrays.EMPTY_ARRAY;
+                }
+            }
+        }
+
+        private void snapshotGraph(PooledRenderDigraph<?> graph, int n) {
+            ensureVertexStorage(n);
+            for (int u = 0; u < n; u++) {
+                vertices[u] = graph.vertices[u];
+                int deg = graph.outDegree[u];
+                edgeCounts[u] = deg;
+                if (deg > 0) {
+                    if (targets[u].length < deg) {
+                        int rowCap = Math.max(deg, Math.max(4, targets[u].length * 2));
+                        targets[u] = new int[rowCap];
+                        weights[u] = new int[rowCap];
+                        keptTargets[u] = new int[rowCap];
+                        keptWeights[u] = new int[rowCap];
+                    } else if (keptTargets[u].length < deg) {
+                        int rowCap = targets[u].length;
+                        keptTargets[u] = new int[rowCap];
+                        keptWeights[u] = new int[rowCap];
+                    }
+                    System.arraycopy(graph.outTargets[u], 0, targets[u], 0, deg);
+                    System.arraycopy(graph.outWeights[u], 0, weights[u], 0, deg);
+                }
+            }
+            if (cachedVertexCount > n) {
+                Arrays.fill(vertices, n, cachedVertexCount, null);
+            }
+            cachedVertexCount = n;
+        }
+
         boolean matches(PooledRenderDigraph<?> graph, FeedbackArcSetProvider provider) {
-            if (!valid || owner != provider || vertices.length != graph.vertexCount) return false;
-            for (int u = 0; u < vertices.length; u++) {
-                if (vertices[u] != graph.vertices[u] || targets[u].length != graph.outDegree[u]) return false;
-                for (int e = 0; e < targets[u].length; e++) {
-                    if (targets[u][e] != graph.outTargets[u][e] || weights[u][e] != graph.outWeights[u][e]) return false;
+            if (!valid || owner != provider || cachedVertexCount != graph.vertexCount) return false;
+            for (int u = 0; u < cachedVertexCount; u++) {
+                int deg = graph.outDegree[u];
+                if (vertices[u] != graph.vertices[u] || edgeCounts[u] != deg) return false;
+                int[] t = targets[u], w = weights[u];
+                int[] gt = graph.outTargets[u], gw = graph.outWeights[u];
+                for (int e = 0; e < deg; e++) {
+                    if (t[e] != gt[e] || w[e] != gw[e]) return false;
                 }
             }
             return true;
@@ -850,44 +926,430 @@ public final class GraphOrderPerf {
         <V> void compute(PooledRenderDigraph<V> graph, FeedbackArcSetProvider provider, Scratch scratch) {
             valid = false;
             int n = graph.vertexCount;
-            Object[] nextVertices = Arrays.copyOf(graph.vertices, n);
-            int[][] nextTargets = new int[n][], nextWeights = new int[n][];
-            MapDigraph<V> reference = new MapDigraph<>();
-            for (int u = 0; u < n; u++) {
-                @SuppressWarnings("unchecked") V vertex = (V) nextVertices[u];
-                reference.add(vertex);
-                nextTargets[u] = graph.outDegree[u] == 0 ? IntArrays.EMPTY_ARRAY : Arrays.copyOf(graph.outTargets[u], graph.outDegree[u]);
-                nextWeights[u] = graph.outDegree[u] == 0 ? IntArrays.EMPTY_ARRAY : Arrays.copyOf(graph.outWeights[u], graph.outDegree[u]);
+            snapshotGraph(graph, n);
+            if (provider != null && provider.getClass() == SimpleFeedbackArcSetProvider.class
+                    && computeSimpleFas(n, scratch)) {
+                owner = provider;
+                valid = true;
+                return;
             }
-            for (int u = 0; u < n; u++) for (int e = 0; e < nextTargets[u].length; e++) {
-                @SuppressWarnings("unchecked") V src = (V) nextVertices[u];
-                @SuppressWarnings("unchecked") V dst = (V) nextVertices[nextTargets[u][e]];
-                reference.put(src, dst, nextWeights[u][e]);
-            }
-            FeedbackArcSet<V> fas = provider.getFeedbackArcSet(reference, reference, FeedbackArcSetPolicy.MIN_WEIGHT);
-            for (V src : fas.vertices()) for (V dst : fas.targets(src)) reference.remove(src, dst);
-            int[][] nextKeptTargets = new int[n][], nextKeptWeights = new int[n][];
+            computeFallback(n, provider, scratch);
+            owner = provider;
+            valid = true;
+        }
+
+        private boolean computeSimpleFas(int n, Scratch s) {
+            s.ensureVertexCap(n);
+            int[] edgeBase = s.edgeBase;
+            edgeBase[0] = 0;
             for (int u = 0; u < n; u++) {
-                @SuppressWarnings("unchecked") V src = (V) nextVertices[u];
-                int kept = reference.getOutDegree(src), i = 0;
-                nextKeptTargets[u] = kept == 0 ? IntArrays.EMPTY_ARRAY : new int[kept];
-                nextKeptWeights[u] = kept == 0 ? IntArrays.EMPTY_ARRAY : new int[kept];
-                for (int e = 0; e < nextTargets[u].length; e++) {
-                    int v = nextTargets[u][e];
-                    @SuppressWarnings("unchecked") V dst = (V) nextVertices[v];
-                    if (reference.contains(src, dst)) {
-                        nextKeptTargets[u][i] = v; nextKeptWeights[u][i++] = nextWeights[u][e];
+                edgeBase[u + 1] = edgeBase[u] + edgeCounts[u];
+            }
+            int totalEdges = edgeBase[n];
+            s.ensureEdgeCap(totalEdges);
+            if (totalEdges > 0) {
+                Arrays.fill(s.edgeRemoved, 0, totalEdges, (byte) 0);
+            }
+
+            // Kosaraju SCC matching Digraphs.scc(reference) using zero-allocation CSR + arrays.
+            Arrays.fill(s.sccVisited, 0, n, (byte) 0);
+            int finishCount = 0;
+            for (int start = 0; start < n; start++) {
+                if (s.sccVisited[start] != 0) continue;
+                int sp = 0;
+                s.sccVisited[start] = 1;
+                s.dfsNode[0] = start;
+                s.dfsEdge[0] = 0;
+                while (sp >= 0) {
+                    int u = s.dfsNode[sp];
+                    int ei = s.dfsEdge[sp];
+                    int deg = edgeCounts[u];
+                    if (ei < deg) {
+                        s.dfsEdge[sp] = ei + 1;
+                        int v = targets[u][ei];
+                        if (s.sccVisited[v] == 0) {
+                            s.sccVisited[v] = 1;
+                            sp++;
+                            s.dfsNode[sp] = v;
+                            s.dfsEdge[sp] = 0;
+                        }
+                    } else {
+                        s.finishStack[finishCount++] = u;
+                        sp--;
                     }
                 }
             }
-            Object[] nextOrder = toposortKeptVertices(nextVertices, nextKeptTargets, scratch);
-            vertices = nextVertices; targets = nextTargets; weights = nextWeights;
-            keptTargets = nextKeptTargets; keptWeights = nextKeptWeights;
-            order = nextOrder; owner = provider; valid = true;
+
+            Arrays.fill(s.revDegree, 0, n, 0);
+            for (int u = 0; u < n; u++) {
+                int deg = edgeCounts[u];
+                int[] t = targets[u];
+                for (int e = 0; e < deg; e++) {
+                    s.revDegree[t[e]]++;
+                }
+            }
+            s.revHead[0] = 0;
+            for (int v = 0; v < n; v++) {
+                int head = s.revHead[v];
+                s.revHead[v + 1] = head + s.revDegree[v];
+                s.revCursor[v] = head;
+            }
+            for (int u = 0; u < n; u++) {
+                int deg = edgeCounts[u];
+                int[] t = targets[u];
+                for (int e = 0; e < deg; e++) {
+                    int v = t[e];
+                    s.revTargets[s.revCursor[v]++] = u;
+                }
+            }
+
+            Arrays.fill(s.sccVisited, 0, n, (byte) 0);
+            s.sccOffsets[0] = 0;
+            int sccCount = 0;
+            int sccTotalVertices = 0;
+            for (int fi = finishCount - 1; fi >= 0; fi--) {
+                int root = s.finishStack[fi];
+                if (s.sccVisited[root] != 0) continue;
+                int sp = 0;
+                s.sccVisited[root] = 1;
+                s.dfsNode[0] = root;
+                s.dfsEdge[0] = s.revHead[root];
+                while (sp >= 0) {
+                    int u = s.dfsNode[sp];
+                    int ei = s.dfsEdge[sp];
+                    int end = s.revHead[u + 1];
+                    if (ei < end) {
+                        s.dfsEdge[sp] = ei + 1;
+                        int v = s.revTargets[ei];
+                        if (s.sccVisited[v] == 0) {
+                            s.sccVisited[v] = 1;
+                            sp++;
+                            s.dfsNode[sp] = v;
+                            s.dfsEdge[sp] = s.revHead[v];
+                        }
+                    } else {
+                        s.sccVertices[sccTotalVertices++] = u;
+                        sp--;
+                    }
+                }
+                s.sccOffsets[++sccCount] = sccTotalVertices;
+            }
+
+            if (sccCount != n) {
+                for (int sccIdx = 0; sccIdx < sccCount; sccIdx++) {
+                    int compStart = s.sccOffsets[sccIdx];
+                    int compEnd = s.sccOffsets[sccIdx + 1];
+                    int m = compEnd - compStart;
+                    if (m <= 1) continue;
+
+                    int mark = s.nextSccMark();
+                    for (int k = compStart; k < compEnd; k++) {
+                        int u = s.sccVertices[k];
+                        s.inScc[u] = mark;
+                        s.origToSub[u] = -1;
+                    }
+
+                    if (sccCount == 1) {
+                        for (int su = 0; su < m; su++) {
+                            s.subVertices[su] = su;
+                            s.origToSub[su] = su;
+                        }
+                    } else {
+                        if (!buildHashSetIterationOrder(compStart, m, s)) {
+                            return false;
+                        }
+                        int subV = 0;
+                        for (int i = 0; i < m; i++) {
+                            int u = s.compBucketOrder[i];
+                            if (s.origToSub[u] < 0) {
+                                s.subVertices[subV] = u;
+                                s.origToSub[u] = subV++;
+                            }
+                            int deg = edgeCounts[u];
+                            int[] t = targets[u];
+                            for (int e = 0; e < deg; e++) {
+                                int v = t[e];
+                                if (s.inScc[v] == mark && s.origToSub[v] < 0) {
+                                    s.subVertices[subV] = v;
+                                    s.origToSub[v] = subV++;
+                                }
+                            }
+                        }
+                    }
+
+                    s.subEdgeHead[0] = 0;
+                    int subEdgeCount = 0;
+                    for (int su = 0; su < m; su++) {
+                        int u = s.subVertices[su];
+                        int deg = edgeCounts[u];
+                        int base = edgeBase[u];
+                        int[] t = targets[u];
+                        int[] w = weights[u];
+                        for (int e = 0; e < deg; e++) {
+                            int v = t[e];
+                            if (sccCount == 1 || s.inScc[v] == mark) {
+                                s.subEdgeTarget[subEdgeCount] = s.origToSub[v];
+                                s.subEdgeWeight[subEdgeCount] = w[e];
+                                s.subEdgeOrigEid[subEdgeCount] = base + e;
+                                subEdgeCount++;
+                            }
+                        }
+                        s.subEdgeHead[su + 1] = subEdgeCount;
+                    }
+
+                    int numShuffles = Math.min(10, m);
+                    int totalCopies = numShuffles + 1;
+                    s.ensureCopyStorage(totalCopies, subEdgeCount, m);
+                    if (subEdgeCount > 0) {
+                        System.arraycopy(s.subEdgeTarget, 0, s.copyTargets, 0, subEdgeCount);
+                    }
+
+                    int[] mapping = s.shuffleMapping;
+                    for (int i = 0; i < m; i++) {
+                        mapping[i] = i;
+                    }
+                    Random rnd = s.shuffleRandom;
+                    rnd.setSeed(7L);
+                    for (int c = 1; c < totalCopies; c++) {
+                        for (int i = m; i > 1; i--) {
+                            int j = rnd.nextInt(i);
+                            int tmp = mapping[i - 1];
+                            mapping[i - 1] = mapping[j];
+                            mapping[j] = tmp;
+                        }
+                        int copyBase = c * subEdgeCount;
+                        if (subEdgeCount > 0) {
+                            System.arraycopy(s.subEdgeTarget, 0, s.copyTargets, copyBase, subEdgeCount);
+                        }
+                        for (int su = 0; su < m; su++) {
+                            int from = copyBase + s.subEdgeHead[su];
+                            int to = copyBase + s.subEdgeHead[su + 1];
+                            for (int p = from + 1; p < to; p++) {
+                                int key = s.copyTargets[p];
+                                int keyRank = mapping[key];
+                                int q = p - 1;
+                                while (q >= from && mapping[s.copyTargets[q]] > keyRank) {
+                                    s.copyTargets[q + 1] = s.copyTargets[q];
+                                    q--;
+                                }
+                                s.copyTargets[q + 1] = key;
+                            }
+                        }
+                    }
+
+                    int bestWeight = Integer.MAX_VALUE;
+                    int bestSize = Integer.MAX_VALUE;
+                    boolean hasBest = false;
+                    int maxRounds = Math.max(1, 1_000_000 / (m + subEdgeCount));
+
+                    for (int startU = 0; startU < m; startU++) {
+                        for (int c = 0; c < totalCopies; c++) {
+                            int copyBase = c * subEdgeCount;
+                            Arrays.fill(s.subVisited, 0, m, (byte) 0);
+                            int dfsCount = 0;
+                            int sp = 0;
+                            s.subVisited[startU] = 1;
+                            s.dfsNode[0] = startU;
+                            s.dfsEdge[0] = s.subEdgeHead[startU];
+                            while (sp >= 0) {
+                                int su = s.dfsNode[sp];
+                                int ei = s.dfsEdge[sp];
+                                int eEnd = s.subEdgeHead[su + 1];
+                                if (ei < eEnd) {
+                                    s.dfsEdge[sp] = ei + 1;
+                                    int sw = s.copyTargets[copyBase + ei];
+                                    if (s.subVisited[sw] == 0) {
+                                        s.subVisited[sw] = 1;
+                                        sp++;
+                                        s.dfsNode[sp] = sw;
+                                        s.dfsEdge[sp] = s.subEdgeHead[sw];
+                                    }
+                                } else {
+                                    s.dfsOrder[dfsCount++] = su;
+                                    sp--;
+                                }
+                            }
+                            if (dfsCount != m) {
+                                return false;
+                            }
+
+                            Arrays.fill(s.subVisited, 0, m, (byte) 0);
+                            int weight = 0;
+                            int size = 0;
+                            for (int i = 0; i < m; i++) {
+                                int su = s.dfsOrder[i];
+                                s.subVisited[su] = 1;
+                                int eStart = s.subEdgeHead[su];
+                                int eEnd = s.subEdgeHead[su + 1];
+                                for (int e = eStart; e < eEnd; e++) {
+                                    int sw = s.subEdgeTarget[e];
+                                    if (s.subVisited[sw] == 0) {
+                                        weight += s.subEdgeWeight[e];
+                                        size++;
+                                    }
+                                }
+                                if (weight > bestWeight) {
+                                    break;
+                                }
+                            }
+                            if (weight < bestWeight || (weight == bestWeight && size < bestSize)) {
+                                System.arraycopy(s.dfsOrder, 0, s.bestOrder, 0, m);
+                                bestWeight = weight;
+                                bestSize = size;
+                                hasBest = true;
+                            }
+                        }
+                        if (--maxRounds == 0) {
+                            break;
+                        }
+                    }
+
+                    if (hasBest) {
+                        Arrays.fill(s.subVisited, 0, m, (byte) 0);
+                        for (int i = 0; i < m; i++) {
+                            int su = s.bestOrder[i];
+                            s.subVisited[su] = 1;
+                            int eStart = s.subEdgeHead[su];
+                            int eEnd = s.subEdgeHead[su + 1];
+                            for (int e = eStart; e < eEnd; e++) {
+                                int sw = s.subEdgeTarget[e];
+                                if (s.subVisited[sw] == 0) {
+                                    s.edgeRemoved[s.subEdgeOrigEid[e]] = 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (int u = 0; u < n; u++) {
+                int kept = 0;
+                int base = edgeBase[u];
+                int deg = edgeCounts[u];
+                int[] t = targets[u];
+                int[] w = weights[u];
+                int[] kt = keptTargets[u];
+                int[] kw = keptWeights[u];
+                for (int e = 0; e < deg; e++) {
+                    if (s.edgeRemoved[base + e] == 0) {
+                        kt[kept] = t[e];
+                        kw[kept] = w[e];
+                        kept++;
+                    }
+                }
+                keptEdgeCounts[u] = kept;
+            }
+            toposortKeptVerticesIntoCache(n, s);
+            return true;
         }
 
-        private static Object[] toposortKeptVertices(Object[] vertices, int[][] keptTargets, Scratch s) {
-            int n = vertices.length;
+        private boolean buildHashSetIterationOrder(int compStart, int m, Scratch s) {
+            int cap = 16;
+            int threshold = 12;
+            s.ensureHashCap(cap, m);
+            Arrays.fill(s.hsHead, 0, cap, -1);
+            Arrays.fill(s.hsTail, 0, cap, -1);
+            Arrays.fill(s.hsBinLen, 0, cap, 0);
+            int hsSize = 0;
+            for (int k = 0; k < m; k++) {
+                int u = s.sccVertices[compStart + k];
+                Object obj = vertices[u];
+                int rawH = (obj == null) ? 0 : obj.hashCode();
+                int hash = rawH ^ (rawH >>> 16);
+                s.hsVertex[k] = u;
+                s.hsHash[k] = hash;
+                s.hsNext[k] = -1;
+                int b = hash & (cap - 1);
+                if (s.hsHead[b] < 0) {
+                    s.hsHead[b] = k;
+                    s.hsTail[b] = k;
+                } else {
+                    if (s.hsBinLen[b] >= 8) {
+                        return false;
+                    }
+                    s.hsNext[s.hsTail[b]] = k;
+                    s.hsTail[b] = k;
+                }
+                s.hsBinLen[b]++;
+                if (++hsSize > threshold) {
+                    int oldCap = cap;
+                    cap <<= 1;
+                    threshold <<= 1;
+                    s.ensureHashCap(cap, m);
+                    Arrays.fill(s.hsHead, oldCap, cap, -1);
+                    Arrays.fill(s.hsTail, oldCap, cap, -1);
+                    Arrays.fill(s.hsBinLen, oldCap, cap, 0);
+                    for (int ob = 0; ob < oldCap; ob++) {
+                        int node = s.hsHead[ob];
+                        if (node < 0) continue;
+                        int loHead = -1, loTail = -1, loLen = 0;
+                        int hiHead = -1, hiTail = -1, hiLen = 0;
+                        while (node >= 0) {
+                            int nxt = s.hsNext[node];
+                            s.hsNext[node] = -1;
+                            if ((s.hsHash[node] & oldCap) == 0) {
+                                if (loHead < 0) loHead = node; else s.hsNext[loTail] = node;
+                                loTail = node;
+                                loLen++;
+                            } else {
+                                if (hiHead < 0) hiHead = node; else s.hsNext[hiTail] = node;
+                                hiTail = node;
+                                hiLen++;
+                            }
+                            node = nxt;
+                        }
+                        s.hsHead[ob] = loHead; s.hsTail[ob] = loTail; s.hsBinLen[ob] = loLen;
+                        s.hsHead[ob + oldCap] = hiHead; s.hsTail[ob + oldCap] = hiTail; s.hsBinLen[ob + oldCap] = hiLen;
+                    }
+                }
+            }
+            int outIdx = 0;
+            for (int b = 0; b < cap; b++) {
+                for (int node = s.hsHead[b]; node >= 0; node = s.hsNext[node]) {
+                    s.compBucketOrder[outIdx++] = s.hsVertex[node];
+                }
+            }
+            return true;
+        }
+
+        private <V> void computeFallback(int n, FeedbackArcSetProvider provider, Scratch scratch) {
+            MapDigraph<V> reference = new MapDigraph<>();
+            for (int u = 0; u < n; u++) {
+                @SuppressWarnings("unchecked") V vertex = (V) vertices[u];
+                reference.add(vertex);
+            }
+            for (int u = 0; u < n; u++) {
+                @SuppressWarnings("unchecked") V src = (V) vertices[u];
+                int deg = edgeCounts[u];
+                int[] t = targets[u], w = weights[u];
+                for (int e = 0; e < deg; e++) {
+                    @SuppressWarnings("unchecked") V dst = (V) vertices[t[e]];
+                    reference.put(src, dst, w[e]);
+                }
+            }
+            FeedbackArcSet<V> fas = provider.getFeedbackArcSet(reference, reference, FeedbackArcSetPolicy.MIN_WEIGHT);
+            for (V src : fas.vertices()) for (V dst : fas.targets(src)) reference.remove(src, dst);
+            for (int u = 0; u < n; u++) {
+                @SuppressWarnings("unchecked") V src = (V) vertices[u];
+                int deg = edgeCounts[u];
+                int[] t = targets[u], w = weights[u];
+                int[] kt = keptTargets[u], kw = keptWeights[u];
+                int kept = 0;
+                for (int e = 0; e < deg; e++) {
+                    int v = t[e];
+                    @SuppressWarnings("unchecked") V dst = (V) vertices[v];
+                    if (reference.contains(src, dst)) {
+                        kt[kept] = v;
+                        kw[kept] = w[e];
+                        kept++;
+                    }
+                }
+                keptEdgeCounts[u] = kept;
+            }
+            toposortKeptVerticesIntoCache(n, scratch);
+        }
+
+        private void toposortKeptVerticesIntoCache(int n, Scratch s) {
             s.ensureVertexCap(n);
             int[] color = s.color;
             int[] dfsNode = s.dfsNode;
@@ -905,10 +1367,11 @@ public final class GraphOrderPerf {
                 while (sp >= 0) {
                     int u = dfsNode[sp];
                     int ei = dfsEdge[sp];
-                    int[] targets = keptTargets[u];
-                    if (ei < targets.length) {
+                    int deg = keptEdgeCounts[u];
+                    int[] row = keptTargets[u];
+                    if (ei < deg) {
                         dfsEdge[sp] = ei + 1;
-                        int v = targets[ei];
+                        int v = row[ei];
                         if (v != u && color[v] == 0) {
                             color[v] = 1;
                             sp++;
@@ -923,35 +1386,124 @@ public final class GraphOrderPerf {
                 }
             }
 
-            Object[] result = new Object[count];
-            for (int i = count - 1, dst = 0; i >= 0; i--) {
-                result[dst++] = vertices[post[i]];
+            if (order.length < count) {
+                order = Arrays.copyOf(order, count);
             }
-            return result;
+            for (int i = count - 1, dst = 0; i >= 0; i--) {
+                order[dst++] = vertices[post[i]];
+            }
+            if (cachedOrderCount > count) {
+                Arrays.fill(order, count, cachedOrderCount, null);
+            }
+            cachedOrderCount = count;
         }
 
         <V> void apply(PooledRenderDigraph<V> graph, List<V> out) {
             graph.edgeCount = 0;
-            for (int u = 0; u < vertices.length; u++) {
-                int count = keptTargets[u].length;
+            for (int u = 0; u < cachedVertexCount; u++) {
+                int count = keptEdgeCounts[u];
                 if (count > 0) {
                     System.arraycopy(keptTargets[u], 0, graph.outTargets[u], 0, count);
                     System.arraycopy(keptWeights[u], 0, graph.outWeights[u], 0, count);
                 }
-                graph.outDegree[u] = count; graph.edgeCount += count;
+                graph.outDegree[u] = count;
+                graph.edgeCount += count;
             }
-            for (Object v : order) { @SuppressWarnings("unchecked") V vertex = (V) v; out.add(vertex); }
+            for (int i = 0; i < cachedOrderCount; i++) {
+                @SuppressWarnings("unchecked") V vertex = (V) order[i];
+                out.add(vertex);
+            }
         }
     }
 
     static final class Scratch {
         int[] color = IntArrays.EMPTY_ARRAY, dfsNode = IntArrays.EMPTY_ARRAY;
         int[] dfsEdge = IntArrays.EMPTY_ARRAY, postOrder = IntArrays.EMPTY_ARRAY;
+        int[] partner = IntArrays.EMPTY_ARRAY, droppedSlot = IntArrays.EMPTY_ARRAY;
+        int[] edgeBase = IntArrays.EMPTY_ARRAY;
+        byte[] sccVisited = new byte[0];
+        int[] finishStack = IntArrays.EMPTY_ARRAY;
+        int[] revDegree = IntArrays.EMPTY_ARRAY, revHead = IntArrays.EMPTY_ARRAY, revCursor = IntArrays.EMPTY_ARRAY;
+        int[] sccVertices = IntArrays.EMPTY_ARRAY, sccOffsets = IntArrays.EMPTY_ARRAY;
+        int[] inScc = IntArrays.EMPTY_ARRAY, origToSub = IntArrays.EMPTY_ARRAY;
+        int[] compBucketOrder = IntArrays.EMPTY_ARRAY, subVertices = IntArrays.EMPTY_ARRAY;
+        int[] subEdgeHead = IntArrays.EMPTY_ARRAY;
+        int[] shuffleMapping = IntArrays.EMPTY_ARRAY, dfsOrder = IntArrays.EMPTY_ARRAY, bestOrder = IntArrays.EMPTY_ARRAY;
+        byte[] subVisited = new byte[0];
+        byte[] edgeRemoved = new byte[0];
+        int[] revTargets = IntArrays.EMPTY_ARRAY;
+        int[] subEdgeTarget = IntArrays.EMPTY_ARRAY, subEdgeWeight = IntArrays.EMPTY_ARRAY, subEdgeOrigEid = IntArrays.EMPTY_ARRAY;
+        int[] copyTargets = IntArrays.EMPTY_ARRAY;
+        int[] hsHead = IntArrays.EMPTY_ARRAY, hsTail = IntArrays.EMPTY_ARRAY, hsBinLen = IntArrays.EMPTY_ARRAY;
+        int[] hsNext = IntArrays.EMPTY_ARRAY, hsVertex = IntArrays.EMPTY_ARRAY, hsHash = IntArrays.EMPTY_ARRAY;
+        int sccMark;
+        final Random shuffleRandom = new Random(7L);
         final FeedbackArcSetProvider provider = new SimpleFeedbackArcSetProvider();
+
+        int nextSccMark() {
+            int next = ++sccMark;
+            if (next == 0) {
+                Arrays.fill(inScc, 0);
+                next = sccMark = 1;
+            }
+            return next;
+        }
+
         void ensureVertexCap(int n) {
-            if (color.length >= n) return;
-            int cap = Math.max(32, Math.max(n, color.length * 2));
-            color = new int[cap]; dfsNode = new int[cap]; dfsEdge = new int[cap]; postOrder = new int[cap];
+            if (color.length < n) {
+                int cap = Math.max(32, Math.max(n, color.length * 2));
+                color = new int[cap]; dfsNode = new int[cap]; dfsEdge = new int[cap]; postOrder = new int[cap];
+                partner = new int[cap]; droppedSlot = new int[cap];
+                edgeBase = new int[cap + 1];
+                sccVisited = new byte[cap];
+                finishStack = new int[cap];
+                revDegree = new int[cap]; revHead = new int[cap + 1]; revCursor = new int[cap];
+                sccVertices = new int[cap]; sccOffsets = new int[cap + 1];
+                inScc = new int[cap]; origToSub = new int[cap];
+                compBucketOrder = new int[cap]; subVertices = new int[cap];
+                subEdgeHead = new int[cap + 1];
+                shuffleMapping = new int[cap]; dfsOrder = new int[cap]; bestOrder = new int[cap];
+                subVisited = new byte[cap];
+            } else if (edgeBase.length < n + 1) {
+                int cap = color.length;
+                edgeBase = new int[cap + 1];
+                revHead = new int[cap + 1];
+                sccOffsets = new int[cap + 1];
+                subEdgeHead = new int[cap + 1];
+            }
+        }
+
+        void ensureEdgeCap(int e) {
+            if (edgeRemoved.length >= e) return;
+            int cap = Math.max(64, Math.max(e, edgeRemoved.length * 2));
+            edgeRemoved = new byte[cap];
+            revTargets = new int[cap];
+            subEdgeTarget = new int[cap];
+            subEdgeWeight = new int[cap];
+            subEdgeOrigEid = new int[cap];
+        }
+
+        void ensureCopyStorage(int totalCopies, int subEdgeCount, int m) {
+            int needed = totalCopies * subEdgeCount;
+            if (copyTargets.length < needed) {
+                copyTargets = new int[Math.max(needed, Math.max(128, copyTargets.length * 2))];
+            }
+            ensureVertexCap(m);
+        }
+
+        void ensureHashCap(int bucketCap, int nodeCount) {
+            if (hsHead.length < bucketCap) {
+                int cap = Math.max(bucketCap, hsHead.length * 2);
+                hsHead = Arrays.copyOf(hsHead, cap);
+                hsTail = Arrays.copyOf(hsTail, cap);
+                hsBinLen = Arrays.copyOf(hsBinLen, cap);
+            }
+            if (hsNext.length < nodeCount) {
+                int cap = Math.max(32, Math.max(nodeCount, hsNext.length * 2));
+                hsNext = new int[cap];
+                hsVertex = new int[cap];
+                hsHash = new int[cap];
+            }
         }
     }
 }
