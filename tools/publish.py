@@ -45,7 +45,8 @@ def prepare(args):
     require(sha256(jar) == report['sha256'] and jar.stat().st_size == report['size'],
             f'{args.side} JAR과 빌드 보고서의 해시 또는 크기가 다릅니다.')
     check_release_jar(jar)
-    require(0 < len(changes['features']) <= 40, '릴리스 기능 설명은 1~40개여야 합니다.')
+    entries = changes.get('changes', changes.get('features', []))
+    require(0 < len(entries) <= 40, '릴리스 변경 내역은 1~40개여야 합니다.')
     key = args.keys / (args.side + '.pk8')
     require(key.is_file() and not key.resolve().is_relative_to(ROOT.resolve()),
             f'{args.side} 개인 서명 키가 없거나 저장소 안에 있습니다. 원래 키를 확인하세요.')
@@ -59,12 +60,12 @@ def prepare(args):
              'label': report['label'], 'title': changes['title'], 'tag': tag,
              'url': f'https://github.com/{REPO}/releases/download/{tag}/{FILENAME}',
              'size': str(report['size']), 'sha256': report['sha256']}
-    for index, feature in enumerate(changes['features']):
+    for index, feature in enumerate(entries):
         title = feature['title']
-        require(0 < len(title) <= 80 and ' :: ' not in title, '릴리스 기능 제목 형식이 올바르지 않습니다.')
+        require(0 < len(title) <= 80 and ' :: ' not in title, '릴리스 변경 제목 형식이 올바르지 않습니다.')
         note = title + ' :: ' + feature['detail']
         require(len(note) <= 1200 and not any(ord(char) < 32 for char in note),
-                '릴리스 기능 설명이 너무 길거나 제어 문자를 포함합니다.')
+                '릴리스 변경 설명이 너무 길거나 제어 문자를 포함합니다.')
         props[f'notes.{index}'] = note
 
     def escape(value):
@@ -84,8 +85,7 @@ def prepare(args):
     (release/'SHA256SUMS.txt').write_text(''.join(sha256(release/name) + '  ' + name + '\n'
                                                    for name in [FILENAME, 'update.properties']), encoding='utf8')
     notes = '# ' + changes['title'] + ' · ' + args.side + '\n\n' + ''.join(
-        '<details>\n<summary>' + feature['title'] + '</summary>\n\n' + feature['detail'] +
-        '\n\n</details>\n\n' for feature in changes['features'])
+        '### ' + feature['title'] + '\n\n' + feature['detail'] + '\n\n' for feature in entries)
     (release/'notes.md').write_text(notes, encoding='utf8')
     return build, report, changes, jar, tag, release, java, classpath
 
