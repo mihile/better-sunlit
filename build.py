@@ -39,16 +39,8 @@ classpath += sorted((INSTANCE / "minecraft/mods").glob("*.jar"))
 sourceRoot=ROOT/'src/main/java'
 sources=sorted(sourceRoot.rglob('*.java'))
 CLIENT_ONLY_MIXINS={'ItemEntityRendererMixin.java','ItemPickupParticleMixin.java','XpToastMixin.java','DisplayInfoMixin.java','FontSetMixin.java','StandardFontSetMixin.java'}
-CLIENT_ONLY_MIXINS.update({
-    'EntryJeiIngredientScopeMixin.java','EntryCoreLibCandidatesMixin.java','EntryJeiTypedCacheMixin.java',
-    'PerfButterflyRendererMixin.java','PerfMothRendererMixin.java','PerfButterflyModelMixin.java',
-    'PerfButterflyItemRendererMixin.java','PerfMothItemRendererMixin.java','PerfHandbookScreenMixin.java',
-    'PerfHandbookIndexButtonMixin.java','PerfHandbookToastMixin.java',
-    'PerfParticleSpawnerMixin.java','PerfWeatherParticleMixin.java','PerfCustomParticleMixin.java','PerfWindManagerMixin.java',
-    'PerfSeasonHandlerClientMixin.java','PerfSeasonColorHandlersMixin.java','PerfSeasonColorUtilMixin.java',
-    'PerfAmbientBiomeAreaMixin.java','PerfAmbientAirPocketScannerMixin.java',
-    'PerfIrisDimensionMixin.java','PerfJeiSortingConfigMixin.java',
-})
+entryMixinConfig=json.loads((ROOT/'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
+CLIENT_ONLY_MIXINS.update(name+'.java' for name in entryMixinConfig.get('client',[]))
 if side=='server':
  sources=[s for s in sources if '/client/' not in s.as_posix() and s.name not in CLIENT_ONLY_MIXINS]
  common=sourceRoot/'dev/sunlit/fishvisuals/SunlitFishVisuals.java';text=common.read_text(encoding='utf8');old='context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,\n                    () -> () -> dev.sunlit.fishvisuals.client.ClientFishVisuals.receive(packet)));'
@@ -84,7 +76,7 @@ for client in [False,True]:
   generated=BUILD/('generated/dev/sunlit/fishvisuals/mixin/'+name+'.java');generated.parent.mkdir(parents=True,exist_ok=True);generated.write_text(source,encoding='utf8');sources.append(generated)
   inlineLists['client' if client else 'mixins'].append(name)
 compileArgs=['--release','17','-proc:none','-encoding','UTF-8','-classpath',';'.join(str(s) for s in classpath),'-d',str(CLASSES)]+list(map(str,sources))
-argfile=BUILD/'javac.args';argfile.write_text('\n'.join('"'+s.replace('\\','/').replace('"','\\"')+'"' for s in compileArgs),encoding='utf8');subprocess.run([JDK/'javac.exe','@'+str(argfile.resolve())],check=True)
+argfile=BUILD/'javac.args';argfile.write_text('\n'.join('"'+s.replace('\\','/').replace('"','\\"')+'"' for s in compileArgs),encoding='utf8');subprocess.run([JDK/'javac.exe','-J-Dfile.encoding=UTF-8','@'+str(argfile.resolve())],check=True)
 resources=BUILD/'resources'
 if resources.exists():shutil.rmtree(resources)
 shutil.copytree(ROOT/'src/main/resources',resources)

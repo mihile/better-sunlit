@@ -18,8 +18,8 @@ assert SERVER_JAR.is_file(), f'Missing {SERVER_JAR}; build the server first'
 mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
 common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
-assert len(common_mixins) == 5, common_mixins
-assert len(client_mixins) == 22, client_mixins
+assert len(common_mixins) == 7, common_mixins
+assert len(client_mixins) == 32, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
@@ -69,11 +69,14 @@ compile_argfile.write_text('\n'.join([
     '"--release"', '"17"', '"-proc:none"', '"-encoding"', '"UTF-8"',
     '"-classpath"', '"' + test_cp + '"',
     '"-d"', '"' + to_cmd_path(str(OUT_CLASSES)) + '"',
-    '"' + to_cmd_path(str(ROOT / 'tests/perf/PerfOptTests.java')) + '"',
+    *['"' + to_cmd_path(str(p)) + '"' for p in sorted((ROOT / 'tests/perf').glob('*.java'))],
 ]), encoding='utf8')
-subprocess.run([str(JDK / 'javac.exe'), '@' + to_cmd_path(str(compile_argfile))], cwd=str(INSTANCE), check=True)
+subprocess.run([str(JDK / 'javac.exe'), '-J-Dfile.encoding=UTF-8', '@' + to_cmd_path(str(compile_argfile))], cwd=str(INSTANCE), check=True)
 
-run_cp = to_cmd_path(str(OUT_CLASSES)) + os.pathsep + test_cp
+extra_runtime_jars = [str(p) for p in sorted((LIBRARIES / 'com/ibm/icu/icu4j').glob('71.1/icu4j-*.jar')) if p.is_file()]
+if not extra_runtime_jars:
+    extra_runtime_jars = [str(p) for p in sorted((LIBRARIES / 'com/ibm/icu/icu4j').glob('*/icu4j-*.jar'))[:1] if p.is_file()]
+run_cp = os.pathsep.join([to_cmd_path(str(OUT_CLASSES)), test_cp] + [to_cmd_path(p) for p in extra_runtime_jars])
 run_argfile = ROOT / 'build/test-perf-java.args'
 run_argfile.write_text('\n'.join([
     '"-Dfile.encoding=UTF-8"',
