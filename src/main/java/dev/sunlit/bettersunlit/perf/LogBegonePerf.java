@@ -12,6 +12,12 @@ public final class LogBegonePerf {
     private static final ThreadLocal<MatcherCache> MATCHERS = ThreadLocal.withInitial(MatcherCache::new);
     private LogBegonePerf() {}
 
+    /** Called outside log callbacks, while the filter still uses its native startup path. */
+    public static void preload() {
+        new FilterSnapshot(new String[0], new String[0]);
+        new MatcherCache();
+    }
+
     public static void invalidate() { snapshot = null; }
 
     public static void onConfigEvent(ModConfigEvent event) {
