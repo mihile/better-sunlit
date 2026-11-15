@@ -22,6 +22,7 @@ import dev.sunlit.bettersunlit.client.AmbientSoundsClientPerf;
 import dev.sunlit.bettersunlit.client.ClientPostApplyPatches;
 import dev.sunlit.bettersunlit.client.EmfRenderPerf;
 import dev.sunlit.bettersunlit.client.EmojiRenderPerf;
+import dev.sunlit.bettersunlit.client.FtbChunksClientPerf;
 import dev.sunlit.bettersunlit.client.GraphOrderPerf;
 import dev.sunlit.bettersunlit.client.IrisAstCachePerf;
 import dev.sunlit.bettersunlit.client.IrisDimensionPerf;
@@ -205,7 +206,17 @@ public final class PerfOptTests {
             "net.minecraft.world.level.chunk.Palette",
             "org.violetmoon.zetaimplforge.event.ForgeZetaEventBus",
             "org.violetmoon.zetaimplforge.event.ForgeEventsRemapper",
-            "net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement"
+            "net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement",
+            "com.github.spacemex.skillsexpnotifier.client.ClientLoginHandler",
+            "com.github.spacemex.skillsexpnotifier.client.SearchForSkills",
+            "dev.ftb.mods.ftbchunks.client.ClientTaskQueue",
+            "dev.ftb.mods.ftbchunks.client.FTBChunksClientConfig",
+            "dev.ftb.mods.ftbchunks.client.FTBChunksClient",
+            "dev.ftb.mods.ftbchunks.client.map.MapTask",
+            "dev.ftb.mods.ftbchunks.client.map.MapRegion",
+            "dev.ftb.mods.ftbchunks.client.map.MapRegionData",
+            "journeymap.client.texture.ImageUtil",
+            "journeymap.client.cartography.color.RGB"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -257,7 +268,11 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfPalettedContainerMixin",
             "dev.sunlit.fishvisuals.mixin.PerfForgeZetaEventBusMixin",
             "dev.sunlit.fishvisuals.mixin.PerfForgeEventsRemapperMixin",
-            "dev.sunlit.fishvisuals.mixin.PerfRandomSpreadStructurePlacementMixin"
+            "dev.sunlit.fishvisuals.mixin.PerfRandomSpreadStructurePlacementMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfSkillsLoginScanMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfFtbChunksTaskQueueMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfFtbChunksRegionDataMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfJourneyMapImageUtilMixin"
     );
 
     public static void main(String[] args) throws Exception {
@@ -286,6 +301,7 @@ public final class PerfOptTests {
         testTextureManagerThreadSafety();
         testZetaEventBusThreadSafety();
         testRandomSpreadStructurePlacementClamp();
+        testJoinPerfOpts();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
     }
@@ -3692,5 +3708,66 @@ public final class PerfOptTests {
         @Override public void m_5752_() { count++; }
         @Override public void m_7404_(int r, int g, int b, int a) {}
         @Override public void m_141991_() {}
+    }
+
+    private static void testJoinPerfOpts() {
+        int pixels = FtbChunksClientPerf.REGION_PIXELS;
+        short[] height = new short[pixels];
+        short[] waterLight = new short[pixels];
+        int[] foliage = new int[pixels];
+        int[] grass = new int[pixels];
+        int[] water = new int[pixels];
+        for (int i = 0; i < pixels; i++) {
+            height[i] = (short) ((i * 73) ^ (i >>> 5));
+            waterLight[i] = (short) ((i * 197) + 17);
+            foliage[i] = (i * 0x01010103) ^ 0xA55A1234;
+            grass[i] = (i * 0x02030507) ^ 0x5AA59876;
+            water[i] = (i * 0x0305070B) ^ 0xFF112233;
+        }
+        java.awt.image.BufferedImage[] fastImgs = FtbChunksClientPerf.fillWriteImages(
+                height, waterLight, foliage, grass, water);
+        assertEquals(5, fastImgs.length, "Expected 5 region export images");
+
+        for (int y = 0; y < 512; y += 17) {
+            for (int x = 0; x < 512; x += 19) {
+                int i = x + y * 512;
+                int expectedData = ((height[i] & 0xFFFF) << 16) | (waterLight[i] & 0xFFFF);
+                assertEquals(expectedData, fastImgs[0].getRGB(x, y), "data image pixel mismatch");
+                assertEquals(0xFF000000 | (foliage[i] & 0xFFFFFF), fastImgs[1].getRGB(x, y), "foliage pixel mismatch");
+                assertEquals(0xFF000000 | (grass[i] & 0xFFFFFF), fastImgs[2].getRGB(x, y), "grass pixel mismatch");
+                assertEquals(0xFF000000 | (water[i] & 0xFFFFFF), fastImgs[3].getRGB(x, y), "water pixel mismatch");
+                int fBlk = (foliage[i] >> 24) & 0xFF;
+                int gBlk = (grass[i] >> 24) & 0xFF;
+                int wBlk = (water[i] >> 24) & 0xFF;
+                int expectedBlk = 0xFF000000 | (fBlk << 16) | (gBlk << 8) | wBlk;
+                assertEquals(expectedBlk, fastImgs[4].getRGB(x, y), "blocks pixel mismatch");
+            }
+        }
+
+        // Test queue draining: min-1 task progress, budget cap, and cancelOtherTasks stop
+        java.util.ArrayDeque<dev.ftb.mods.ftbchunks.client.map.MapTask> q = new java.util.ArrayDeque<>();
+        int[] ran = new int[3];
+        q.add(() -> ran[0]++);
+        q.add(new dev.ftb.mods.ftbchunks.client.map.MapTask() {
+            @Override public void runMapTask() { ran[1]++; }
+            @Override public boolean cancelOtherTasks() { return true; }
+        });
+        q.add(() -> ran[2]++);
+
+        // Even with 0ns budget, first task executes and stops immediately
+        FtbChunksClientPerf.runQueuedTasks(q, 100, 0L);
+        assertEquals(1, ran[0], "First task must run even on 0ns budget");
+        assertEquals(0, ran[1], "Second task deferred when budget exhausted");
+        assertEquals(2, q.size(), "Two tasks should remain queued");
+
+        // Generous budget hits cancelOtherTasks() on task 2 and leaves task 3 queued
+        FtbChunksClientPerf.runQueuedTasks(q, 100, 60_000_000_000L);
+        assertEquals(1, ran[1], "cancelOtherTasks task runs");
+        assertEquals(0, ran[2], "Task after cancelOtherTasks waits for next tick");
+        assertEquals(1, q.size(), "One task left after cancelOtherTasks");
+
+        FtbChunksClientPerf.runQueuedTasks(q, 100, 60_000_000_000L);
+        assertEquals(1, ran[2], "Final task runs cleanly");
+        assertEquals(0, q.size(), "Queue drained");
     }
 }
