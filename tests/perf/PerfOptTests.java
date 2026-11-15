@@ -202,7 +202,10 @@ public final class PerfOptTests {
             "net.minecraft.world.level.chunk.SingleValuePalette",
             "net.minecraft.world.level.chunk.PalettedContainer",
             "net.minecraft.world.level.chunk.PalettedContainer$Data",
-            "net.minecraft.world.level.chunk.Palette"
+            "net.minecraft.world.level.chunk.Palette",
+            "org.violetmoon.zetaimplforge.event.ForgeZetaEventBus",
+            "org.violetmoon.zetaimplforge.event.ForgeEventsRemapper",
+            "net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -251,7 +254,10 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfLevelRendererWeatherMixin",
             "dev.sunlit.fishvisuals.mixin.PerfWhitelistMixin",
             "dev.sunlit.fishvisuals.mixin.PerfSingleValuePaletteMixin",
-            "dev.sunlit.fishvisuals.mixin.PerfPalettedContainerMixin"
+            "dev.sunlit.fishvisuals.mixin.PerfPalettedContainerMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfForgeZetaEventBusMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfForgeEventsRemapperMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfRandomSpreadStructurePlacementMixin"
     );
 
     public static void main(String[] args) throws Exception {
@@ -278,6 +284,8 @@ public final class PerfOptTests {
         testArea4IrisAstCachePerf();
         testArea4JeiRegistryPerf();
         testTextureManagerThreadSafety();
+        testZetaEventBusThreadSafety();
+        testRandomSpreadStructurePlacementClamp();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
     }
@@ -2832,6 +2840,54 @@ public final class PerfOptTests {
         assertFalse(mutator1.isAlive() || mutator2.isAlive(), "Worker threads must finish within timeout");
         assertTrue(errors.isEmpty(), "Concurrent TextureManager access must not fail: " + errors);
         assertTrue(ticks.get() >= 2000, "Tick iteration must still run all frames");
+    }
+
+    private static void testZetaEventBusThreadSafety() throws Exception {
+        ClassNode busMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfForgeZetaEventBusMixin");
+        assertEquals("org.violetmoon.zetaimplforge.event.ForgeZetaEventBus", extractMixinTarget(busMixin),
+                "PerfForgeZetaEventBusMixin target mismatch");
+        ClassNode remapperMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfForgeEventsRemapperMixin");
+        assertEquals("org.violetmoon.zetaimplforge.event.ForgeEventsRemapper", extractMixinTarget(remapperMixin),
+                "PerfForgeEventsRemapperMixin target mismatch");
+
+        // Concurrent rehash across worker threads (modeling Quark + Supplementaries FML construct race)
+        Map<Object, Object> syncMap = Collections.synchronizedMap(
+                new it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap<>());
+        List<Throwable> errors = Collections.synchronizedList(new ArrayList<>());
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        Thread[] workers = new Thread[4];
+        for (int t = 0; t < workers.length; t++) {
+            final int tid = t;
+            workers[t] = new Thread(() -> {
+                try {
+                    start.await();
+                    for (int i = 0; i < 4000; i++) {
+                        String k = "handler_" + tid + "_" + i;
+                        syncMap.put(k, Boolean.TRUE);
+                        syncMap.get(k);
+                        if ((i & 3) == 0) {
+                            syncMap.remove(k);
+                        }
+                    }
+                } catch (Throwable ex) {
+                    errors.add(ex);
+                }
+            }, "zeta-bus-worker-" + t);
+            workers[t].start();
+        }
+        start.countDown();
+        for (Thread w : workers) {
+            w.join(5000);
+            assertFalse(w.isAlive(), "Zeta stress worker must finish within timeout");
+        }
+        assertTrue(errors.isEmpty(), "Synchronized Object2ObjectOpenHashMap must not race on rehash: " + errors);
+    }
+
+    private static void testRandomSpreadStructurePlacementClamp() throws Exception {
+        ClassNode placementMixin = readClassNode("dev.sunlit.fishvisuals.mixin.PerfRandomSpreadStructurePlacementMixin");
+        assertEquals("net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement",
+                extractMixinTarget(placementMixin),
+                "PerfRandomSpreadStructurePlacementMixin target mismatch");
     }
 
     private static void verifyBytecode(String binaryName, byte[] classBytes) throws Exception {

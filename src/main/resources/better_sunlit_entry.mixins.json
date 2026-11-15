@@ -11,7 +11,10 @@
     "PerfSeasonHandlerMixin",
     "PerfSeasonHooksMixin",
     "PerfBlockOcclusionMixin",
-    "PerfLogBegoneMixin"
+    "PerfLogBegoneMixin",
+    "PerfForgeZetaEventBusMixin",
+    "PerfForgeEventsRemapperMixin",
+    "PerfRandomSpreadStructurePlacementMixin"
   ],
   "client": [
     "EntryJeiIngredientScopeMixin",
