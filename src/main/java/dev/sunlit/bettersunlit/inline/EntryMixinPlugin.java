@@ -105,7 +105,17 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.minecraft.world.level.chunk.Palette","541587aa197255575e66f4849e5fdfcc798434ff60be80a18c2807bb51ba95c4"),
         Map.entry("org.violetmoon.zetaimplforge.event.ForgeZetaEventBus","ac733daf7d44811759117364dca49d1e0284ec2488f255bbf8cf994c3a1af378"),
         Map.entry("org.violetmoon.zetaimplforge.event.ForgeEventsRemapper","c9641ec662ad5931dd00351f995822bb1924d221a0117189ef5cd7f56d9dc6d3"),
-        Map.entry("net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement","c4ad250470ec6eeeb28ca87ea5951b395d4d26b53db3dff5bf84e20eb59facdb"));
+        Map.entry("net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement","c4ad250470ec6eeeb28ca87ea5951b395d4d26b53db3dff5bf84e20eb59facdb"),
+        Map.entry("com.github.spacemex.skillsexpnotifier.client.ClientLoginHandler","8ce63c02235c9cf587323fb243d4597edcc82b58c1d2b97e8befc3e0c01e10fe"),
+        Map.entry("com.github.spacemex.skillsexpnotifier.client.SearchForSkills","a7888feab2427bf8b263dd6c37ff47f86a9c01a4a929837ac82caa002fec7862"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.ClientTaskQueue","da66701c7470b3178f8a3f4941cd9a72d604977fa9c2ab52cfd3fd9f31368ff1"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.FTBChunksClientConfig","17085d58658730befeefb521c9fcc3445cb03ecf80642280f077c6dd784c4286"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.FTBChunksClient","158939e9e1df64f0832fcba3752c2b8587a598e9163c80f0dec0b8809f683366"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.map.MapTask","513c4210b2573e7a8656dc725372defe975410bdf44265589d23daca7153617a"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.map.MapRegion","1ce498fd44ab22d993e64946f35668953d9c5b934c1c2202687e899ad6e84c4f"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.map.MapRegionData","19d995918d9a212d73f12d693901efa62e173b73eb3d4ce619cb5f289a84a421"),
+        Map.entry("journeymap.client.texture.ImageUtil","0be50ac84c542fec7b8f40ab7878cf6ac5cba842c283fc163272836437a6685a"),
+        Map.entry("journeymap.client.cartography.color.RGB","592d85465605545ab783c9c3fe620f3d3f08529dd76c8d62f02980c40fcb33e3"));
     private static final Map<String,String> ALT_HASHES=Map.ofEntries(
         Map.entry("net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase","2d0e63e450caead1710a462bc66ce913083a8c22e25be23e4e1cdaddb5d73e12"),
         Map.entry("net.minecraft.client.renderer.block.BlockModelShaper","2f56551223f6b64b195d9cb898877019cc7ca084aaa83a5eca60381cbd80936d"),
@@ -227,6 +237,16 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfChunkBuilderMeshingTaskMixin" ->
                  matches(target)&&matches("fr.madu59.obe.client.mixin.renderer.compat.sodium.ChunkBuilderMeshingTaskMixin")
                  &&matches("fr.madu59.obe.client.util.meshing.SectionMeshingUtil");
+            case "PerfSkillsLoginScanMixin" ->
+                 matches(target)&&matches("com.github.spacemex.skillsexpnotifier.client.SearchForSkills");
+            case "PerfFtbChunksTaskQueueMixin" ->
+                 matches(target)&&matches("dev.ftb.mods.ftbchunks.client.FTBChunksClientConfig")
+                 &&matches("dev.ftb.mods.ftbchunks.client.map.MapTask");
+            case "PerfFtbChunksRegionDataMixin" ->
+                 matches(target)&&matches("dev.ftb.mods.ftbchunks.client.map.MapRegion")
+                 &&matches("dev.ftb.mods.ftbchunks.client.FTBChunksClient");
+            case "PerfJourneyMapImageUtilMixin" ->
+                 matches(target)&&matches("journeymap.client.cartography.color.RGB");
             default -> false;
         };
     }

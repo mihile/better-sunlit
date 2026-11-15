@@ -58,7 +58,11 @@
     "PerfLevelRendererWeatherMixin",
     "PerfWhitelistMixin",
     "PerfSingleValuePaletteMixin",
-    "PerfPalettedContainerMixin"
+    "PerfPalettedContainerMixin",
+    "PerfSkillsLoginScanMixin",
+    "PerfFtbChunksTaskQueueMixin",
+    "PerfFtbChunksRegionDataMixin",
+    "PerfJourneyMapImageUtilMixin"
   ],
   "injectors": {
     "defaultRequire": 1
