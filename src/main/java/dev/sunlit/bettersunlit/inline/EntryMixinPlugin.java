@@ -102,7 +102,10 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.minecraft.world.level.chunk.SingleValuePalette","0809b73a849fc3053a12dfe7080989ead6838e35d2b6089d746f367fe6ddc679"),
         Map.entry("net.minecraft.world.level.chunk.PalettedContainer","80800643eb90559e9d33c154bc91f5c3b873ede6f62d3ea8fd1fed8f06033935"),
         Map.entry("net.minecraft.world.level.chunk.PalettedContainer$Data","b9e12f1cbe09d5944a789c715028d542e0e23cb9489d8eecc23ce1a8217cf771"),
-        Map.entry("net.minecraft.world.level.chunk.Palette","541587aa197255575e66f4849e5fdfcc798434ff60be80a18c2807bb51ba95c4"));
+        Map.entry("net.minecraft.world.level.chunk.Palette","541587aa197255575e66f4849e5fdfcc798434ff60be80a18c2807bb51ba95c4"),
+        Map.entry("org.violetmoon.zetaimplforge.event.ForgeZetaEventBus","ac733daf7d44811759117364dca49d1e0284ec2488f255bbf8cf994c3a1af378"),
+        Map.entry("org.violetmoon.zetaimplforge.event.ForgeEventsRemapper","c9641ec662ad5931dd00351f995822bb1924d221a0117189ef5cd7f56d9dc6d3"),
+        Map.entry("net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement","c4ad250470ec6eeeb28ca87ea5951b395d4d26b53db3dff5bf84e20eb59facdb"));
     private static final Map<String,String> ALT_HASHES=Map.ofEntries(
         Map.entry("net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase","2d0e63e450caead1710a462bc66ce913083a8c22e25be23e4e1cdaddb5d73e12"),
         Map.entry("net.minecraft.client.renderer.block.BlockModelShaper","2f56551223f6b64b195d9cb898877019cc7ca084aaa83a5eca60381cbd80936d"),
@@ -141,7 +144,9 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  "PerfJeiSortingConfigMixin", "PerfEmfMathParserMixin",
                  "PerfJeiRegistryWrapperMixin", "PerfEmfModelPartVariableMixin",
                  "PerfTextureManagerMixin", "PerfWhitelistMixin",
-                 "PerfSingleValuePaletteMixin" -> matches(target);
+                 "PerfSingleValuePaletteMixin",
+                 "PerfForgeZetaEventBusMixin", "PerfForgeEventsRemapperMixin",
+                 "PerfRandomSpreadStructurePlacementMixin" -> matches(target);
             case "PerfPalettedContainerMixin" ->
                  matches(target)&&matches("net.minecraft.world.level.chunk.PalettedContainer$Data")
                  &&matches("net.minecraft.world.level.chunk.SingleValuePalette")
