@@ -1,5 +1,5 @@
 from pathlib import Path
-import argparse,subprocess,zipfile,hashlib,json,shutil,os,re
+import argparse,subprocess,zipfile,hashlib,json,shutil,os,re,sys
 p=argparse.ArgumentParser();p.add_argument('--instance',type=Path,required=True);p.add_argument('--side',choices=['client','server']);p.add_argument('--build',type=int,default=2026110801);p.add_argument('--label',default='2026.11.08.1');p.add_argument('--java-home',type=Path,default=Path(os.environ.get('JAVA_HOME','C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot')));p.add_argument('--keys',type=Path,default=Path.home()/'.codex/secrets/better-sunlit');args=p.parse_args()
 ROOT=Path(__file__).resolve().parent
 INSTANCE=args.instance.resolve();LIBRARIES=INSTANCE.parent.parent/'libraries';JDK=args.java_home/'bin'
@@ -86,6 +86,8 @@ inlineConfig.write_text(json.dumps(inlineData,indent=2),encoding='utf8')
 if side=='server':
  entryConfig=resources/'better_sunlit_entry.mixins.json';entryData=json.loads(entryConfig.read_text(encoding='utf8'));entryData.pop('client',None);entryConfig.write_text(json.dumps(entryData,indent=2),encoding='utf8')
 asset=resources/'assets/better_sunlit';asset.mkdir(parents=True,exist_ok=True)
+if side=='client':
+ subprocess.run([sys.executable,str(ROOT/'tools/build_boot.py'),'--instance',str(INSTANCE),'--out',str(asset/'sunlit-boot.jar'),'--java-home',str(args.java_home)],check=True)
 maint=BUILD/'maintainer-tools';maint.mkdir(exist_ok=True);subprocess.run([JDK/'javac.exe','--release','17','-d',maint,ROOT/'tools/SignRelease.java'],check=True)
 args.keys.mkdir(parents=True,exist_ok=True);secret=args.keys/(side+'.pk8');pub=ROOT/'keys'/(side+'-public.der');pub.parent.mkdir(exist_ok=True)
 if not secret.exists():

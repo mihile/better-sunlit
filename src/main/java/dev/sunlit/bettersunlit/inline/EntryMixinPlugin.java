@@ -115,7 +115,61 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("dev.ftb.mods.ftbchunks.client.map.MapRegion","1ce498fd44ab22d993e64946f35668953d9c5b934c1c2202687e899ad6e84c4f"),
         Map.entry("dev.ftb.mods.ftbchunks.client.map.MapRegionData","19d995918d9a212d73f12d693901efa62e173b73eb3d4ce619cb5f289a84a421"),
         Map.entry("journeymap.client.texture.ImageUtil","0be50ac84c542fec7b8f40ab7878cf6ac5cba842c283fc163272836437a6685a"),
-        Map.entry("journeymap.client.cartography.color.RGB","592d85465605545ab783c9c3fe620f3d3f08529dd76c8d62f02980c40fcb33e3"));
+        Map.entry("journeymap.client.cartography.color.RGB","592d85465605545ab783c9c3fe620f3d3f08529dd76c8d62f02980c40fcb33e3"),
+        Map.entry("net.minecraft.client.Minecraft","e693a6b597702229c396382fb199ccf752497e61757c216efb20d72d5a60a3bd"),
+        Map.entry("net.minecraft.client.gui.screens.LoadingOverlay","be07e1887cc7233ecbfe08941657c3aaafbc866c65f6a3eba3f978776d8359ee"),
+        Map.entry("dev.latvian.mods.kubejs.script.data.GeneratedResourcePack","aa9d65456dadd0f902a0d983c8b5f19c606a8f000165746d0336221fcb870d05"),
+        Map.entry("fuzs.puzzleslib.impl.client.event.ForgeClientEventInvokers","c484e68ba4853ed3be12ed9233afe8f19fbf09070a1ae77fd3b48f79520957c1"),
+        Map.entry("net.mehvahdjukaar.mysticaloaktree.client.TreeLoreManager","cdfda0747c979cd447f1db38f02315cdfeeb3cd92422c3a7b46f4a01e6103c3a"),
+        Map.entry("net.irisshaders.iris.features.FeatureFlags","3b23f1a97703eb18987e99156fd6cefdbf1c620fe4ea5939af47dd53f36b88f5"),
+        Map.entry("com.moepus.gbf.molang.compiler.MolangCompiler","27b4dfa88fe893a53d2697814c954be2411bad04a0845fd1485e3305b061ea30"),
+        Map.entry("me.cortex.voxy.client.core.gl.AsyncTextureUploader","5ddde94f5a54649012414adc300ff4d5491f18e58db3f629156ed6f95c34f9ed"),
+        Map.entry("com.Pink_Cats.createschematicchecker.online.VersionChecker","2632d1b874e9cde9d76530cca3df82f38bff1c089981515e502b2256fad57928"),
+        Map.entry("xyz.apex.forge.commonality.trust.TrustedSourceList","ce747596ba4bd29757c55c9199ab956d33822d8bcaba51feaec929d1b07ed019"),
+        Map.entry("net.irisshaders.iris.gl.shader.StandardMacros","82c76a34a78abf69d248553c05512ccda7de31f6dbcc86e2523153cb38bea227"),
+        Map.entry("net.irisshaders.iris.gl.IrisRenderSystem","533b39ce0a67887a1e113d2c0dbceba7a4620d6b58b71f5e553991b488cc51b2"),
+        Map.entry("net.minecraft.client.renderer.texture.SpriteLoader","c19caf36d6fb62ee9217c3abffb2558335e69d7eb96bccebb656fed7868211c2"),
+        Map.entry("com.hrznstudio.emojiful.ClientEmojiHandler","f8384a360045d6a6ccc5efa22ecd39d4f6187615e707b9b5834af3d05613736b"),
+        Map.entry("dev.isxander.yacl3.gui.image.YACLImageReloadListener","3132b905c1d87239589abc21385be2c8f8eb0865008d87fb69b85c271fb48f29"),
+        Map.entry("journeymap.client.io.ThemeLoader","f2c8cb204f09c8dac5bdf4fcdec35b463bbc493b9e66e7abbc8ca5e0ac117a78"),
+        Map.entry("org.watermedia.loaders.ForgeMCLoader","a337648220e566ea7986e625c6efda4c9c109b194449d16d00476418b4f01589"),
+        Map.entry("org.watermedia.api.player.PlayerAPI","dad94df7ab6eb7c7525fb9a3665da31da96ed32402b81d34360b4d5a04e3ec78"),
+        Map.entry("org.watermedia.api.image.ImageAPI","3c0c4440e718c60aadf943c8f228c6090c73639e3a8c88e2d41dc3d695add6cd"),
+        Map.entry("org.watermedia.api.cache.CacheAPI","90625c6251eeb3111a466330da5c1c0216c50a03a06b369b6ff876f1063d93b2"),
+        Map.entry("dev.latvian.mods.kubejs.client.GeneratedClientResourcePack","f2f9c9af981bf7531fa4c1be06fa92304881cd33eda2f1ba436d7f59922a625a"),
+        Map.entry("net.minecraft.client.resources.model.ModelBakery","4c211a2523c6c4592dc18fb398bcff9e74ff9c9bc8228741a438630bbc15558b"),
+        Map.entry("org.embeddedt.modernfix.forge.dynresources.ModelBakeEventHelper","1a85c1cb9cd10371a889e32da0de66efefbcacc6d29b39534e8cb97ce9ef976a"),
+        Map.entry("com.refinedmods.refinedstorage.render.BakedModelOverrideRegistry","5e879be37646f130b9259f0580be73fd0dcf1b75cd76e17251e6dc871f1d8217"),
+        Map.entry("com.refinedmods.refinedstorage.setup.ClientSetup","08b044ee10775c825277a5c2f0b2ba9903c665fb2ece0ee724401d34ffe6ed67"),
+        Map.entry("net.minecraft.CrashReport","b4cfe8e4ae7cb0c0160154b0f7653cf9b99cf415dd786aafe74c85963ce616d8"),
+        Map.entry("net.minecraft.SystemReport","849ea2abf0c66580440489c1d024862beb94a523a962055425aab99aeb6f60e4"),
+        Map.entry("net.p3pp3rf1y.sophisticatedbackpacks.client.render.ClientBackpackShapeProvider","a327ac777cede514c4a8be02f985e95659b4c862a8ab665c5f6ffbccd6db933e"),
+        Map.entry("software.bernie.geckolib.core.molang.MolangParser","16bd435826408fdb60c81a56a0f17fd7480473619e6f2a65a92a43498563fffb"),
+        Map.entry("net.minecraft.server.packs.resources.ReloadableResourceManager","7148ba66f24f4cb676d102dddbdfc290e06cae09681052a0ca3c5747bfc7844f"),
+        Map.entry("net.minecraft.client.resources.language.ClientLanguage","3bad5419eb6fe8693c8bdd6b1a52d108cb2e99a8b5d413bf39c4d4f60380d0f8"),
+        Map.entry("com.github.alexthe666.citadel.web.WebHelper","1ca138c9ed07e9a6c03fc431f1659ed8419438b9de209d2cf4f0a00f25be65b9"),
+        Map.entry("me.lucko.spark.common.ws.TrustedKeyStore","ac8305f2a84346991923fb04ea24034f12028a08a8f0b645332fc5ab5ea67c43"),
+        Map.entry("com.simibubi.create.foundation.model.ModelSwapper","2b8fc2b1e53424457fd45f4d00c9f91278d0e2652627d75ba479c8ebfec2901f"),
+        Map.entry("net.minecraftforge.client.loading.ClientModLoader","f5a1ebd0557c4a622e60e265f627c6dcece3593b2f394dbeda42cbb6d682be57"),
+        Map.entry("de.keksuccino.fancymenu.util.mcef.MCEFUtil","134d802bf7b5fd34b07b74dc7267c7bccd6e082fb3e19c27e1493d95994d0331"),
+        Map.entry("com.teamabnormals.blueprint.client.RewardHandler","9f162609b6919116fbd3d2f0cb9cbb6aae90c0bf761470e53e88b3f1ffdc153a"),
+        Map.entry("net.minecraftforge.registries.GameData","17d80637236c7b621161681fd573e8a14961469dc8cbcbc1ba329496fd859406"),
+        Map.entry("dev.uncandango.alltheleaks.leaks.common.mods.forge.Issue10684","fdac9efcc8ab5d8613320992292157a5ba7261fd0b1161fba992a1ee54ddb06d"),
+        Map.entry("net.minecraftforge.client.ForgeHooksClient","56a62dfb8dfcd68dfc45451b1a8c51b414f3462cb1e16b2e9171ad571d3ad955"),
+        Map.entry("org.embeddedt.modernfix.dynamicresources.DynamicBakedModelProvider","a442acaf98896e5b976d6590769d5aa760d8b35c810514aadf0a5b6a6faacf04"),
+        Map.entry("net.minecraft.client.model.geom.EntityModelSet","5b66679a5ba96b215c131fec5bc9c7862a668188d3f9fd3465d513f21132a74f"),
+        Map.entry("traben.entity_model_features.EMFManager","819d94e3fc64b04cd8cfcebb73f1b894ff836e3a97be29762a60babe7c714d40"),
+        Map.entry("traben.entity_texture_features.features.ETFManager","a7523f13ca3fce508cf3721cde3737ca0f960beb7c1c63b73226af3b53041049"),
+        Map.entry("net.minecraft.world.level.block.state.StateDefinition","2e8774b1d81626b33294439e528981b1a935718c9ea154fc1d9266acd97a2a2c"),
+        Map.entry("me.jellysquid.mods.lithium.common.reflection.ReflectionUtil","9d59dafe68452f1b5028a84e15cb7232aa1b84b5f60ddbce454bd69819d9e437"),
+        Map.entry("net.minecraft.client.renderer.texture.MipmapGenerator","1e47bdf5d77703579e216da562934fb4e9d5cf9540e88429a0a00dd1fd3ae9c0"),
+        Map.entry("net.minecraft.client.renderer.texture.SpriteContents","8b9017c17646d3fdd314e3779f319af3706a968b66882c3cb3f0e8b8427398f2"),
+        Map.entry("com.mojang.blaze3d.platform.NativeImage","24f84cf9b9c0358de8812c572565abe63559b7233fb03013c742d2c78d8d7689"),
+        Map.entry("me.jellysquid.mods.sodium.client.util.color.ColorSRGB","b48afd04f6461be8bdbe3b375156dc2e068e62b2d23d0563f4f334f504ca2f76"),
+        Map.entry("me.jellysquid.mods.sodium.mixin.features.textures.mipmaps.SpriteContentsMixin","963ac5b9d50d987a79a0e1158685d916bca3d9607da669c9f98a809f8339a234"),
+        Map.entry("net.irisshaders.iris.mixin.bettermipmaps.MixinMipmapGenerator","814594606a3ab92e06d006595ee999903c4ce5368a28c5d4271fd58389d474b3"),
+        Map.entry("net.irisshaders.iris.helpers.ColorSRGB","0d428a754f753cc18bc62110c6e890d80a1cf73c4b6001922eae7f3db2854887"),
+        Map.entry("org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel","865ab5a6d9aa19111a26896a177c6d6b5a901497c9a0a1360e7c1c46800f94a1"));
     private static final Map<String,String> ALT_HASHES=Map.ofEntries(
         Map.entry("net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase","2d0e63e450caead1710a462bc66ce913083a8c22e25be23e4e1cdaddb5d73e12"),
         Map.entry("net.minecraft.client.renderer.block.BlockModelShaper","2f56551223f6b64b195d9cb898877019cc7ca084aaa83a5eca60381cbd80936d"),
@@ -123,7 +177,14 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.minecraft.client.renderer.texture.TextureManager","f3d654e4d0f5628d8d7350b6f6c890f6cff9075f3431cc0806e115b80d73df01"),
         Map.entry("net.minecraft.client.renderer.LevelRenderer","c1603c5a96efece8736bcfc9842962ce5ffb3580331d0baf4d1e0f9984fecb3b"),
         Map.entry("net.minecraft.world.level.chunk.PalettedContainer","7c0f3481565606795266222bfbb26cea6e925ee55b8704eb3c81a3a96a046088"),
-        Map.entry("net.minecraft.world.level.chunk.PalettedContainer$Data","87e522635c87f7cedfbe1d8a2090ffaf95cd9fe5da55e315ec031eecf8aee966"));
+        Map.entry("net.minecraft.world.level.chunk.PalettedContainer$Data","87e522635c87f7cedfbe1d8a2090ffaf95cd9fe5da55e315ec031eecf8aee966"),
+        Map.entry("net.minecraft.client.Minecraft","e19f6b95ab7620a1b42cd04b8c41d91089fb4556d8eb53efefc2f810653b7f01"),
+        Map.entry("net.minecraft.client.gui.screens.LoadingOverlay","23349ec2d2664f71b077f9f2543ca15d3d8e460f99400407687bd991e784b507"),
+        Map.entry("net.minecraft.client.renderer.texture.SpriteLoader","efeabc5c9c824e9f1ad5a1a7ad06cec1cb22dbc0d5c531daf6f245e5e7a05cde"),
+        Map.entry("net.minecraft.client.resources.model.ModelBakery","4be0d2eff8a85facb65e338472593c9aa02a6f37a201810b9f66c8b163af82ec"),
+        Map.entry("net.minecraft.client.renderer.texture.MipmapGenerator","1c4e452d34cff6c168e4cfba8098219571d6e4bff6ea750f4323c99b772db6f8"),
+        Map.entry("net.minecraft.client.renderer.texture.SpriteContents","505ab0e45498c9cb8ff81a6b7f219e1e736843cd466e893d61b09145b4bbaae9"),
+        Map.entry("net.minecraft.CrashReport","8cdc6f8dc0bb3ba60a8c5055979162e2e813ad02bb7cac18bde751040f1c521f"));
     private final Map<String,Boolean> checked=new HashMap<>();
     public boolean matches(String name) {
         return checked.computeIfAbsent(name,n->{
@@ -247,6 +308,46 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  &&matches("dev.ftb.mods.ftbchunks.client.FTBChunksClient");
             case "PerfJourneyMapImageUtilMixin" ->
                  matches(target)&&matches("journeymap.client.cartography.color.RGB");
+            case "PerfIrisLoadingCompleteMixin", "PerfLoadingOverlayMixin", "PerfKubeJsPackMixin",
+                 "PerfPuzzlesModelEventsMixin", "PerfMysticalTreeLoreMixin",
+                 "PerfTrustedSourceListMixin", "PerfCscVersionCheckerMixin",
+                 "PerfIrisAsyncLoadMixin", "PerfIrisFeatureFlagsMixin",
+                 "PerfVoxyAsyncUploaderMixin", "PerfSearchForSkillsMixin",
+                 "PerfGbfMolangCompilerMixin", "PerfIrisStandardMacrosMixin",
+                 "PerfIrisRenderSystemMixin",
+                 "PerfSpriteLoaderMipmapMixin", "PerfEmojifulClientHandlerMixin",
+                 "PerfYaclImageReloadMixin", "PerfJourneymapThemeMixin",
+                 "PerfWaterMediaLoaderMixin", "PerfWaterMediaPlayerMixin",
+                 "PerfWaterMediaImageMixin", "PerfWaterMediaCacheMixin",
+                 "PerfKubeJsClientPackMixin",
+                 "PerfModelBakeryPrewarmMixin", "PerfModelBakeEventHelperMixin",
+                 "PerfBakedModelOverrideRegistryAccessor", "PerfRefinedStorageBakeMixin",
+                 "PerfCrashReportPreloadMixin", "PerfSystemReportPreloadMixin",
+                 "PerfBackpackShapeMixin", "PerfMolangParserMixin",
+                 "PerfCitadelWebHelperMixin", "PerfSparkTrustedKeyStoreMixin",
+                 "PerfClientLanguageMixin", "PerfCreateModelSwapperMixin",
+                 "PerfClientModLoaderMixin", "PerfMcefUtilMixin",
+                 "PerfBlueprintRewardMixin", "PerfGameDataMixin",
+                 "PerfAllTheLeaksIssue10684Mixin", "PerfForgeLayerDefinitionsMixin",
+                 "PerfDynamicBakedModelProviderMixin", "PerfEmfManagerInitMixin",
+                 "PerfEtfManagerInitMixin", "PerfEntityModelSetMixin",
+                 "PerfStateDefinitionMixin", "PerfRadiumReflectionMixin",
+                 "PerfNativeImageAccessor" ->
+                 matches(target);
+            case "PerfMipmapFastMixin" ->
+                 matches(target)
+                 && matches("com.mojang.blaze3d.platform.NativeImage")
+                 && matches("me.jellysquid.mods.sodium.client.util.color.ColorSRGB")
+                 && matches("net.irisshaders.iris.mixin.bettermipmaps.MixinMipmapGenerator")
+                 && matches("net.irisshaders.iris.helpers.ColorSRGB");
+            case "PerfSpriteContentsTransparencyMixin" ->
+                 matches(target)
+                 && matches("com.mojang.blaze3d.platform.NativeImage")
+                 && matches("me.jellysquid.mods.sodium.client.util.color.ColorSRGB")
+                 && matches("me.jellysquid.mods.sodium.mixin.features.textures.mipmaps.SpriteContentsMixin")
+                 && matches("org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel");
+            case "PerfMinecraftStartupTickMixin" ->
+                 matches(target)&&matches("net.minecraft.client.gui.screens.LoadingOverlay");
             default -> false;
         };
     }
@@ -260,6 +361,9 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         String shortName=mixinClassName.substring(mixinClassName.lastIndexOf('.')+1);
         switch(shortName){
             case "PerfBlockOcclusionMixin"->EntryPostApplyPatches.patchBlockOcclusion(targetClass);
+            case "PerfStateDefinitionMixin"->EntryPostApplyPatches.patchStateDefinition(targetClass);
+            case "PerfMipmapFastMixin"->applyClientPatch("patchMipmapGenerator",targetClass);
+            case "PerfSpriteContentsTransparencyMixin"->applyClientPatch("patchSpriteContents",targetClass);
             case "PerfObeModelMixin"->applyClientPatch("patchBlockModelShaper",targetClass);
             case "PerfModelPartCubeMixin"->applyClientPatch("patchModelPartCube",targetClass);
             case "PerfEmfModelPartMixin"->applyClientPatch("patchEmfModelPart",targetClass);
@@ -267,6 +371,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfEmojiFontRendererMixin"->applyClientPatch("patchEmojiFontRenderer",targetClass);
             case "PerfChunkBuilderMeshingTaskMixin"->applyClientPatch("patchChunkBuilderMeshingTask",targetClass);
             case "PerfPalettedContainerMixin"->applyClientPatch("patchPalettedContainer",targetClass);
+            case "PerfGbfMolangCompilerMixin"->applyClientPatch("patchGbfMolangCompiler",targetClass);
+            case "PerfLoadingOverlayMixin"->applyClientPatch("patchLoadingOverlay",targetClass);
             default->{}
         }
     }

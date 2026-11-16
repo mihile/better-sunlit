@@ -63,5 +63,30 @@ public final class ApplyUpdate {
         if(failure!=null)throw failure;
         try{UpdateFiles.verify(target,release);}
         catch(Exception e){Files.copy(backup,target,StandardCopyOption.REPLACE_EXISTING);throw e;}
+        syncBundledBootAgent(game,target);
+    }
+
+    private static void syncBundledBootAgent(Path game,Path installedJar) {
+        try(var jar=new java.util.jar.JarFile(installedJar.toFile())){
+            var entry=jar.getJarEntry("assets/better_sunlit/sunlit-boot.jar");
+            if(entry==null)return;
+            byte[] bundled;
+            try(var in=jar.getInputStream(entry)){bundled=in.readAllBytes();}
+            if(bundled.length==0)return;
+            Path configDir=UpdateFiles.directory(game.resolve("config"));
+            Path bootTarget=configDir.resolve("sunlit-boot.jar");
+            if(Files.isSymbolicLink(bootTarget))return;
+            String expected=java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(bundled));
+            if(Files.isRegularFile(bootTarget,LinkOption.NOFOLLOW_LINKS)
+                    && UpdateFiles.sha(bootTarget).equals(expected)){
+                Files.deleteIfExists(configDir.resolve(".sunlit-boot.jar.staged"));
+                return;
+            }
+            UpdateFiles.writeBytes(bootTarget,bundled);
+            Files.deleteIfExists(configDir.resolve(".sunlit-boot.jar.staged"));
+        }catch(Exception ignored){
+            // Non-fatal: runtime BootAgentSync will retry on next client launch.
+        }
     }
 }

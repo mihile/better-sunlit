@@ -1,4 +1,5 @@
 from pathlib import Path
+import io
 import subprocess
 import sys
 import tempfile
@@ -29,11 +30,31 @@ class GuardTests(unittest.TestCase):
 
     def test_source_and_public_keys_are_allowed(self):
         guard.check_file('src/main/java/Example.java', b'class Example {}')
+        guard.check_file('boot-agent/src/dev/sunlit/bootagent/Agent.java', b'class Agent {}')
         guard.check_file('keys/client-public.der', guard.PUBLIC_DER_PREFIX + b'x'*32)
         for name in ('.env', 'server.properties', 'mods/example.jar', 'tools/notes.txt',
-                     'src/main/resources/token.pk8'):
+                     'src/main/resources/token.pk8', 'boot-agent/src/credentials.txt'):
             with self.subTest(name=name), self.assertRaises(RuntimeError):
                 guard.check_file(name, b'local data')
+
+    def test_embedded_boot_agent_is_inspected(self):
+        with tempfile.TemporaryDirectory(prefix='sunlit-guard-boot-') as directory:
+            jar = Path(directory)/'test.jar'
+            def write_boot(member, content):
+                nested = io.BytesIO()
+                with zipfile.ZipFile(nested, 'w') as archive:
+                    archive.writestr(member, content)
+                with zipfile.ZipFile(jar, 'w') as archive:
+                    archive.writestr('assets/better_sunlit/sunlit-boot.jar', nested.getvalue())
+            write_boot('dev/sunlit/bootagent/Agent.class', b'class bytes')
+            guard.check_release_jar(jar)
+            for name, data in (('local/secrets.txt', b'secret'),
+                               ('dev/sunlit/bootagent/Agent.class', b'ghp_'+b'C'*36),
+                               ('dev/sunlit/bootagent/../Other.class', b'class bytes')):
+                with self.subTest(name=name):
+                    write_boot(name, data)
+                    with self.assertRaises(RuntimeError):
+                        guard.check_release_jar(jar)
 
     def test_private_key_and_token_values_are_never_echoed(self):
         secret = b'ghp_' + b'A'*36

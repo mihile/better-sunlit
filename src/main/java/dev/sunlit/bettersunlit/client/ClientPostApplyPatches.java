@@ -351,6 +351,47 @@ public final class ClientPostApplyPatches {
         target.instructions.remove(n1);
         target.instructions.remove(n2);
         target.instructions.remove(n3);
+        return patchMathReadVariableOrConstant(cn);
+    }
+
+    private static boolean patchMathReadVariableOrConstant(ClassNode cn) {
+        MethodNode m = EntryPostApplyPatches.findMethod(
+                cn,
+                "readVariableOrConstant",
+                "(Ltraben/entity_model_features/models/animation/math/expression_tree/MathExpressionParser$RollingReader;)V");
+        if (m == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: readVariableOrConstant missing", cn.name);
+            return false;
+        }
+        for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode mi
+                    && EMF_RENDER_PERF.equals(mi.owner)
+                    && "parseFloatOrThrowFast".equals(mi.name)) {
+                return true;
+            }
+        }
+        MethodInsnNode parseFloatCall = null;
+        int count = 0;
+        for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode mi
+                    && mi.getOpcode() == Opcodes.INVOKESTATIC
+                    && "java/lang/Float".equals(mi.owner)
+                    && "parseFloat".equals(mi.name)
+                    && "(Ljava/lang/String;)F".equals(mi.desc)) {
+                parseFloatCall = mi;
+                count++;
+            }
+        }
+        if (count != 1 || parseFloatCall == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected parseFloat count {}", cn.name, count);
+            return false;
+        }
+        m.instructions.set(parseFloatCall, new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                EMF_RENDER_PERF,
+                "parseFloatOrThrowFast",
+                "(Ljava/lang/String;)F",
+                false));
         return true;
     }
 
@@ -764,5 +805,169 @@ public final class ClientPostApplyPatches {
             cur = cur.getNext();
         }
         return cur;
+    }
+
+    /**
+     * Replaces {@code BytecodeGen.compile(CompiledAst)} inside GBF's
+     * {@code MolangCompiler.compile(IValue)} with {@link GbfMolangPerf#wrapLazy(Object, Object)} so
+     * runtime expressions compile lazily on first evaluation instead of stalling resource reload.
+     */
+    public static void patchGbfMolangCompiler(ClassNode cn) {
+        if (cn == null) return;
+        final String iValueInternal = "com/eliotlash/mclib/math/IValue";
+        final String compileDesc = "(L" + iValueInternal + ";)L" + iValueInternal + ";";
+        final String genOwner = "com/moepus/gbf/molang/compiler/BytecodeGen";
+        final String genDesc = "(Lcom/moepus/gbf/molang/compiler/CompiledAst;)L" + iValueInternal + ";";
+        for (MethodNode mn : cn.methods) {
+            if (!"compile".equals(mn.name) || !compileDesc.equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof MethodInsnNode m
+                        && m.getOpcode() == Opcodes.INVOKESTATIC
+                        && genOwner.equals(m.owner)
+                        && "compile".equals(m.name)
+                        && genDesc.equals(m.desc)) {
+                    InsnList rep = new InsnList();
+                    rep.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    rep.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            "dev/sunlit/bettersunlit/client/GbfMolangPerf",
+                            "wrapLazy",
+                            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+                            false));
+                    rep.add(new TypeInsnNode(Opcodes.CHECKCAST, iValueInternal));
+                    mn.instructions.insertBefore(m, rep);
+                    mn.instructions.remove(m);
+                    mn.maxStack = Math.max(mn.maxStack + 1, 5);
+                    LOG.info("[BetterSunlit-Perf] Patched GBF MolangCompiler.compile for lazy bytecode gen");
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Redirects Drippy Loading Screen's merged {@code loadFontsDrippy()} on {@code LoadingOverlay}
+     * to asynchronous {@link DrippyFontPerf#loadFontsAsync()} so {@code FontManager.prepare(...).get()}
+     * never blocks the Render thread during startup.
+     */
+    public static void patchLoadingOverlay(ClassNode cn) {
+        if (cn == null) return;
+        for (MethodNode mn : cn.methods) {
+            if ("()V".equals(mn.desc)
+                    && ("loadFontsDrippy".equals(mn.name) || mn.name.endsWith("$loadFontsDrippy"))) {
+                mn.instructions.clear();
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        "dev/sunlit/bettersunlit/client/DrippyFontPerf",
+                        "loadFontsAsync",
+                        "()V",
+                        false));
+                mn.instructions.add(new InsnNode(Opcodes.RETURN));
+                mn.maxStack = 1;
+                mn.maxLocals = 1;
+                LOG.info("[BetterSunlit-Perf] Patched {}.{} for async font preparation", cn.name, mn.name);
+                return;
+            }
+        }
+    }
+
+    /** Adds a bulk generator only when Iris's exact four-pixel blend is already installed. */
+    public static boolean patchMipmapGenerator(ClassNode cn) {
+        if (cn == null) return false;
+        String imageArray = "[Lcom/mojang/blaze3d/platform/NativeImage;";
+        MethodNode target = EntryPostApplyPatches.findMethod(cn, "m_246246_", "(" + imageArray + "I)" + imageArray);
+        MethodNode blend = EntryPostApplyPatches.findMethod(cn, "m_118048_", "(IIIIZ)I");
+        if (target == null || blend == null || EntryPostApplyPatches.findMethod(cn, "weightedAverageColor", "(II)I") == null) return false;
+        for (AbstractInsnNode insn = target.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && "dev/sunlit/bettersunlit/client/SpriteMipmapPerf".equals(m.owner)
+                    && "generateMipLevelsFast".equals(m.name)) return true;
+        }
+        List<AbstractInsnNode> code = new ArrayList<>();
+        for (AbstractInsnNode insn = blend.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn.getOpcode() >= 0) code.add(insn);
+        }
+        int[] opcodes = {Opcodes.ILOAD, Opcodes.ILOAD, Opcodes.INVOKESTATIC, Opcodes.ILOAD,
+                Opcodes.ILOAD, Opcodes.INVOKESTATIC, Opcodes.INVOKESTATIC, Opcodes.IRETURN};
+        int[] vars = {0, 1, -1, 2, 3, -1, -1, -1};
+        if (code.size() != opcodes.length) return false;
+        for (int i = 0; i < opcodes.length; i++) {
+            AbstractInsnNode insn = code.get(i);
+            if (insn.getOpcode() != opcodes[i]) return false;
+            if (vars[i] >= 0 && (!(insn instanceof VarInsnNode v) || v.var != vars[i])) return false;
+            if (opcodes[i] == Opcodes.INVOKESTATIC && (!(insn instanceof MethodInsnNode m)
+                    || !cn.name.equals(m.owner) || !"weightedAverageColor".equals(m.name) || !"(II)I".equals(m.desc))) return false;
+        }
+        AbstractInsnNode first = target.instructions.getFirst();
+        while (first != null && first.getOpcode() < 0) first = first.getNext();
+        if (first == null) return false;
+        LabelNode fallback = new LabelNode();
+        InsnList fast = new InsnList();
+        fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        fast.add(new VarInsnNode(Opcodes.ILOAD, 1));
+        fast.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "dev/sunlit/bettersunlit/client/SpriteMipmapPerf",
+                "generateMipLevelsFast", "(" + imageArray + "I)" + imageArray, false));
+        fast.add(new InsnNode(Opcodes.DUP));
+        fast.add(new JumpInsnNode(Opcodes.IFNULL, fallback));
+        fast.add(new InsnNode(Opcodes.ARETURN));
+        fast.add(fallback);
+        fast.add(new FrameNode(Opcodes.F_SAME1, 0, null, 1, new Object[]{imageArray}));
+        fast.add(new InsnNode(Opcodes.POP));
+        target.instructions.insertBefore(first, fast);
+        target.maxStack = Math.max(target.maxStack, 2);
+        return true;
+    }
+
+    /**
+     * Prepends a bulk row-major fast path at the entry of Emberbium's
+     * {@code embeddium$processTransparentImages(NativeImage, boolean)}.
+     */
+    public static boolean patchSpriteContents(ClassNode cn) {
+        final String levelInternal = "org/embeddedt/embeddium/impl/render/chunk/sprite/SpriteTransparencyLevel";
+        final String levelDesc = "L" + levelInternal + ";";
+        final String fieldName = "embeddium$transparencyLevel";
+        final String methodName = "embeddium$processTransparentImages";
+        final String methodDesc = "(Lcom/mojang/blaze3d/platform/NativeImage;Z)V";
+        final String perfInternal = "dev/sunlit/bettersunlit/client/SpriteMipmapPerf";
+
+        MethodNode target = EntryPostApplyPatches.findMethod(cn, methodName, methodDesc);
+        if (target == null || target.instructions == null || !EntryPostApplyPatches.hasField(cn, fieldName, levelDesc)) {
+            return false;
+        }
+        for (AbstractInsnNode insn = target.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && perfInternal.equals(m.owner) && "processTransparentFast".equals(m.name)) {
+                return true;
+            }
+        }
+        AbstractInsnNode firstReal = target.instructions.getFirst();
+        while (firstReal != null && firstReal.getOpcode() < 0) {
+            firstReal = firstReal.getNext();
+        }
+        if (firstReal == null) {
+            return false;
+        }
+
+        LabelNode lFallback = new LabelNode();
+        InsnList fast = new InsnList();
+        fast.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        fast.add(new VarInsnNode(Opcodes.ILOAD, 2));
+        fast.add(new MethodInsnNode(Opcodes.INVOKESTATIC, perfInternal, "processTransparentFast",
+                "(Lcom/mojang/blaze3d/platform/NativeImage;Z)" + levelDesc, false));
+        fast.add(new InsnNode(Opcodes.DUP));
+        fast.add(new JumpInsnNode(Opcodes.IFNULL, lFallback));
+        fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        fast.add(new InsnNode(Opcodes.SWAP));
+        fast.add(new FieldInsnNode(Opcodes.PUTFIELD, cn.name, fieldName, levelDesc));
+        fast.add(new InsnNode(Opcodes.RETURN));
+        fast.add(lFallback);
+        fast.add(new FrameNode(Opcodes.F_SAME1, 0, null, 1, new Object[] { levelInternal }));
+        fast.add(new InsnNode(Opcodes.POP));
+
+        target.instructions.insertBefore(firstReal, fast);
+        target.maxStack = Math.max(target.maxStack, 3);
+        return true;
     }
 }
