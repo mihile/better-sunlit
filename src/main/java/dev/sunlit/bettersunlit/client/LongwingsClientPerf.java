@@ -32,6 +32,66 @@ public final class LongwingsClientPerf {
 
     private LongwingsClientPerf() {}
 
+    /**
+     * Thread-safe, reload- and EntityModelSet-scoped single-instance cache for stateless custom item renderers.
+     */
+    public static final class RendererCacheSlot<T> {
+        private volatile Object cachedModelSet;
+        private volatile long cachedEpoch = -1L;
+        private volatile T cachedRenderer;
+
+        public T getOrCreate(Object modelSetKey, long epoch, java.util.function.Supplier<T> factory) {
+            T existing = this.cachedRenderer;
+            if (existing != null && this.cachedEpoch == epoch && this.cachedModelSet == modelSetKey) {
+                return existing;
+            }
+            synchronized (this) {
+                existing = this.cachedRenderer;
+                if (existing != null && this.cachedEpoch == epoch && this.cachedModelSet == modelSetKey) {
+                    return existing;
+                }
+                T created = factory.get();
+                this.cachedModelSet = modelSetKey;
+                this.cachedEpoch = epoch;
+                this.cachedRenderer = created;
+                return created;
+            }
+        }
+
+        public void clear() {
+            this.cachedRenderer = null;
+            this.cachedModelSet = null;
+            this.cachedEpoch = -1L;
+        }
+    }
+
+    private static final RendererCacheSlot<net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer> BUTTERFLY_RENDERER =
+            new RendererCacheSlot<>();
+    private static final RendererCacheSlot<net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer> MOTH_RENDERER =
+            new RendererCacheSlot<>();
+    private static final RendererCacheSlot<net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer> CATCHING_NET_RENDERER =
+            new RendererCacheSlot<>();
+
+    private static Object currentEntityModelSet() {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.m_91087_();
+        return mc == null ? null : mc.m_167973_();
+    }
+
+    public static net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer getOrCreateButterflyRenderer(
+            java.util.function.Supplier<net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer> factory) {
+        return BUTTERFLY_RENDERER.getOrCreate(currentEntityModelSet(), reloadEpoch(), factory);
+    }
+
+    public static net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer getOrCreateMothRenderer(
+            java.util.function.Supplier<net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer> factory) {
+        return MOTH_RENDERER.getOrCreate(currentEntityModelSet(), reloadEpoch(), factory);
+    }
+
+    public static net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer getOrCreateCatchingNetRenderer(
+            java.util.function.Supplier<net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer> factory) {
+        return CATCHING_NET_RENDERER.getOrCreate(currentEntityModelSet(), reloadEpoch(), factory);
+    }
+
     private static final class TextureCache {
         final ConcurrentHashMap<ResourceLocation, Boolean> customPresence = new ConcurrentHashMap<>();
         final ConcurrentHashMap<String, ResourceLocation> butterflyEntity = new ConcurrentHashMap<>();
