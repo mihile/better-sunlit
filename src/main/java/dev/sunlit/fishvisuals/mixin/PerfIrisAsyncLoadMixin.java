@@ -1,11 +1,13 @@
 package dev.sunlit.fishvisuals.mixin;
 
+import dev.sunlit.bettersunlit.client.GlslTransformDiskCache;
 import dev.sunlit.bettersunlit.client.IrisShaderLoadPerf;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.features.FeatureFlags;
 import net.irisshaders.iris.gl.IrisRenderSystem;
 import net.irisshaders.iris.gl.shader.StandardMacros;
 import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
+import net.irisshaders.iris.shaderpack.DimensionId;
 import net.irisshaders.iris.shaderpack.ShaderPack;
 import net.irisshaders.iris.shaderpack.materialmap.NamespacedId;
 import net.minecraft.client.Minecraft;
@@ -36,7 +38,11 @@ public abstract class PerfIrisAsyncLoadMixin {
             flag.isUsable();
         }
         StandardMacros.createStandardEnvironmentDefines();
-        IrisShaderLoadPerf.startAsync(Iris::loadShaderpack);
+        IrisShaderLoadPerf.startAsync(() -> {
+            GlslTransformDiskCache.preload();
+            Iris.loadShaderpack();
+            Iris.getCurrentPack().ifPresent(pack -> pack.getProgramSet(DimensionId.OVERWORLD));
+        });
     }
 
     @Inject(method = "getCurrentPack()Ljava/util/Optional;", at = @At("HEAD"))

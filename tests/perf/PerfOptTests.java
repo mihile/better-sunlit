@@ -4553,5 +4553,114 @@ public final class PerfOptTests {
                 }
             }
         }
+
+        // 19. GlslTransformDiskCache: Iris & Colorwheel disk caching + key sensitivity + preload.
+        {
+            java.nio.file.Path tempGlsl = java.nio.file.Files.createTempDirectory("glsl_cache_test");
+            try {
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.setCacheDirForTests(tempGlsl);
+                var texMap = new it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap<
+                        net.irisshaders.iris.helpers.Tri<
+                                String,
+                                net.irisshaders.iris.gl.texture.TextureType,
+                                net.irisshaders.iris.shaderpack.texture.TextureStage>,
+                        String>();
+                texMap.put(
+                        new net.irisshaders.iris.helpers.Tri<>(
+                                "colortex0",
+                                net.irisshaders.iris.gl.texture.TextureType.TEXTURE_2D,
+                                net.irisshaders.iris.shaderpack.texture.TextureStage.DEFERRED),
+                        "u_colortex0");
+                var inputs = new java.util.EnumMap<net.irisshaders.iris.pipeline.transform.PatchShaderType, String>(
+                        net.irisshaders.iris.pipeline.transform.PatchShaderType.class);
+                inputs.put(net.irisshaders.iris.pipeline.transform.PatchShaderType.VERTEX, "void main(){}");
+                inputs.put(net.irisshaders.iris.pipeline.transform.PatchShaderType.FRAGMENT, "void main(){gl_FragData[0]=vec4(1.0);}");
+                var p1 = new net.irisshaders.iris.pipeline.transform.parameter.SodiumParameters(
+                        net.irisshaders.iris.pipeline.transform.Patch.SODIUM,
+                        texMap,
+                        net.irisshaders.iris.gl.blending.AlphaTest.ALWAYS,
+                        new net.irisshaders.iris.gl.state.ShaderAttributeInputs(true, true, false, true, true));
+                var p2 = new net.irisshaders.iris.pipeline.transform.parameter.SodiumParameters(
+                        net.irisshaders.iris.pipeline.transform.Patch.SODIUM,
+                        texMap,
+                        net.irisshaders.iris.gl.blending.AlphaTest.ALWAYS,
+                        new net.irisshaders.iris.gl.state.ShaderAttributeInputs(false, true, false, true, true));
+
+                String k1 = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.keyForIris("gbuffers_terrain", inputs, p1, false);
+                String k2 = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.keyForIris("gbuffers_terrain", inputs, p2, false);
+                String kDebug = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.keyForIris("gbuffers_terrain", inputs, p1, true);
+                assertTrue(k1 != null && !k1.equals(k2) && !k1.equals(kDebug),
+                        "Iris GLSL cache keys must distinguish attribute inputs and debug mode");
+
+                var irisOut = new java.util.EnumMap<net.irisshaders.iris.pipeline.transform.PatchShaderType, String>(
+                        net.irisshaders.iris.pipeline.transform.PatchShaderType.class);
+                irisOut.put(net.irisshaders.iris.pipeline.transform.PatchShaderType.VERTEX, "// patched vert");
+                irisOut.put(net.irisshaders.iris.pipeline.transform.PatchShaderType.FRAGMENT, "// patched frag");
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.putIris(k1, irisOut);
+
+                String ckStr = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.keyForClrwlString("vert", "void main(){}", false, 0, texMap);
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.putClrwlString(ckStr, "// clrwl vert");
+
+                String ckFrag = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.keyForClrwlFragment("void main(){}", true, false, 1, texMap);
+                var fragOut = new dev.djefrey.colorwheel.compile.transform.ClrwlTransformOutput("// clrwl frag", Map.of(0, "col0"));
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.putClrwlFragment(ckFrag, fragOut);
+
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.flushWritesForTests();
+                // Simulate fresh JVM startup preload from disk.
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.setCacheDirForTests(tempGlsl);
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.preload();
+
+                var irisLoaded = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.getIris(k1);
+                assertTrue(irisLoaded != null && "// patched vert".equals(irisLoaded.get(net.irisshaders.iris.pipeline.transform.PatchShaderType.VERTEX)),
+                        "Iris disk cache entry must roundtrip via preload");
+                assertEquals("// clrwl vert", dev.sunlit.bettersunlit.client.GlslTransformDiskCache.getClrwlString(ckStr),
+                        "Colorwheel string disk cache must roundtrip");
+                var fragLoaded = dev.sunlit.bettersunlit.client.GlslTransformDiskCache.getClrwlFragment(ckFrag);
+                assertTrue(fragLoaded != null && "// clrwl frag".equals(fragLoaded.code()) && "col0".equals(fragLoaded.outputs().get(0)),
+                        "Colorwheel fragment disk cache must roundtrip code and outputs");
+            } finally {
+                dev.sunlit.bettersunlit.client.GlslTransformDiskCache.setCacheDirForTests(null);
+                try (var walk = java.nio.file.Files.walk(tempGlsl)) {
+                    walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                        try { java.nio.file.Files.deleteIfExists(p); } catch (java.io.IOException ignored) {}
+                    });
+                }
+            }
+        }
+
+        // 20. EntryPostApplyPatches.patchEntityHorseman: instanceof AbstractHorse guard & fail-closed behavior.
+        {
+            ClassNode cn = new ClassNode();
+            cn.version = Opcodes.V17;
+            cn.access = Opcodes.ACC_PUBLIC;
+            cn.name = "net/minecraft/world/entity/Entity";
+            cn.superName = "java/lang/Object";
+            MethodNode mn = new MethodNode(Opcodes.ACC_PRIVATE, "modifyReturnValue$zbn000$onGetBoundingBox",
+                    "(Lnet/minecraft/world/phys/AABB;)Lnet/minecraft/world/phys/AABB;", null, null);
+            mn.instructions.add(new FieldInsnNode(Opcodes.GETSTATIC, "io/github/mortuusars/horseman/Config$Common",
+                    "HORSE_IN_BOAT", "Lnet/minecraftforge/common/ForgeConfigSpec$BooleanValue;"));
+            mn.instructions.add(new InsnNode(Opcodes.POP));
+            mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            mn.instructions.add(new InsnNode(Opcodes.ARETURN));
+            mn.maxStack = 1;
+            mn.maxLocals = 2;
+            cn.methods.add(mn);
+
+            assertTrue(dev.sunlit.bettersunlit.inline.EntryPostApplyPatches.patchEntityHorseman(cn),
+                    "patchEntityHorseman must succeed on expected Horseman callback");
+            assertTrue(dev.sunlit.bettersunlit.inline.EntryPostApplyPatches.patchEntityHorseman(cn),
+                    "patchEntityHorseman must be idempotent");
+            int instanceofCount = 0;
+            for (var insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof TypeInsnNode t && t.getOpcode() == Opcodes.INSTANCEOF
+                        && "net/minecraft/world/entity/animal/horse/AbstractHorse".equals(t.desc)) {
+                    instanceofCount++;
+                }
+            }
+            assertEquals(1, instanceofCount, "Exactly one AbstractHorse instanceof guard must be inserted");
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+            cn.accept(cw);
+            assertTrue(cw.toByteArray().length > 0, "Patched Horseman Entity callback must compute frames cleanly");
+        }
     }
 }

@@ -172,8 +172,14 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("me.jellysquid.mods.sodium.mixin.features.textures.mipmaps.SpriteContentsMixin","963ac5b9d50d987a79a0e1158685d916bca3d9607da669c9f98a809f8339a234"),
         Map.entry("net.irisshaders.iris.mixin.bettermipmaps.MixinMipmapGenerator","814594606a3ab92e06d006595ee999903c4ce5368a28c5d4271fd58389d474b3"),
         Map.entry("net.irisshaders.iris.helpers.ColorSRGB","0d428a754f753cc18bc62110c6e890d80a1cf73c4b6001922eae7f3db2854887"),
-        Map.entry("org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel","865ab5a6d9aa19111a26896a177c6d6b5a901497c9a0a1360e7c1c46800f94a1"));
+        Map.entry("org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel","865ab5a6d9aa19111a26896a177c6d6b5a901497c9a0a1360e7c1c46800f94a1"),
+        Map.entry("dev.djefrey.colorwheel.compile.transform.ClrwlTransformPatcher","f233bf6c71f929bf1fb298b58c1a8c5b32f641264360253989b1f8a1665219d9"),
+        Map.entry("dev.djefrey.colorwheel.compile.transform.ClrwlComputeTransformPatcher","12c69b06ee869d467e874a540a47ac1760a297dcc435a6c69d95a715ff5c6403"),
+        Map.entry("dev.djefrey.colorwheel.compile.transform.ClrwlTransformOutput","49991cc885a953beaf5a10c2352679c2550e586dd69053b47d1ac7c739b8eb73"),
+        Map.entry("net.minecraft.world.entity.Entity","4701eaf96a2590af14040385e0c90c0e8b3ef47d74c12c582cb3d489b5864f08"),
+        Map.entry("io.github.mortuusars.horseman.mixin.fits_in_boat.EntityMixin","000488d4b99c86e649bcc277ad0415e00bf61c7dced096f41e27164d5b6deeec"));
     private static final Map<String,String> ALT_HASHES=Map.ofEntries(
+        Map.entry("net.minecraft.world.entity.Entity","6e12e82aa70dd496466481e185a947d4f76c374592b10610fb957c4ca64cea14"),
         Map.entry("net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase","2d0e63e450caead1710a462bc66ce913083a8c22e25be23e4e1cdaddb5d73e12"),
         Map.entry("net.minecraft.client.renderer.block.BlockModelShaper","2f56551223f6b64b195d9cb898877019cc7ca084aaa83a5eca60381cbd80936d"),
         Map.entry("com.mojang.blaze3d.vertex.PoseStack","eab986aad817df3afd87407a3d45fe82e9a5602a275926dc01ac67b774e00e8b"),
@@ -311,8 +317,14 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfFtbChunksRegionDataMixin" ->
                  matches(target)&&matches("dev.ftb.mods.ftbchunks.client.map.MapRegion")
                  &&matches("dev.ftb.mods.ftbchunks.client.FTBChunksClient");
-            case "PerfJourneyMapImageUtilMixin" ->
+            case "PerfJourneyMapImageUtilMixin", "PerfJourneyMapRgbMixin" ->
                  matches(target)&&matches("journeymap.client.cartography.color.RGB");
+            case "PerfClrwlTransformPatcherMixin" ->
+                 matches(target)&&matches("dev.djefrey.colorwheel.compile.transform.ClrwlTransformOutput");
+            case "PerfClrwlComputeTransformPatcherMixin" ->
+                 matches(target);
+            case "PerfEntityHorsemanMixin" ->
+                 matches(target)&&matches("io.github.mortuusars.horseman.mixin.fits_in_boat.EntityMixin");
             case "PerfIrisLoadingCompleteMixin", "PerfLoadingOverlayMixin", "PerfKubeJsPackMixin",
                  "PerfPuzzlesModelEventsMixin", "PerfMysticalTreeLoreMixin",
                  "PerfTrustedSourceListMixin", "PerfCscVersionCheckerMixin",
@@ -367,6 +379,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         switch(shortName){
             case "PerfBlockOcclusionMixin"->EntryPostApplyPatches.patchBlockOcclusion(targetClass);
             case "PerfStateDefinitionMixin"->EntryPostApplyPatches.patchStateDefinition(targetClass);
+            case "PerfEntityHorsemanMixin"->EntryPostApplyPatches.patchEntityHorseman(targetClass);
             case "PerfMipmapFastMixin"->applyClientPatch("patchMipmapGenerator",targetClass);
             case "PerfSpriteContentsTransparencyMixin"->applyClientPatch("patchSpriteContents",targetClass);
             case "PerfObeModelMixin"->applyClientPatch("patchBlockModelShaper",targetClass);

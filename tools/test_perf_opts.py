@@ -18,8 +18,8 @@ assert SERVER_JAR.is_file(), f'Missing {SERVER_JAR}; build the server first'
 mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
 common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
-assert len(common_mixins) == 16, common_mixins
-assert len(client_mixins) == 94, client_mixins
+assert len(common_mixins) == 17, common_mixins
+assert len(client_mixins) == 97, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
