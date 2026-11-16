@@ -109,7 +109,7 @@ with zipfile.ZipFile(helper,'w',zipfile.ZIP_DEFLATED) as z:
  for f in sorted((CLASSES/'dev/sunlit/bettersunlit/update').glob('*.class')):z.write(f,f.relative_to(CLASSES).as_posix())
  for name in ['update-build.properties','update-public-key.der']:z.write(asset/name,'assets/better_sunlit/'+name)
 helperHash=hashlib.sha256(helper.read_bytes()).hexdigest();shutil.copy2(helper,asset/'update-helper.jar');(asset/'update-build.properties').write_text(identity+'helperSha256='+helperHash+'\n',encoding='utf8')
-meta=resources/'META-INF/mods.toml';text=meta.read_text(encoding='utf8').replace('version="1.2.4"','version="1.0.0"').replace('displayName="Sunlit Fishing Visuals"','displayName="Better Sunlit"');meta.write_text(text,encoding='utf8')
+meta=resources/'META-INF/mods.toml';text=meta.read_text(encoding='utf8').replace('version="1.2.4"','version="1.0.0"').replace('displayName="Sunlit Fishing Visuals"','displayName="Better Sunlit"').replace("description='''Physical fish flops, gradual fatigue and persistent fish models for successful Stardew catches. Pickup unlocks when the fresh phase ends. Preserves original quality, counts and item data. Configure with /realfishing.'''","description='''Sunlit Valley compatibility, startup/runtime optimizations, Korean localization, Stardew fishing visuals, and signed self-updater maintained by mihile.\nGitHub: https://github.com/mihile/better-sunlit'''");meta.write_text(text,encoding='utf8')
 if side=='server':
  mix=resources/'sunlit_fish_visuals.mixins.json';data=json.loads(mix.read_text());data.pop('client',None);mix.write_text(json.dumps(data,indent=2),encoding='utf8')
 jar=BUILD/'better-sunlit.jar'

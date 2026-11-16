@@ -1,0 +1,11 @@
+{
+  "build": 2026111605,
+  "label": "2026.11.16.5",
+  "title": "Better Sunlit 모드 정보 업데이트",
+  "changes": [
+    {
+      "title": "모드 메타데이터 및 GitHub 링크 정리",
+      "detail": "Prism Launcher 등에서 제작자(mihile), GitHub 저장소 링크 및 Better Sunlit 설명이 올바르게 표시되도록 mods.toml 메타데이터를 갱신했습니다."
+    }
+  ]
+}
