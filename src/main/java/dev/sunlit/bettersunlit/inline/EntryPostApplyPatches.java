@@ -702,4 +702,62 @@ public final class EntryPostApplyPatches {
         }
         return cur;
     }
+
+    /**
+     * Guards Horseman's {@code EntityMixin.onGetBoundingBox} {@code @ModifyReturnValue} callback
+     * behind an {@code instanceof AbstractHorse} check so non-horse entities do not perform a
+     * {@code ForgeConfigSpec$BooleanValue.get()} lookup on every {@code Entity.getBoundingBox()} call.
+     */
+    public static boolean patchEntityHorseman(ClassNode cn) {
+        if (cn == null) return false;
+        String desc = "(Lnet/minecraft/world/phys/AABB;)Lnet/minecraft/world/phys/AABB;";
+        String abstractHorse = "net/minecraft/world/entity/animal/horse/AbstractHorse";
+        MethodNode target = null;
+        for (MethodNode m : cn.methods) {
+            if (desc.equals(m.desc)
+                    && (m.access & Opcodes.ACC_STATIC) == 0
+                    && (m.name.endsWith("$onGetBoundingBox") || "onGetBoundingBox".equals(m.name))) {
+                target = m;
+                break;
+            }
+        }
+        if (target == null) {
+            return true;
+        }
+        AbstractInsnNode firstReal = null;
+        boolean sawHorseConfig = false;
+        for (AbstractInsnNode insn = target.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (firstReal == null && insn.getOpcode() >= 0) {
+                firstReal = insn;
+            }
+            if (insn instanceof TypeInsnNode t && t.getOpcode() == Opcodes.INSTANCEOF && abstractHorse.equals(t.desc)
+                    && firstReal != null && t.getPrevious() == firstReal) {
+                return true;
+            }
+            if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC
+                    && "io/github/mortuusars/horseman/Config$Common".equals(f.owner)
+                    && "HORSE_IN_BOAT".equals(f.name)) {
+                sawHorseConfig = true;
+            }
+        }
+        if (!sawHorseConfig || firstReal == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected Horseman onGetBoundingBox layout", cn.name);
+            return false;
+        }
+
+        LabelNode lRun = new LabelNode();
+        InsnList guard = new InsnList();
+        guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        guard.add(new TypeInsnNode(Opcodes.INSTANCEOF, abstractHorse));
+        guard.add(new JumpInsnNode(Opcodes.IFNE, lRun));
+        guard.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        guard.add(new InsnNode(Opcodes.ARETURN));
+        guard.add(lRun);
+        guard.add(new FrameNode(Opcodes.F_FULL, 2, new Object[] { cn.name, "net/minecraft/world/phys/AABB" }, 0, new Object[0]));
+
+        target.instructions.insertBefore(firstReal, guard);
+        target.maxStack = Math.max(target.maxStack, 1);
+        target.maxLocals = Math.max(target.maxLocals, 2);
+        return true;
+    }
 }

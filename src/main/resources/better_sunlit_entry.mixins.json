@@ -20,7 +20,8 @@
     "PerfCitadelWebHelperMixin",
     "PerfSparkTrustedKeyStoreMixin",
     "PerfStateDefinitionMixin",
-    "PerfRadiumReflectionMixin"
+    "PerfRadiumReflectionMixin",
+    "PerfEntityHorsemanMixin"
   ],
   "client": [
     "EntryJeiIngredientScopeMixin",
@@ -116,7 +117,10 @@
     "PerfSpriteContentsTransparencyMixin",
     "PerfRenderedButterflyItemExtMixin",
     "PerfRenderedMothItemExtMixin",
-    "PerfRenderedCatchingNetItemExtMixin"
+    "PerfRenderedCatchingNetItemExtMixin",
+    "PerfClrwlTransformPatcherMixin",
+    "PerfClrwlComputeTransformPatcherMixin",
+    "PerfJourneyMapRgbMixin"
   ],
   "injectors": {
     "defaultRequire": 1
