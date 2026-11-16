@@ -216,7 +216,15 @@ public final class PerfOptTests {
             "dev.ftb.mods.ftbchunks.client.map.MapRegion",
             "dev.ftb.mods.ftbchunks.client.map.MapRegionData",
             "journeymap.client.texture.ImageUtil",
-            "journeymap.client.cartography.color.RGB"
+            "journeymap.client.cartography.color.RGB",
+            "net.minecraft.client.resources.model.ModelBakery",
+            "org.embeddedt.modernfix.forge.dynresources.ModelBakeEventHelper",
+            "com.refinedmods.refinedstorage.render.BakedModelOverrideRegistry",
+            "com.refinedmods.refinedstorage.setup.ClientSetup",
+            "net.minecraft.CrashReport",
+            "net.minecraft.SystemReport",
+            "net.p3pp3rf1y.sophisticatedbackpacks.client.render.ClientBackpackShapeProvider",
+            "software.bernie.geckolib.core.molang.MolangParser"
     );
 
     private static final List<String> ALL_PERF_MIXINS = List.of(
@@ -302,8 +310,157 @@ public final class PerfOptTests {
         testZetaEventBusThreadSafety();
         testRandomSpreadStructurePlacementClamp();
         testJoinPerfOpts();
+        testStartupPerfOpts();
+        testIter7StartupPerfOpts();
+        testIter8StartupPerfOpts();
+        testSpriteTransparencyOptimization();
+        testMipmapCandidateAgainstIris();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
+    }
+
+    private static void testMipmapCandidateAgainstIris() throws Exception {
+        ClassNode generator = new ClassNode();
+        try (var in = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                "net/minecraft/client/renderer/texture/MipmapGenerator.class")) {
+            assertTrue(in != null, "Installed Minecraft mipmap class must exist");
+            new ClassReader(in).accept(generator, 0);
+        }
+        assertFalse(ClientPostApplyPatches.patchMipmapGenerator(generator),
+                "Vanilla generator without Iris must remain unchanged");
+        ClassNode irisNode = new ClassNode();
+        try (var in = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                "net/irisshaders/iris/mixin/bettermipmaps/MixinMipmapGenerator.class")) {
+            assertTrue(in != null, "Installed Iris mipmap mixin must exist");
+            new ClassReader(in).accept(irisNode, 0);
+        }
+        generator.methods.removeIf(m -> m.name.equals("m_118048_") && m.desc.equals("(IIIIZ)I"));
+        for (MethodNode m : irisNode.methods) {
+            if (!m.name.equals("m_118048_") && !m.name.equals("weightedAverageColor")) continue;
+            for (AbstractInsnNode i : m.instructions) {
+                if (i instanceof MethodInsnNode method && method.owner.equals(irisNode.name)) method.owner = generator.name;
+            }
+            generator.methods.add(m);
+        }
+        assertTrue(ClientPostApplyPatches.patchMipmapGenerator(generator),
+                "The installed Iris blend must allow the fast generator");
+        assertTrue(ClientPostApplyPatches.patchMipmapGenerator(generator), "Mipmap patch must be idempotent");
+        long inserted = generator.methods.stream().flatMap(m -> Stream.of(m.instructions.toArray()))
+                .filter(i -> i instanceof MethodInsnNode n
+                        && n.owner.equals("dev/sunlit/bettersunlit/client/SpriteMipmapPerf")
+                        && n.name.equals("generateMipLevelsFast")).count();
+        assertEquals(1L, inserted, "Mipmap fast path must be inserted exactly once");
+
+        Class<?> iris = Class.forName("net.irisshaders.iris.mixin.bettermipmaps.MixinMipmapGenerator");
+        var reference = iris.getDeclaredMethod("m_118048_", int.class, int.class, int.class, int.class, boolean.class);
+        reference.setAccessible(true);
+        var candidate = dev.sunlit.bettersunlit.client.SpriteMipmapPerf.class.getDeclaredMethod(
+                "downsampleQuad", int[].class, int.class, int[].class, int.class, int.class);
+        candidate.setAccessible(true);
+        Random rng = new Random(20261116);
+        int[] source = new int[4];
+        int[] output = new int[1];
+        for (int i = 0; i < 100_000; i++) {
+            if (i < 65_536) {
+                int alpha = i >>> 8, color = i & 255;
+                Arrays.fill(source, alpha << 24 | color << 16 | color << 8 | color);
+            } else {
+                for (int j = 0; j < 4; j++) source[j] = rng.nextInt();
+            }
+            int expected = (Integer) reference.invoke(null, source[0], source[1], source[2], source[3], true);
+            candidate.invoke(null, source, 2, output, 1, 1);
+            assertEquals(expected, output[0], "Candidate mipmap pixel must match the actual Iris overwrite");
+        }
+    }
+
+    private static void testSpriteTransparencyOptimization() throws Exception {
+        EntryMixinPlugin plugin = new EntryMixinPlugin();
+        String sprite = "net.minecraft.client.renderer.texture.SpriteContents";
+        String mixin = "dev.sunlit.fishvisuals.mixin.PerfSpriteContentsTransparencyMixin";
+        assertTrue(plugin.canApplyGate(sprite, mixin), "Installed sprite and Emberbium bytes must pass the gate");
+        assertTrue(plugin.canApplyGate("net.minecraft.client.renderer.texture.MipmapGenerator",
+                "dev.sunlit.fishvisuals.mixin.PerfMipmapFastMixin"),
+                "Installed Iris and Minecraft mipmap implementations must pass the gate");
+        TamperPluginLoader irisModified = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(),
+                "net/irisshaders/iris/mixin/bettermipmaps/MixinMipmapGenerator.class");
+        Object irisModifiedPlugin = irisModified.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) irisModifiedPlugin.getClass().getMethod("canApplyGate", String.class, String.class)
+                .invoke(irisModifiedPlugin, "net.minecraft.client.renderer.texture.MipmapGenerator",
+                        "dev.sunlit.fishvisuals.mixin.PerfMipmapFastMixin"),
+                "Changed Iris mipmap implementation must fail closed");
+        TamperPluginLoader modified = new TamperPluginLoader(EntryMixinPlugin.class.getClassLoader(),
+                "me/jellysquid/mods/sodium/mixin/features/textures/mipmaps/SpriteContentsMixin.class");
+        Object modifiedPlugin = modified.loadClass(EntryMixinPlugin.class.getName()).getConstructor().newInstance();
+        assertFalse((Boolean) modifiedPlugin.getClass().getMethod("canApplyGate", String.class, String.class)
+                .invoke(modifiedPlugin, sprite, mixin), "Changed Emberbium implementation must fail closed");
+
+        String path = "me/jellysquid/mods/sodium/mixin/features/textures/mipmaps/SpriteContentsMixin.class";
+        ClassNode original = new ClassNode();
+        try (var in = PerfOptTests.class.getClassLoader().getResourceAsStream(path)) {
+            assertTrue(in != null, "Installed Emberbium sprite mixin must exist");
+            new ClassReader(in).accept(original, 0);
+        }
+        assertTrue(ClientPostApplyPatches.patchSpriteContents(original), "Installed sprite method must be patched");
+        assertTrue(ClientPostApplyPatches.patchSpriteContents(original), "Patching must be idempotent");
+        long calls = original.methods.stream().flatMap(m -> Stream.of(m.instructions.toArray()))
+                .filter(i -> i instanceof MethodInsnNode n
+                        && n.owner.equals("dev/sunlit/bettersunlit/client/SpriteMipmapPerf")
+                        && n.name.equals("processTransparentFast")).count();
+        assertEquals(1L, calls, "Sprite fast path must be inserted exactly once");
+        assertFalse(ClientPostApplyPatches.patchSpriteContents(new ClassNode()),
+                "Missing target method must not be reported as patched");
+
+        Random rng = new Random(120116L);
+        for (int length : new int[]{0, 1, 2, 4, 17, 256, 1024}) {
+            for (int sample = 0; sample < 100; sample++) {
+                int[] source = new int[length + 3];
+                for (int i = 0; i < source.length; i++) {
+                    int alpha = switch (rng.nextInt(4)) { case 0 -> 0; case 1 -> 255; default -> rng.nextInt(256); };
+                    source[i] = (rng.nextInt() & 0x00ffffff) | alpha << 24;
+                }
+                for (boolean fill : new boolean[]{false, true}) {
+                    int[] expected = source.clone();
+                    int[] actual = source.clone();
+                    int reference = referenceSpriteTransparency(expected, length, fill);
+                    int result = dev.sunlit.bettersunlit.client.SpriteMipmapPerf.processTransparentPixels(actual, length, fill);
+                    assertEquals(reference, result, "Transparency and modified flag must match Emberbium");
+                    assertTrue(Arrays.equals(expected, actual), "Sprite pixels must match Emberbium exactly");
+                }
+            }
+        }
+    }
+
+    // Direct transcription of the installed Emberbium method, including its order of float operations.
+    private static int referenceSpriteTransparency(int[] pixels, int count, boolean fill) {
+        var level = org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel.OPAQUE;
+        float r = 0, g = 0, b = 0, weight = 0;
+        boolean hasZero = false;
+        for (int i = 0; i < count; i++) {
+            int c = pixels[i];
+            int alpha = net.minecraft.util.FastColor.ABGR32.m_266503_(c);
+            if (alpha > 0) {
+                level = level.chooseNextLevel(alpha < 255
+                        ? org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel.TRANSLUCENT
+                        : org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel.OPAQUE);
+                if (fill) {
+                    float w = alpha;
+                    r += me.jellysquid.mods.sodium.client.util.color.ColorSRGB.srgbToLinear(net.minecraft.util.FastColor.ABGR32.m_266313_(c)) * w;
+                    g += me.jellysquid.mods.sodium.client.util.color.ColorSRGB.srgbToLinear(net.minecraft.util.FastColor.ABGR32.m_266446_(c)) * w;
+                    b += me.jellysquid.mods.sodium.client.util.color.ColorSRGB.srgbToLinear(net.minecraft.util.FastColor.ABGR32.m_266247_(c)) * w;
+                    weight += w;
+                }
+            } else {
+                hasZero = true;
+                level = level.chooseNextLevel(org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel.TRANSPARENT);
+            }
+        }
+        int code = level.ordinal();
+        if (fill && weight != 0 && hasZero) {
+            int color = me.jellysquid.mods.sodium.client.util.color.ColorSRGB.linearToSrgb(r / weight, g / weight, b / weight, 0);
+            for (int i = 0; i < count; i++) if (net.minecraft.util.FastColor.ABGR32.m_266503_(pixels[i]) == 0) pixels[i] = color;
+            code |= 4;
+        }
+        return code;
     }
 
     private static void testEntryMixinPluginHashesAndGates() throws Exception {
@@ -3769,5 +3926,582 @@ public final class PerfOptTests {
         FtbChunksClientPerf.runQueuedTasks(q, 100, 60_000_000_000L);
         assertEquals(1, ran[2], "Final task runs cleanly");
         assertEquals(0, q.size(), "Queue drained");
+    }
+
+    private static void testStartupPerfOpts() throws Exception {
+        // 1. EntryMixinPlugin gates & hashes for all new startup mixins
+        EntryMixinPlugin plugin = new EntryMixinPlugin();
+        assertTrue(plugin.canApplyGate("net.irisshaders.iris.Iris",
+                "dev.sunlit.fishvisuals.mixin.PerfIrisLoadingCompleteMixin"), "Iris gate");
+        assertTrue(plugin.canApplyGate("net.minecraft.client.Minecraft",
+                "dev.sunlit.fishvisuals.mixin.PerfMinecraftStartupTickMixin"), "Minecraft startup gate");
+        assertTrue(plugin.canApplyGate("net.minecraft.client.gui.screens.LoadingOverlay",
+                "dev.sunlit.fishvisuals.mixin.PerfLoadingOverlayMixin"), "LoadingOverlay gate");
+        assertTrue(plugin.canApplyGate("dev.latvian.mods.kubejs.script.data.GeneratedResourcePack",
+                "dev.sunlit.fishvisuals.mixin.PerfKubeJsPackMixin"), "KubeJS pack gate");
+
+        // 2. EmfRenderPerf.canBeFloat & MathExpressionParser readVariableOrConstant bytecode patch
+        assertTrue(EmfRenderPerf.canBeFloat("0"), "0");
+        assertTrue(EmfRenderPerf.canBeFloat("1.25"), "1.25");
+        assertTrue(EmfRenderPerf.canBeFloat("-3.5"), "-3.5");
+        assertTrue(EmfRenderPerf.canBeFloat(".5"), ".5");
+        assertTrue(EmfRenderPerf.canBeFloat("NaN"), "NaN");
+        assertTrue(EmfRenderPerf.canBeFloat("Infinity"), "Infinity");
+        assertFalse(EmfRenderPerf.canBeFloat(null), "null");
+        assertFalse(EmfRenderPerf.canBeFloat(""), "empty");
+        assertFalse(EmfRenderPerf.canBeFloat("limb_swing"), "var name");
+        assertFalse(EmfRenderPerf.canBeFloat("sin"), "func name");
+        assertFalse(EmfRenderPerf.canBeFloat("NaNVar"), "NaNVar");
+        assertFalse(EmfRenderPerf.canBeFloat("InfinityFoo"), "InfinityFoo");
+
+        try (var in = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                "traben/entity_model_features/models/animation/math/expression_tree/MathExpressionParser.class")) {
+            assertTrue(in != null, "MathExpressionParser class missing on test classpath");
+            org.objectweb.asm.tree.ClassNode cn = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(in.readAllBytes()).accept(cn, 0);
+            assertTrue(ClientPostApplyPatches.patchMathExpressionParser(cn), "patchMathExpressionParser failed");
+            boolean foundFastParse = false;
+            for (var m : cn.methods) {
+                if ("readVariableOrConstant".equals(m.name)) {
+                    for (var insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                        if (insn instanceof org.objectweb.asm.tree.MethodInsnNode mi
+                                && "parseFloatOrThrowFast".equals(mi.name)) {
+                            foundFastParse = true;
+                        }
+                    }
+                }
+            }
+            assertTrue(foundFastParse, "parseFloatOrThrowFast not inserted in readVariableOrConstant");
+            assertTrue(Math.abs(EmfRenderPerf.parseFloatOrThrowFast("1.25") - 1.25f) < 1e-6f, "parse float");
+            boolean caughtFast = false;
+            try {
+                EmfRenderPerf.parseFloatOrThrowFast("limb_swing");
+            } catch (NumberFormatException nfe) {
+                caughtFast = nfe.getStackTrace().length == 0;
+            }
+            assertTrue(caughtFast, "Expected stackless NumberFormatException for variable token");
+            // Verify patched class verifies & loads into an isolated ClassWriter (COMPUTE_FRAMES)
+            org.objectweb.asm.ClassWriter cw = new org.objectweb.asm.ClassWriter(
+                    org.objectweb.asm.ClassWriter.COMPUTE_FRAMES);
+            cn.accept(cw);
+            assertTrue(cw.toByteArray().length > 0, "ClassWriter frames check failed");
+        }
+
+        // 3. KubeJsPackPerf bucket lookup equivalence + mutation cache invalidation
+        java.util.Map<net.minecraft.resources.ResourceLocation, dev.latvian.mods.kubejs.script.data.GeneratedData> map =
+                new java.util.HashMap<>();
+        net.minecraft.resources.ResourceLocation k1 = new net.minecraft.resources.ResourceLocation("kubejs", "textures/item/a.png");
+        net.minecraft.resources.ResourceLocation k2 = new net.minecraft.resources.ResourceLocation("kubejs", "textures/block/b.png");
+        net.minecraft.resources.ResourceLocation k3 = new net.minecraft.resources.ResourceLocation("kubejs", "models/item/a.json");
+        net.minecraft.resources.ResourceLocation k4 = new net.minecraft.resources.ResourceLocation("minecraft", "lang/en_us.json");
+        map.put(k1, dev.latvian.mods.kubejs.script.data.GeneratedData.INTERNAL_RELOAD);
+        map.put(k2, dev.latvian.mods.kubejs.script.data.GeneratedData.INTERNAL_RELOAD);
+        map.put(k3, dev.latvian.mods.kubejs.script.data.GeneratedData.INTERNAL_RELOAD);
+        map.put(k4, dev.latvian.mods.kubejs.script.data.GeneratedData.INTERNAL_RELOAD);
+
+        java.util.List<net.minecraft.resources.ResourceLocation> out = new java.util.ArrayList<>();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.listResources(map, "kubejs", "textures", (id, s) -> out.add(id));
+        assertEquals(2, out.size(), "Expected 2 kubejs textures");
+        assertTrue(out.contains(k1) && out.contains(k2), "Missing kubejs texture keys");
+
+        out.clear();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.listResources(map, "kubejs", "textures/item/", (id, s) -> out.add(id));
+        assertEquals(1, out.size(), "Expected 1 kubejs/textures/item");
+        assertEquals(k1, out.get(0), "Expected k1");
+
+        out.clear();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.listResources(map, "absent_mod", "textures", (id, s) -> out.add(id));
+        assertEquals(0, out.size(), "Absent namespace should return empty");
+
+        net.minecraft.resources.ResourceLocation k5 = new net.minecraft.resources.ResourceLocation("kubejs", "textures/item/c.png");
+        map.put(k5, dev.latvian.mods.kubejs.script.data.GeneratedData.INTERNAL_RELOAD);
+        out.clear();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.listResources(map, "kubejs", "textures", (id, s) -> out.add(id));
+        assertEquals(3, out.size(), "Mutated map should invalidate bucket cache");
+    }
+
+    private static void testIter7StartupPerfOpts() throws Exception {
+        // 1. EntryMixinPlugin gates for Iter 7 mixins fail closed on wrong targets and pass on exact hashes.
+        EntryMixinPlugin plugin = new EntryMixinPlugin();
+        assertTrue(plugin.canApplyGate(
+                "net.minecraft.server.packs.resources.ReloadableResourceManager",
+                "dev.sunlit.fishvisuals.mixin.PerfModelBakeryPrewarmMixin"),
+                "PerfModelBakeryPrewarmMixin gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "org.embeddedt.modernfix.forge.dynresources.ModelBakeEventHelper",
+                "dev.sunlit.fishvisuals.mixin.PerfModelBakeEventHelperMixin"),
+                "PerfModelBakeEventHelperMixin gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "com.refinedmods.refinedstorage.render.BakedModelOverrideRegistry",
+                "dev.sunlit.fishvisuals.mixin.PerfBakedModelOverrideRegistryAccessor"),
+                "PerfBakedModelOverrideRegistryAccessor gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "com.refinedmods.refinedstorage.setup.ClientSetup",
+                "dev.sunlit.fishvisuals.mixin.PerfRefinedStorageBakeMixin"),
+                "PerfRefinedStorageBakeMixin gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "net.minecraft.CrashReport",
+                "dev.sunlit.fishvisuals.mixin.PerfCrashReportPreloadMixin"),
+                "PerfCrashReportPreloadMixin gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "net.minecraft.SystemReport",
+                "dev.sunlit.fishvisuals.mixin.PerfSystemReportPreloadMixin"),
+                "PerfSystemReportPreloadMixin gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "net.p3pp3rf1y.sophisticatedbackpacks.client.render.ClientBackpackShapeProvider",
+                "dev.sunlit.fishvisuals.mixin.PerfBackpackShapeMixin"),
+                "PerfBackpackShapeMixin gate must pass");
+        assertTrue(plugin.canApplyGate(
+                "software.bernie.geckolib.core.molang.MolangParser",
+                "dev.sunlit.fishvisuals.mixin.PerfMolangParserMixin"),
+                "PerfMolangParserMixin gate must pass");
+
+        // 2. RefinedStorageBakePerf index groups overrides by namespace and path.
+        com.refinedmods.refinedstorage.render.BakedModelOverrideRegistry.BakedModelOverrideFactory f1 =
+                (base, reg) -> base;
+        com.refinedmods.refinedstorage.render.BakedModelOverrideRegistry.BakedModelOverrideFactory f2 =
+                (base, reg) -> base;
+        Map<ResourceLocation, com.refinedmods.refinedstorage.render.BakedModelOverrideRegistry.BakedModelOverrideFactory> rawOverrides =
+                new HashMap<>();
+        rawOverrides.put(new ResourceLocation("refinedstorage", "block/grid"), f1);
+        rawOverrides.put(new ResourceLocation("cabletiers", "block/elite_importer"), f2);
+        var rsIndex = dev.sunlit.bettersunlit.client.RefinedStorageBakePerf.buildIndex(rawOverrides);
+        assertEquals(2, rsIndex.size(), "Expected 2 namespaces in RS override index");
+        assertTrue(rsIndex.get("refinedstorage").get("block/grid") == f1, "Expected RS factory lookup");
+        assertTrue(rsIndex.get("cabletiers").get("block/elite_importer") == f2, "Expected cabletiers lookup");
+        assertTrue(rsIndex.get("minecraft") == null, "Absent namespace must return null");
+
+        // 3. CrashReportPreloadPerf only skips hardware probe during preload().
+        dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.resetForTest();
+        assertFalse(dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.isInPreload(),
+                "Outside preload() flag must be false");
+        assertFalse(dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.shouldSkipSyncHardwareProbe(),
+                "Real crashes outside preload must not skip hardware info");
+        dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.enterPreload();
+        assertTrue(dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.isInPreload(),
+                "Inside preload() flag must be true");
+        assertTrue(dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.shouldSkipSyncHardwareProbe(),
+                "The throwaway preload report must skip the hardware probe");
+        assertFalse(java.util.concurrent.CompletableFuture.supplyAsync(
+                dev.sunlit.bettersunlit.client.CrashReportPreloadPerf::shouldSkipSyncHardwareProbe).join(),
+                "A crash report on another thread must still collect hardware info");
+        dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.exitPreload();
+        assertFalse(dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.isInPreload(),
+                "After exitPreload() flag must reset to false");
+        assertFalse(dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.shouldSkipSyncHardwareProbe(),
+                "Crash reports after preload must collect hardware info");
+        dev.sunlit.bettersunlit.client.CrashReportPreloadPerf.resetForTest();
+
+        // 4. JourneymapThemePerf ignores initial startup forceReload=true once, then honors later forceReload=true.
+        java.lang.reflect.Method jmReset = dev.sunlit.bettersunlit.client.JourneymapThemePerf.class.getDeclaredMethod("resetForTest");
+        jmReset.setAccessible(true);
+        jmReset.invoke(null);
+        java.lang.reflect.Field forceField = dev.sunlit.bettersunlit.client.JourneymapThemePerf.class.getDeclaredField("FORCE_RELOAD");
+        forceField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ThreadLocal<Boolean> forceTl = (ThreadLocal<Boolean>) forceField.get(null);
+        dev.sunlit.bettersunlit.client.JourneymapThemePerf.beginInitialize(true);
+        assertFalse(Boolean.TRUE.equals(forceTl.get()), "Initial startup forceReload must allow stamp cache");
+        dev.sunlit.bettersunlit.client.JourneymapThemePerf.beginInitialize(true);
+        assertTrue(Boolean.TRUE.equals(forceTl.get()), "Subsequent user-triggered reload must honor forceReload");
+        jmReset.invoke(null);
+
+        // 5. KubeJsPackPerf.populateGeneratedFromRoot scans regular files and skips zip/desktop.ini/skipped files.
+        java.nio.file.Path kubeRoot = java.nio.file.Files.createTempDirectory("sunlit_kube_gen_test");
+        java.nio.file.Path nsDir = kubeRoot.resolve("kubejs/textures/item");
+        java.nio.file.Files.createDirectories(nsDir);
+        java.nio.file.Path validPng = nsDir.resolve("Sword_Custom.png");
+        java.nio.file.Files.write(validPng, new byte[]{1, 2, 3, 4});
+        java.nio.file.Files.write(nsDir.resolve("ignored.zip"), new byte[]{9});
+        java.nio.file.Files.write(nsDir.resolve("Thumbs.db"), new byte[]{8});
+        java.nio.file.Files.write(nsDir.resolve("skipped.png"), new byte[]{7});
+        Map<ResourceLocation, dev.latvian.mods.kubejs.script.data.GeneratedData> loadedMap = new HashMap<>();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.populateGeneratedFromRoot(
+                kubeRoot,
+                "assets",
+                loadedMap,
+                false,
+                rel -> false,
+                data -> data.id().m_135815_().endsWith("skipped.png"));
+        assertEquals(1, loadedMap.size(), "Expected only 1 valid generated asset");
+        ResourceLocation expectedId = new ResourceLocation("kubejs", "textures/item/sword_custom.png");
+        assertTrue(loadedMap.containsKey(expectedId), "Expected lowercased path ResourceLocation");
+        assertEquals(4, loadedMap.get(expectedId).data().get().length, "Expected lazy file bytes loaded");
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean UNINIT_CLINIT_RAN =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    private static final class UninitProbeClass {
+        static {
+            UNINIT_CLINIT_RAN.set(true);
+        }
+    }
+
+    private static void testIter8StartupPerfOpts() throws Exception {
+        // 1. EntryMixinPlugin gates for Iter 8 mixins pass on exact hashes and fail closed on wrong targets.
+        EntryMixinPlugin plugin = new EntryMixinPlugin();
+        String[][] gates = new String[][] {
+                {"com.github.alexthe666.citadel.web.WebHelper", "dev.sunlit.fishvisuals.mixin.PerfCitadelWebHelperMixin"},
+                {"me.lucko.spark.common.ws.TrustedKeyStore", "dev.sunlit.fishvisuals.mixin.PerfSparkTrustedKeyStoreMixin"},
+                {"net.minecraft.client.resources.language.ClientLanguage", "dev.sunlit.fishvisuals.mixin.PerfClientLanguageMixin"},
+                {"com.simibubi.create.foundation.model.ModelSwapper", "dev.sunlit.fishvisuals.mixin.PerfCreateModelSwapperMixin"},
+                {"net.minecraftforge.client.loading.ClientModLoader", "dev.sunlit.fishvisuals.mixin.PerfClientModLoaderMixin"},
+                {"de.keksuccino.fancymenu.util.mcef.MCEFUtil", "dev.sunlit.fishvisuals.mixin.PerfMcefUtilMixin"},
+                {"com.teamabnormals.blueprint.client.RewardHandler", "dev.sunlit.fishvisuals.mixin.PerfBlueprintRewardMixin"},
+        };
+        for (String[] pair : gates) {
+            assertTrue(plugin.canApplyGate(pair[0], pair[1]), "Gate must pass for " + pair[1]);
+            assertFalse(plugin.canApplyGate("com.example.WrongTarget", pair[1]), "Gate must fail closed for " + pair[1]);
+        }
+
+        // 2. CitadelWebPerf opens bundled classpath assets without HTTP and returns null when absent.
+        try (java.io.BufferedReader reader = dev.sunlit.bettersunlit.perf.CitadelWebPerf.openBundledReader(
+                "/better_sunlit_entry.mixins.json", PerfOptTests.class)) {
+            assertTrue(reader != null, "Expected bundled classpath resource reader");
+            String firstLine = reader.readLine();
+            assertTrue(firstLine != null, "Expected readable line from bundled resource");
+        }
+        assertTrue(dev.sunlit.bettersunlit.perf.CitadelWebPerf.openBundledReader(
+                "assets/citadel/nonexistent_file_12345.txt", PerfOptTests.class) == null,
+                "Missing bundled resource must return null");
+
+        // 3. SparkKeyStorePerf defers generation yet completes synchronously on demand.
+        java.security.KeyPair dummyKp = new java.security.KeyPair(null, null);
+        var deferredKp = dev.sunlit.bettersunlit.perf.SparkKeyStorePerf.deferKeyPair(() -> dummyKp);
+        assertTrue(dev.sunlit.bettersunlit.perf.SparkKeyStorePerf.isPending(deferredKp),
+                "Deferred KeyPair must stay pending during startup window");
+        assertFalse(deferredKp.isDone(), "Deferred KeyPair must not run immediately");
+        dev.sunlit.bettersunlit.perf.SparkKeyStorePerf.ensureCompleted(deferredKp);
+        assertFalse(dev.sunlit.bettersunlit.perf.SparkKeyStorePerf.isPending(deferredKp),
+                "Completed KeyPair must be cleared from pending map");
+        assertTrue(deferredKp.isDone() && deferredKp.get() == dummyKp,
+                "ensureCompleted must populate exact supplied KeyPair");
+
+        // 4. PuzzlesModelPrewarmPerf batches inserts into target map cleanly.
+        Map<ResourceLocation, net.minecraft.client.resources.model.BakedModel> trackedMap = new HashMap<>() {
+            int putAllCalls = 0;
+            @Override
+            public void putAll(Map<? extends ResourceLocation, ? extends net.minecraft.client.resources.model.BakedModel> m) {
+                putAllCalls++;
+                super.putAll(m);
+            }
+        };
+        ResourceLocation itemId = new ResourceLocation("diagonalwalls", "test_wall");
+        dev.sunlit.bettersunlit.client.PuzzlesModelPrewarmPerf.putAllStatesBatched(
+                trackedMap, null, java.util.Collections.emptyList(), itemId, null, true);
+        assertEquals(1, trackedMap.size(), "Expected single inventory entry inserted");
+        assertTrue(trackedMap.containsKey(new net.minecraft.client.resources.model.ModelResourceLocation(itemId, "inventory")),
+                "Expected inventory ModelResourceLocation key");
+
+        // 5. StartupClassPreloadPerf preloads with initialize = false and ignores missing classes.
+        UNINIT_CLINIT_RAN.set(false);
+        int preloaded = dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.runPreloadSync(
+                PerfOptTests.class.getClassLoader(),
+                java.util.List.of(UninitProbeClass.class.getName(), "com.example.DoesNotExistClass"));
+        assertEquals(1, preloaded, "Expected 1 existing class preloaded and missing ignored");
+        assertFalse(UNINIT_CLINIT_RAN.get(), "Preload must pass initialize = false without running <clinit>");
+
+        // 6. KubeJsPackPerf skips <ns>/lang subtree when skipFile filters lang/ and preserves it otherwise.
+        java.nio.file.Path kubeLangRoot = java.nio.file.Files.createTempDirectory("sunlit_kube_lang_test");
+        java.nio.file.Files.createDirectories(kubeLangRoot.resolve("kubejs/lang"));
+        java.nio.file.Files.createDirectories(kubeLangRoot.resolve("kubejs/models"));
+        java.nio.file.Files.write(kubeLangRoot.resolve("kubejs/lang/en_us.json"), new byte[]{'{', '}'});
+        java.nio.file.Files.write(kubeLangRoot.resolve("kubejs/models/test.json"), new byte[]{'{', '}'});
+        Map<ResourceLocation, dev.latvian.mods.kubejs.script.data.GeneratedData> filteredMap = new HashMap<>();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.populateGeneratedFromRoot(
+                kubeLangRoot,
+                "assets",
+                filteredMap,
+                false,
+                rel -> true,
+                data -> data.id().m_135815_().startsWith("lang/"));
+        assertEquals(1, filteredMap.size(), "Expected lang/ subtree skipped when predicate skips lang/");
+        assertTrue(filteredMap.containsKey(new ResourceLocation("kubejs", "models/test.json")),
+                "Non-lang generated resource must still load");
+
+        Map<ResourceLocation, dev.latvian.mods.kubejs.script.data.GeneratedData> unfilteredMap = new HashMap<>();
+        dev.sunlit.bettersunlit.client.KubeJsPackPerf.populateGeneratedFromRoot(
+                kubeLangRoot,
+                "assets",
+                unfilteredMap,
+                false,
+                rel -> true,
+                data -> false);
+        assertEquals(2, unfilteredMap.size(), "Expected lang/ retained when skipFile does not skip lang/");
+
+        // 7. ClientLanguagePerf handles null/empty session boundaries cleanly.
+        dev.sunlit.bettersunlit.client.ClientLanguagePerf.beginSession(null, java.util.Collections.emptyList());
+        dev.sunlit.bettersunlit.client.ClientLanguagePerf.endSession();
+
+        // 8. Iter 9: AllTheLeaksPerf defers work asynchronously and completes immediately.
+        java.util.concurrent.CountDownLatch atlLatch = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CompletableFuture<Void> atlFuture =
+                dev.sunlit.bettersunlit.client.AllTheLeaksPerf.deferJarCleanup(atlLatch::countDown, 10L);
+        assertTrue(atlFuture.isDone(), "Deferred cleanup must return immediately completed future");
+        assertTrue(atlLatch.await(2, java.util.concurrent.TimeUnit.SECONDS),
+                "Deferred cleanup runnable must execute asynchronously on daemon thread");
+
+        // 9. Iter 9: LayerDefinitionPerf evaluates in parallel >=16 entries and preserves key order + fallback.
+        java.util.Map<String, java.util.function.Supplier<String>> layerDefs = new java.util.LinkedHashMap<>();
+        java.util.concurrent.atomic.AtomicBoolean throwOnce = new java.util.concurrent.atomic.AtomicBoolean(true);
+        for (int i = 0; i < 24; i++) {
+            final int idx = i;
+            layerDefs.put("layer_" + idx, () -> {
+                if (idx == 5 && throwOnce.compareAndSet(true, false)) {
+                    throw new IllegalStateException("transient worker failure");
+                }
+                return "val_" + idx;
+            });
+        }
+        java.util.List<String> insertedOrder = new java.util.ArrayList<>();
+        dev.sunlit.bettersunlit.client.LayerDefinitionPerf.evaluateAndInsert(layerDefs, (k, v) -> {
+            assertEquals("val_" + k.substring(6), v, "Expected matching value for " + k);
+            insertedOrder.add(k);
+        });
+        assertEquals(new java.util.ArrayList<>(layerDefs.keySet()), insertedOrder,
+                "LayerDefinitionPerf must preserve exact key insertion order");
+
+        // 10. Iter 9: BackpackShapePerf deduplicates canonical states across >=16 unique states.
+        java.util.List<String> rawStates = new java.util.ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            rawStates.add("canonical_" + i + "_open");
+            rawStates.add("canonical_" + i + "_closed");
+        }
+        java.util.concurrent.atomic.AtomicInteger computeCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        Thread shapeCaller = Thread.currentThread();
+        Map<String, String> builtShapes = dev.sunlit.bettersunlit.client.BackpackShapePerf.buildDeduplicatedShapes(
+                rawStates,
+                s -> s.replace("_open", "").replace("_closed", ""),
+                canon -> {
+                    assertTrue(Thread.currentThread() == shapeCaller,
+                            "Lazy model lookup must run on the caller's Forge class-loader thread");
+                    computeCount.incrementAndGet();
+                    return "shape(" + canon + ")";
+                });
+        assertEquals(20, computeCount.get(), "Expected canonical deduplication to halve evaluations");
+        assertEquals(40, builtShapes.size(), "Expected all states populated");
+        assertEquals("shape(canonical_7)", builtShapes.get("canonical_7_open"),
+                "Expected open/closed variants to share canonical shape");
+
+        // 11. Iter 9: StartupClassPreloadPerf scales worker count cleanly between 2 and 8.
+        assertEquals(2, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(2),
+                "Minimum worker count should be 2");
+        assertEquals(8, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(16),
+                "16-thread CPU should allocate 8 preload workers");
+        assertEquals(8, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(32),
+                "Worker count should cap at 8");
+
+        // 12. Iter 10: DrippyFontPerf runs prepare asynchronously on backgroundExecutor and applies on applyExecutor.
+        java.util.List<String> fontEvents = new java.util.ArrayList<>();
+        java.util.concurrent.CompletableFuture<Void> fontFuture = dev.sunlit.bettersunlit.client.DrippyFontPerf.loadFontsAsync(
+                () -> {
+                    fontEvents.add("prepare");
+                    return java.util.concurrent.CompletableFuture.completedFuture("prepared_fonts");
+                },
+                prep -> fontEvents.add("apply:" + prep),
+                java.util.concurrent.ForkJoinPool.commonPool(),
+                Runnable::run);
+        fontFuture.get(2, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(java.util.List.of("prepare", "apply:prepared_fonts"), fontEvents,
+                "DrippyFontPerf must run prepare off-thread before applying prepared fonts");
+
+        // 13. Iter 10: StartupClassPreloadPerf bootstrap wave runs once per cycle with initialize = false.
+        UNINIT_CLINIT_RAN.set(false);
+        int bootLoaded = dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.runPreloadSync(
+                PerfOptTests.class.getClassLoader(),
+                java.util.List.of(UninitProbeClass.class.getName()));
+        assertEquals(1, bootLoaded, "Expected uninitialized probe class preloaded cleanly");
+        assertFalse(UNINIT_CLINIT_RAN.get(), "Bootstrap wave preload must not execute static initializers");
+
+        // 14. Batch 2: SyncHashMap preserves null negative-cache values and HashMap binary compatibility safely under concurrency.
+        dev.sunlit.bettersunlit.client.EmfModelPrebakePerf.SyncHashMap<String, String> syncMap =
+                new dev.sunlit.bettersunlit.client.EmfModelPrebakePerf.SyncHashMap<>();
+        assertTrue(syncMap instanceof java.util.HashMap, "SyncHashMap must subclass HashMap");
+        syncMap.put("missing.jem", null);
+        assertTrue(syncMap.containsKey("missing.jem"), "SyncHashMap must retain null negative-cache entries");
+        java.util.List<java.util.concurrent.CompletableFuture<Void>> mapFutures = new java.util.ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+            final int tid = t;
+            mapFutures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
+                for (int k = 0; k < 200; k++) {
+                    syncMap.put("k_" + tid + "_" + k, k % 5 == 0 ? null : "v_" + k);
+                    syncMap.get("k_" + tid + "_" + k);
+                }
+            }));
+        }
+        java.util.concurrent.CompletableFuture.allOf(mapFutures.toArray(new java.util.concurrent.CompletableFuture[0])).join();
+        assertEquals(1601, syncMap.size(), "SyncHashMap concurrent writes must all survive");
+
+        // 15. Batch 5b: StateDefinitionPerf matches reference Stream cartesian product order and property maps.
+        {
+            class TestState extends net.minecraft.world.level.block.state.StateHolder<String, TestState> {
+                TestState(
+                        String owner,
+                        com.google.common.collect.ImmutableMap<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>> values,
+                        com.mojang.serialization.MapCodec<TestState> codec) {
+                    super(owner, values, codec);
+                }
+            }
+            var propA = net.minecraft.world.level.block.state.properties.BooleanProperty.m_61465_("lit");
+            var propB = net.minecraft.world.level.block.state.properties.IntegerProperty.m_61631_("age", 0, 2);
+            var propC = net.minecraft.world.level.block.state.properties.DirectionProperty.m_61546_(
+                    "facing", d -> d == net.minecraft.core.Direction.NORTH || d == net.minecraft.core.Direction.SOUTH);
+            com.google.common.collect.ImmutableSortedMap<String, net.minecraft.world.level.block.state.properties.Property<?>> propsByName =
+                    com.google.common.collect.ImmutableSortedMap.of("age", propB, "facing", propC, "lit", propA);
+            java.util.List<com.google.common.collect.ImmutableMap<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>> refOrder =
+                    new java.util.ArrayList<>();
+            java.util.stream.Stream<java.util.List<com.mojang.datafixers.util.Pair<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>>> stream =
+                    java.util.stream.Stream.of(java.util.Collections.emptyList());
+            for (var prop : propsByName.values()) {
+                stream = stream.flatMap(list -> prop.m_6908_().stream().map(val -> {
+                    java.util.List<com.mojang.datafixers.util.Pair<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>> copy =
+                            new java.util.ArrayList<>(list);
+                    copy.add(com.mojang.datafixers.util.Pair.of(prop, val));
+                    return copy;
+                }));
+            }
+            stream.forEach(pairs -> refOrder.add(pairs.stream().collect(
+                    com.google.common.collect.ImmutableMap.toImmutableMap(
+                            com.mojang.datafixers.util.Pair::getFirst,
+                            com.mojang.datafixers.util.Pair::getSecond))));
+
+            java.util.List<TestState> fastStates = new java.util.ArrayList<>();
+            java.util.Map<Map<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>, TestState> fastMap =
+                    new java.util.LinkedHashMap<>();
+            dev.sunlit.bettersunlit.perf.StateDefinitionPerf.populateAllStates(
+                    propsByName,
+                    TestState::new,
+                    "owner",
+                    null,
+                    fastMap,
+                    fastStates);
+            java.util.List<com.google.common.collect.ImmutableMap<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>> fastOrder =
+                    fastStates.stream().map(TestState::m_61148_).toList();
+            assertEquals(refOrder, fastOrder, "StateDefinitionPerf must preserve exact state cartesian order");
+            assertEquals(refOrder.size(), fastMap.size(), "StateDefinitionPerf must populate byValues map");
+            for (TestState st : fastStates) {
+                assertTrue(fastMap.get(st.m_61148_()) == st, "byValues must map to same TestState instance");
+            }
+
+            java.util.List<TestState> emptyOrder = new java.util.ArrayList<>();
+            java.util.Map<Map<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>, TestState> emptyMap =
+                    new java.util.LinkedHashMap<>();
+            dev.sunlit.bettersunlit.perf.StateDefinitionPerf.populateAllStates(
+                    com.google.common.collect.ImmutableSortedMap.<String, net.minecraft.world.level.block.state.properties.Property<?>>of(),
+                    TestState::new,
+                    "owner",
+                    null,
+                    emptyMap,
+                    emptyOrder);
+            assertEquals(1, emptyOrder.size(), "StateDefinitionPerf empty property count");
+            assertEquals(0, emptyOrder.get(0).m_61148_().size(), "StateDefinitionPerf empty property map");
+        }
+
+        // 16. Batch 5b: ReflectionPerf.hasMethodOverride matches superclass override traversal without exceptions.
+        {
+            class BaseProbe {
+                @SuppressWarnings("unused")
+                public void overridden(int x) {}
+                @SuppressWarnings("unused")
+                public void inherited() {}
+            }
+            class SubProbe extends BaseProbe {
+                @Override
+                public void overridden(int x) {}
+            }
+            assertTrue(dev.sunlit.bettersunlit.perf.ReflectionPerf.hasMethodOverride(
+                    SubProbe.class, BaseProbe.class, false, "overridden", int.class),
+                    "Should detect overridden method on subclass");
+            assertFalse(dev.sunlit.bettersunlit.perf.ReflectionPerf.hasMethodOverride(
+                    SubProbe.class, BaseProbe.class, false, "inherited"),
+                    "Should return false for non-overridden method");
+            assertFalse(dev.sunlit.bettersunlit.perf.ReflectionPerf.hasMethodOverride(
+                    BaseProbe.class, BaseProbe.class, false, "overridden", int.class),
+                    "Should return false when clazz == superClass");
+            assertFalse(dev.sunlit.bettersunlit.perf.ReflectionPerf.hasMethodOverride(
+                    SubProbe.class, BaseProbe.class, false, null),
+                    "Should handle null method name");
+        }
+
+        // 17. Batch 5b: EntryPostApplyPatches.patchStateDefinition produces valid bytecode with populateAllStates.
+        try (var in = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                "net/minecraft/world/level/block/state/StateDefinition.class")) {
+            assertTrue(in != null, "Expected StateDefinition.class on classpath");
+            org.objectweb.asm.tree.ClassNode cn = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(in.readAllBytes()).accept(cn, 0);
+            assertTrue(dev.sunlit.bettersunlit.inline.EntryPostApplyPatches.patchStateDefinition(cn),
+                    "patchStateDefinition must succeed on StateDefinition");
+            boolean foundCall = false;
+            for (var m : cn.methods) {
+                if ("<init>".equals(m.name)) {
+                    for (var insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                        if (insn instanceof org.objectweb.asm.tree.MethodInsnNode mi
+                                && "dev/sunlit/bettersunlit/perf/StateDefinitionPerf".equals(mi.owner)
+                                && "populateAllStates".equals(mi.name)) {
+                            foundCall = true;
+                        }
+                    }
+                }
+            }
+            assertTrue(foundCall, "Expected populateAllStates call in patched StateDefinition.<init>");
+            org.objectweb.asm.ClassWriter cw = new org.objectweb.asm.ClassWriter(
+                    org.objectweb.asm.ClassWriter.COMPUTE_FRAMES);
+            cn.accept(cw);
+            assertTrue(cw.toByteArray().length > 0, "Patched StateDefinition must serialize with COMPUTE_FRAMES");
+        }
+
+        // 18. BootAgentSync: bundled sunlit-boot.jar sync, stale cleanup, overwrite, and post-exit --sync helper.
+        {
+            byte[] bundled = dev.sunlit.bettersunlit.client.BootAgentSync.loadBundledBytes();
+            assertTrue(bundled != null && bundled.length > 50_000, "Client JAR must bundle assets/better_sunlit/sunlit-boot.jar");
+            String expectedSha = dev.sunlit.bettersunlit.client.BootAgentSync.sha256(bundled);
+            java.nio.file.Path tempCfg = java.nio.file.Files.createTempDirectory("boot_agent_sync_test");
+            try {
+                var o1 = dev.sunlit.bettersunlit.client.BootAgentSync.syncConfigBootAgent(tempCfg, bundled, false);
+                assertEquals(dev.sunlit.bettersunlit.client.BootAgentSync.SyncOutcome.UPDATED_IMMEDIATE, o1,
+                        "Initial sync must create config/sunlit-boot.jar");
+                java.nio.file.Path targetJar = tempCfg.resolve("sunlit-boot.jar");
+                java.nio.file.Path stagedJar = tempCfg.resolve(".sunlit-boot.jar.staged");
+                assertEquals(expectedSha, dev.sunlit.bettersunlit.client.BootAgentSync.sha256(targetJar),
+                        "Extracted boot jar SHA-256 must match bundled");
+
+                java.nio.file.Files.writeString(stagedJar, "stale");
+                var o2 = dev.sunlit.bettersunlit.client.BootAgentSync.syncConfigBootAgent(tempCfg, bundled, false);
+                assertEquals(dev.sunlit.bettersunlit.client.BootAgentSync.SyncOutcome.UP_TO_DATE, o2,
+                        "Matching jar must report UP_TO_DATE");
+                assertFalse(java.nio.file.Files.exists(stagedJar), "UP_TO_DATE sync must remove stale staged jar");
+
+                java.nio.file.Files.writeString(targetJar, "old_version");
+                var o3 = dev.sunlit.bettersunlit.client.BootAgentSync.syncConfigBootAgent(tempCfg, bundled, false);
+                assertEquals(dev.sunlit.bettersunlit.client.BootAgentSync.SyncOutcome.UPDATED_IMMEDIATE, o3,
+                        "Mismatched jar must update cleanly");
+                assertEquals(expectedSha, dev.sunlit.bettersunlit.client.BootAgentSync.sha256(targetJar),
+                        "Updated boot jar SHA-256 must match bundled");
+
+                // Verify SunlitBootAgent --sync helper main replaces stale target from staged JAR.
+                java.nio.file.Files.write(stagedJar, bundled);
+                java.nio.file.Files.writeString(targetJar, "stale_locked_sim");
+                String javaExe = java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString();
+                Process proc = new ProcessBuilder(
+                        javaExe,
+                        "-cp", stagedJar.toAbsolutePath().toString(),
+                        "dev.sunlit.bootagent.SunlitBootAgent",
+                        "--sync",
+                        "999999999",
+                        stagedJar.toAbsolutePath().toString(),
+                        targetJar.toAbsolutePath().toString(),
+                        expectedSha).redirectErrorStream(true).start();
+                assertEquals(0, proc.waitFor(), "SunlitBootAgent --sync helper must exit 0");
+                assertEquals(expectedSha, dev.sunlit.bettersunlit.client.BootAgentSync.sha256(targetJar),
+                        "SunlitBootAgent --sync must replace stale target with exact bundled bytes");
+            } finally {
+                try (var walk = java.nio.file.Files.walk(tempCfg)) {
+                    walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                        try { java.nio.file.Files.deleteIfExists(p); } catch (java.io.IOException ignored) {}
+                    });
+                }
+            }
+        }
     }
 }

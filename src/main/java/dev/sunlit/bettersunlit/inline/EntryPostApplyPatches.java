@@ -41,6 +41,14 @@ public final class EntryPostApplyPatches {
     private static final String BLOCK_POS = "net/minecraft/core/BlockPos";
     private static final String OCCLUSION_PERF = "dev/sunlit/bettersunlit/perf/BlockOcclusionPerf";
     private static final String OCC_CACHE_FIELD = "sunlit$occCache";
+    private static final String STATE_DEF = "net/minecraft/world/level/block/state/StateDefinition";
+    private static final String STATE_DEF_PERF = "dev/sunlit/bettersunlit/perf/StateDefinitionPerf";
+    private static final String STATE_DEF_INIT_DESC =
+            "(Ljava/util/function/Function;Ljava/lang/Object;Lnet/minecraft/world/level/block/state/StateDefinition$Factory;Ljava/util/Map;)V";
+    private static final String STATE_DEF_INDY_DESC =
+            "(Lnet/minecraft/world/level/block/state/StateDefinition$Factory;Ljava/lang/Object;Lcom/mojang/serialization/MapCodec;Ljava/util/Map;Ljava/util/List;)Ljava/util/function/Consumer;";
+    private static final String POPULATE_STATES_DESC =
+            "(Lcom/google/common/collect/ImmutableSortedMap;Lnet/minecraft/world/level/block/state/StateDefinition$Factory;Ljava/lang/Object;Lcom/mojang/serialization/MapCodec;Ljava/util/Map;Ljava/util/List;)V";
 
     private static final int KIND_COLLISION_FULL_BLOCK = 1;
     private static final int KIND_VIEW_BLOCKING = 2;
@@ -548,5 +556,150 @@ public final class EntryPostApplyPatches {
             if (name.equals(f.name) && desc.equals(f.desc)) return true;
         }
         return false;
+    }
+
+    /**
+     * Replaces the nested {@code Stream.flatMap} cartesian product inside {@code StateDefinition.<init>}
+     * with {@link dev.sunlit.bettersunlit.perf.StateDefinitionPerf#populateAllStates}, preserving ModernFix's
+     * {@code FakeStateMap} and exact state order. Fails closed if bytecode shape does not match.
+     */
+    public static boolean patchStateDefinition(ClassNode cn) {
+        MethodNode init = findMethod(cn, "<init>", STATE_DEF_INIT_DESC);
+        if (init == null || init.instructions == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: missing StateDefinition.<init>", cn.name);
+            return false;
+        }
+        for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && STATE_DEF_PERF.equals(m.owner) && "populateAllStates".equals(m.name)) {
+                return true;
+            }
+        }
+        if (init.tryCatchBlocks != null && !init.tryCatchBlocks.isEmpty()) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected try/catch in StateDefinition.<init>", cn.name);
+            return false;
+        }
+
+        MethodInsnNode emptyListCall = null;
+        MethodInsnNode forEachCall = null;
+        for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (emptyListCall == null
+                    && insn.getOpcode() == Opcodes.INVOKESTATIC
+                    && insn instanceof MethodInsnNode m
+                    && "java/util/Collections".equals(m.owner)
+                    && "emptyList".equals(m.name)
+                    && "()Ljava/util/List;".equals(m.desc)) {
+                AbstractInsnNode next = nextRealInsn(insn);
+                if (next != null
+                        && next.getOpcode() == Opcodes.INVOKESTATIC
+                        && next instanceof MethodInsnNode streamOf
+                        && "java/util/stream/Stream".equals(streamOf.owner)
+                        && "of".equals(streamOf.name)
+                        && "(Ljava/lang/Object;)Ljava/util/stream/Stream;".equals(streamOf.desc)) {
+                    emptyListCall = m;
+                }
+            } else if (emptyListCall != null
+                    && insn.getOpcode() == Opcodes.INVOKEINTERFACE
+                    && insn instanceof MethodInsnNode m
+                    && "java/util/stream/Stream".equals(m.owner)
+                    && "forEach".equals(m.name)
+                    && "(Ljava/util/function/Consumer;)V".equals(m.desc)) {
+                forEachCall = m;
+                break;
+            }
+        }
+        if (emptyListCall == null || forEachCall == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: expected Stream cartesian range not found", cn.name);
+            return false;
+        }
+
+        AbstractInsnNode indyNode = prevRealInsnLocal(forEachCall);
+        if (!(indyNode instanceof InvokeDynamicInsnNode indy)
+                || !"accept".equals(indy.name)
+                || !STATE_DEF_INDY_DESC.equals(indy.desc)) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected InvokeDynamic before Stream.forEach", cn.name);
+            return false;
+        }
+        int[] capturedVars = new int[5];
+        AbstractInsnNode cur = indy;
+        for (int i = 4; i >= 0; i--) {
+            cur = prevRealInsnLocal(cur);
+            if (!(cur instanceof VarInsnNode v) || v.getOpcode() != Opcodes.ALOAD) {
+                LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: expected ALOAD arg {} before accept", cn.name, i);
+                return false;
+            }
+            capturedVars[i] = v.var;
+        }
+
+        Set<LabelNode> innerLabels = new HashSet<>();
+        boolean inRange = false;
+        for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn == emptyListCall) {
+                inRange = true;
+            } else if (insn == forEachCall) {
+                break;
+            } else if (inRange && insn instanceof LabelNode l) {
+                innerLabels.add(l);
+            }
+        }
+        boolean outside = true;
+        for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn == emptyListCall) {
+                outside = false;
+            } else if (insn == forEachCall) {
+                outside = true;
+            } else if (outside) {
+                if (insn instanceof JumpInsnNode j && innerLabels.contains(j.label)) {
+                    LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: external jump into Stream range", cn.name);
+                    return false;
+                }
+                if (insn instanceof TableSwitchInsnNode t
+                        && (innerLabels.contains(t.dflt) || t.labels.stream().anyMatch(innerLabels::contains))) {
+                    LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: external tableswitch into Stream range", cn.name);
+                    return false;
+                }
+                if (insn instanceof LookupSwitchInsnNode lsw
+                        && (innerLabels.contains(lsw.dflt) || lsw.labels.stream().anyMatch(innerLabels::contains))) {
+                    LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: external lookupswitch into Stream range", cn.name);
+                    return false;
+                }
+            }
+        }
+
+        AbstractInsnNode insertAfter = emptyListCall.getPrevious();
+        AbstractInsnNode p = emptyListCall;
+        while (p != null) {
+            AbstractInsnNode next = p.getNext();
+            boolean stop = (p == forEachCall);
+            if (p.getOpcode() >= 0 || p instanceof FrameNode) {
+                init.instructions.remove(p);
+            }
+            if (stop) break;
+            p = next;
+        }
+
+        InsnList replacement = new InsnList();
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        replacement.add(new FieldInsnNode(Opcodes.GETFIELD, STATE_DEF, "f_61048_", "Lcom/google/common/collect/ImmutableSortedMap;"));
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, capturedVars[0]));
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, capturedVars[1]));
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, capturedVars[2]));
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, capturedVars[3]));
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, capturedVars[4]));
+        replacement.add(new MethodInsnNode(Opcodes.INVOKESTATIC, STATE_DEF_PERF, "populateAllStates", POPULATE_STATES_DESC, false));
+        if (insertAfter != null) {
+            init.instructions.insert(insertAfter, replacement);
+        } else {
+            init.instructions.insert(replacement);
+        }
+        init.maxStack = Math.max(init.maxStack, 7);
+        return true;
+    }
+
+    private static AbstractInsnNode prevRealInsnLocal(AbstractInsnNode insn) {
+        AbstractInsnNode cur = insn == null ? null : insn.getPrevious();
+        while (cur != null && cur.getOpcode() < 0) {
+            cur = cur.getPrevious();
+        }
+        return cur;
     }
 }

@@ -627,6 +627,31 @@ public final class EmfRenderPerf {
         clearLodTimers();
     }
 
+    private static final NumberFormatException FAST_NON_FLOAT_NFE = new NumberFormatException("non-float token") {
+        @Override
+        public synchronized Throwable fillInStackTrace() {
+            return this;
+        }
+    };
+
+    public static float parseFloatOrThrowFast(String token) {
+        if (!canBeFloat(token)) {
+            throw FAST_NON_FLOAT_NFE;
+        }
+        return Float.parseFloat(token);
+    }
+
+    public static boolean canBeFloat(String token) {
+        if (token == null || token.isEmpty()) {
+            return false;
+        }
+        char c = token.charAt(0);
+        if ((c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+' || c <= ' ') {
+            return true;
+        }
+        return (c == 'N' && "NaN".equals(token)) || (c == 'I' && "Infinity".equals(token));
+    }
+
     private static final class LodTimerKey {
         private java.util.UUID uuid;
         private String modelId;

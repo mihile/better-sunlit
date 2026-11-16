@@ -13,6 +13,7 @@ ROOT_FILES = {
     'CLIENT.BAT', 'GITCLIENT.BAT', 'GITSERVER.BAT', 'GITBOTH.BAT',
 }
 PREFIX_TYPES = {
+    'boot-agent/src/': {'.java'},
     'src/main/java/': {'.java'},
     'src/main/resources/': {'.json', '.mcmeta', '.toml', '.properties', '.png'},
     'tests/': {'.java', '.py'}, 'tools/': {'.java', '.py'},
@@ -66,20 +67,25 @@ def check_content(name, data, secrets=()):
 
 def check_release_jar(path):
     secrets = private_values()
-    def inspect(archive, helper=False):
+    def inspect(archive, kind='main'):
         names = set()
         for entry in archive.infolist():
             name = entry.filename
             if entry.is_dir():
                 continue
             member = PurePosixPath(name)
-            allowed = name.startswith('dev/sunlit/') and name.endswith('.class')
-            allowed = allowed or name in ('assets/better_sunlit/update-build.properties',
-                                          'assets/better_sunlit/update-public-key.der')
-            if not helper:
+            if kind == 'boot':
+                allowed = (name == 'META-INF/MANIFEST.MF' or
+                           (name.startswith('dev/sunlit/bootagent/') and name.endswith('.class')))
+            else:
+                allowed = name.startswith('dev/sunlit/') and name.endswith('.class')
+                allowed = allowed or name in ('assets/better_sunlit/update-build.properties',
+                                              'assets/better_sunlit/update-public-key.der')
+            if kind == 'main':
                 allowed = allowed or name in ('META-INF/MANIFEST.MF', 'META-INF/mods.toml', 'pack.mcmeta',
                     'sunlit_fish_visuals.mixins.json', 'better_sunlit_inline.mixins.json',
-                    'better_sunlit_entry.mixins.json', 'assets/better_sunlit/update-helper.jar')
+                    'better_sunlit_entry.mixins.json', 'assets/better_sunlit/update-helper.jar',
+                    'assets/better_sunlit/sunlit-boot.jar')
                 allowed = allowed or (name.startswith('assets/') and member.suffix in ('.json', '.png'))
             if (not allowed or name in names or '..' in member.parts or member.is_absolute()
                     or entry.file_size > 64*1024*1024 or (entry.external_attr >> 16) & 0o170000 == 0o120000):
@@ -91,7 +97,10 @@ def check_release_jar(path):
                 raise RuntimeError(f'배포 JAR의 공개 검증 키 형식이 올바르지 않습니다: {name}')
             if name == 'assets/better_sunlit/update-helper.jar':
                 with zipfile.ZipFile(io.BytesIO(data)) as nested:
-                    inspect(nested, helper=True)
+                    inspect(nested, kind='helper')
+            if name == 'assets/better_sunlit/sunlit-boot.jar':
+                with zipfile.ZipFile(io.BytesIO(data)) as nested:
+                    inspect(nested, kind='boot')
     with zipfile.ZipFile(path) as archive:
         inspect(archive)
 

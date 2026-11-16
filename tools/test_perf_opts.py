@@ -18,8 +18,8 @@ assert SERVER_JAR.is_file(), f'Missing {SERVER_JAR}; build the server first'
 mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
 common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
-assert len(common_mixins) == 10, common_mixins
-assert len(client_mixins) == 46, client_mixins
+assert len(common_mixins) == 16, common_mixins
+assert len(client_mixins) == 91, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
@@ -96,3 +96,31 @@ print(res.stdout or '', end='')
 if res.returncode != 0:
     print(res.stderr or '', end='')
     sys.exit(res.returncode)
+
+# Run native-image equivalence in a separate JVM. The fixture inserts the same
+# accessor the mixin supplies and merges the actual installed Iris blend into
+# Minecraft's original generator; no game or rendering context is started.
+fixture = ROOT / 'build/test-native-mipmap-fixture'
+assert fixture.resolve().is_relative_to((ROOT / 'build').resolve())
+if fixture.exists():
+    shutil.rmtree(fixture)
+fixture.mkdir(parents=True)
+subprocess.run([str(JDK / 'java.exe'), '-cp', run_cp,
+                'dev.sunlit.bettersunlit.tests.perf.NativeMipmapFixture', str(fixture)],
+               cwd=str(INSTANCE), check=True)
+native_cp = os.pathsep.join([to_cmd_path(str(fixture)), run_cp])
+native_cp += os.pathsep + to_cmd_path(str(next((LIBRARIES / 'cpw/mods/securejarhandler/2.1.10').glob('securejarhandler-*.jar'))))
+native = subprocess.run([str(JDK / 'java.exe'), '-cp', native_cp,
+                         'dev.sunlit.bettersunlit.tests.perf.NativeMipmapTests'],
+                        cwd=str(INSTANCE), capture_output=True, text=True, encoding='utf8', errors='replace')
+print(native.stdout or '', end='')
+if native.returncode != 0:
+    print(native.stderr or '', end='')
+    sys.exit(native.returncode)
+transparency = subprocess.run([str(JDK / 'java.exe'), '-cp', native_cp,
+                               'dev.sunlit.bettersunlit.tests.perf.NativeTransparencyTests'],
+                              cwd=str(INSTANCE), capture_output=True, text=True, encoding='utf8', errors='replace')
+print(transparency.stdout or '', end='')
+if transparency.returncode != 0:
+    print(transparency.stderr or '', end='')
+    sys.exit(transparency.returncode)
