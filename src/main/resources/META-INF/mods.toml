@@ -1,10 +1,13 @@
 modLoader="javafml"
 loaderVersion="[47,)"
 license="MIT"
+issueTrackerURL="https://github.com/mihile/better-sunlit/issues"
 [[mods]]
 modId="sunlit_fish_visuals"
 version="1.2.4"
 displayName="Sunlit Fishing Visuals"
+displayURL="https://github.com/mihile/better-sunlit"
+authors="mihile"
 description='''Physical fish flops, gradual fatigue and persistent fish models for successful Stardew catches. Pickup unlocks when the fresh phase ends. Preserves original quality, counts and item data. Configure with /realfishing.'''
 displayTest="IGNORE_ALL_VERSION"
 [[dependencies.sunlit_fish_visuals]]
