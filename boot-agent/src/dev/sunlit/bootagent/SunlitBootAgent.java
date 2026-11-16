@@ -64,9 +64,16 @@ public final class SunlitBootAgent implements ClassFileTransformer {
     private static final String MIXIN_PAYLOAD_CLS = "org/spongepowered/asm/mixin/transformer/BootMixinPayload";
     private static final String RESOLVER_PAYLOAD_RES = "/dev/sunlit/bootagent/payload/BootResolverPayload.class";
     private static final String MIXIN_PAYLOAD_RES = "/dev/sunlit/bootagent/payload/BootMixinPayload.class";
+    private static boolean initialized;
 
-    public static void premain(String agentArgs, Instrumentation inst) {
+    public static synchronized void premain(String agentArgs, Instrumentation inst) {
+        // ServerStarterJar replays premain using its own Instrumentation instance after the JVM
+        // already invoked this same system-loader class. Register only with the original instance.
+        if (initialized) {
+            return;
+        }
         inst.addTransformer(new SunlitBootAgent(), true);
+        initialized = true;
         retransformIfLoaded(inst, "java.lang.module.Resolver", null);
         retransformIfLoaded(inst, "jdk.nio.zipfs.ZipFileSystem$Entry", ClassLoader.getPlatformClassLoader());
     }

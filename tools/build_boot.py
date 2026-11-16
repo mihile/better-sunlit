@@ -177,6 +177,12 @@ import java.util.zip.*;
 
 public class VerifyBootAgent {
     public static void main(String[] args) throws Exception {
+        // The real JVM already invoked premain. ServerStarterJar invokes it a second time with
+        // a different instrumentation instance, which must not be consulted or registered.
+        var secondInstrumentation = (java.lang.instrument.Instrumentation) java.lang.reflect.Proxy.newProxyInstance(
+            VerifyBootAgent.class.getClassLoader(), new Class<?>[]{java.lang.instrument.Instrumentation.class},
+            (proxy, method, arguments) -> { throw new AssertionError("Duplicate premain used instrumentation: " + method); });
+        SunlitBootAgent.premain(null, secondInstrumentation);
         String libs = args[0];
         String sjh = args[1];
         String fml = args[2];
