@@ -113,7 +113,10 @@
     "PerfEntityModelSetMixin",
     "PerfNativeImageAccessor",
     "PerfMipmapFastMixin",
-    "PerfSpriteContentsTransparencyMixin"
+    "PerfSpriteContentsTransparencyMixin",
+    "PerfRenderedButterflyItemExtMixin",
+    "PerfRenderedMothItemExtMixin",
+    "PerfRenderedCatchingNetItemExtMixin"
   ],
   "injectors": {
     "defaultRequire": 1

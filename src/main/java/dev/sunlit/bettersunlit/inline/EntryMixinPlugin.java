@@ -19,6 +19,9 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("com.cicada.longwings.client.model.ButterflyModel","072e7bd4310e3d6ab706e0e62ee0e20e252a270051c783fb96801dd85e7aa3dd"),
         Map.entry("com.cicada.longwings.client.renderers.ButterflyItemRenderer","ef6664d48db4b286667f2895e810a11b6003fa6d9228e4ffc000712d0dc33fe9"),
         Map.entry("com.cicada.longwings.client.renderers.ButterflyItemRenderer$MothItemRenderer","81ccad6b7a7c766c704d09c3e04437a7a74b1f712314108e280013823883c441"),
+        Map.entry("com.cicada.longwings.block.RenderedItems$RenderedButterflyItem$1","1b395e9f597159abccbce1b454402511f58fbc7279cf5ba2fe2eca66852d8187"),
+        Map.entry("com.cicada.longwings.block.RenderedItems$RenderedMothItem$1","b668c7c1eabe6cfa6ea9f77bd641280a0dd81148cba077ecb4c35d63106a96ab"),
+        Map.entry("com.cicada.longwings.block.RenderedItems$RenderedCatchingNetItem$1","f42a1304c4a870b6c19c4ccdb9bd86173f1a4e4b5aadea84da0d164c28c7d805"),
         Map.entry("com.cicada.longwings.client.gui.HandbookScreen","2db49e8e0a64e5975ddb297d72367204a0527f62c6a1b4646e8d853bf61a8c06"),
         Map.entry("com.cicada.longwings.client.gui.HandbookScreen$ButterflyIndexButton","44f7b4b11e8c68613165d8954df70b38fe57517301e77b558d8522b51500eb3c"),
         Map.entry("com.cicada.longwings.client.gui.HandbookToast","220574266d295c8712b10a8cea0a6479b76be78e844d08703ac636c9e46bd0f2"),
@@ -207,6 +210,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         return switch(shortName) {
             case "EntryJeiTypedCacheMixin", "PerfButterflyVariantMixin", "PerfButterflyEntityMixin",
                  "PerfButterflyModelMixin", "PerfButterflyItemRendererMixin", "PerfMothItemRendererMixin",
+                 "PerfRenderedButterflyItemExtMixin", "PerfRenderedMothItemExtMixin",
+                 "PerfRenderedCatchingNetItemExtMixin",
                  "PerfHandbookScreenMixin", "PerfHandbookIndexButtonMixin", "PerfHandbookToastMixin",
                  "PerfParticleSpawnerMixin", "PerfWeatherParticleMixin", "PerfSeasonsConfigMixin",
                  "PerfSeasonHandlerMixin", "PerfSeasonHandlerClientMixin", "PerfSeasonHooksMixin",

@@ -119,6 +119,9 @@ public final class PerfOptTests {
             "com.cicada.longwings.client.model.ButterflyModel",
             "com.cicada.longwings.client.renderers.ButterflyItemRenderer",
             "com.cicada.longwings.client.renderers.ButterflyItemRenderer$MothItemRenderer",
+            "com.cicada.longwings.block.RenderedItems$RenderedButterflyItem$1",
+            "com.cicada.longwings.block.RenderedItems$RenderedMothItem$1",
+            "com.cicada.longwings.block.RenderedItems$RenderedCatchingNetItem$1",
             "com.cicada.longwings.client.gui.HandbookScreen",
             "com.cicada.longwings.client.gui.HandbookScreen$ButterflyIndexButton",
             "com.cicada.longwings.client.gui.HandbookToast",
@@ -240,6 +243,9 @@ public final class PerfOptTests {
             "dev.sunlit.fishvisuals.mixin.PerfButterflyModelMixin",
             "dev.sunlit.fishvisuals.mixin.PerfButterflyItemRendererMixin",
             "dev.sunlit.fishvisuals.mixin.PerfMothItemRendererMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfRenderedButterflyItemExtMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfRenderedMothItemExtMixin",
+            "dev.sunlit.fishvisuals.mixin.PerfRenderedCatchingNetItemExtMixin",
             "dev.sunlit.fishvisuals.mixin.PerfHandbookScreenMixin",
             "dev.sunlit.fishvisuals.mixin.PerfHandbookIndexButtonMixin",
             "dev.sunlit.fishvisuals.mixin.PerfHandbookToastMixin",
@@ -288,6 +294,7 @@ public final class PerfOptTests {
         testMixinBytecodeContractsAgainstModJars();
         testLongwingsVariantPoolAndMatches();
         testLongwingsTextureCacheAndReload();
+        testLongwingsCustomRendererCacheAndInvalidation();
         testParticleRainMathAndZeroAlloc();
         testWeatherRenderingShortCircuitAndPositionUpdate();
         testParticleRainWhitelistPaletteAndAirRay();
@@ -889,6 +896,49 @@ public final class PerfOptTests {
         int beforeReloadHit = probes.get();
         LongwingsClientPerf.resolveWithPresenceCheck("monarch", false, probe);
         assertEquals(beforeReloadHit + 1, probes.get(), "Reload must invalidate cache and re-probe");
+    }
+
+    private static void testLongwingsCustomRendererCacheAndInvalidation() {
+        var slot = new LongwingsClientPerf.RendererCacheSlot<Object>();
+        Object modelSetA = new Object();
+        Object modelSetB = new Object();
+        AtomicInteger createdCount = new AtomicInteger();
+        java.util.function.Supplier<Object> factory = () -> {
+            createdCount.incrementAndGet();
+            return new Object();
+        };
+
+        Object first = slot.getOrCreate(modelSetA, 1L, factory);
+        Object second = slot.getOrCreate(modelSetA, 1L, factory);
+        assertSame(first, second, "Same EntityModelSet and reload epoch must reuse cached custom renderer");
+        assertEquals(1, createdCount.get(), "Cache hit must not re-invoke renderer factory / bakeLayer");
+
+        // Changing reload epoch must invalidate cleanly even with same EntityModelSet key
+        Object afterReload = slot.getOrCreate(modelSetA, 2L, factory);
+        assertTrue(afterReload != first, "Reload epoch change must recreate custom renderer");
+        assertEquals(2, createdCount.get(), "Epoch change must invoke factory once");
+
+        // Swapping EntityModelSet instance must invalidate cleanly even at same epoch
+        Object afterModelSetSwap = slot.getOrCreate(modelSetB, 2L, factory);
+        assertTrue(afterModelSetSwap != afterReload, "EntityModelSet identity change must recreate custom renderer");
+        assertEquals(3, createdCount.get(), "ModelSet swap must invoke factory once");
+
+        // Explicit clear() forces recreation
+        slot.clear();
+        Object afterClear = slot.getOrCreate(modelSetB, 2L, factory);
+        assertTrue(afterClear != afterModelSetSwap, "clear() must discard cached renderer");
+        assertEquals(4, createdCount.get(), "clear() must cause next lookup to invoke factory");
+
+        // Warmup & verify zero heap allocations on cache hit
+        for (int i = 0; i < 500; i++) slot.getOrCreate(modelSetB, 2L, factory);
+        long allocHit = measureAllocBytes(() -> {
+            int hash = 0;
+            for (int i = 0; i < 10_000; i++) {
+                hash ^= System.identityHashCode(slot.getOrCreate(modelSetB, 2L, factory));
+            }
+            if (hash == 0 && System.nanoTime() == 0) throw new AssertionError();
+        });
+        assertEquals(0L, allocHit, "Cached custom renderer lookup must allocate 0 bytes, got " + allocHit);
     }
 
     private static void testParticleRainMathAndZeroAlloc() {
