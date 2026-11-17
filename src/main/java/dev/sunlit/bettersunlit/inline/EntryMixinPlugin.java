@@ -199,6 +199,13 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.minecraft.client.renderer.texture.SpriteContents","505ab0e45498c9cb8ff81a6b7f219e1e736843cd466e893d61b09145b4bbaae9"),
         Map.entry("net.minecraft.CrashReport","8cdc6f8dc0bb3ba60a8c5055979162e2e813ad02bb7cac18bde751040f1c521f"));
     private final Map<String,Boolean> checked=new HashMap<>();
+    private boolean matchesLegacy(String name, String expected) {
+        return checked.computeIfAbsent(name+"#"+expected, key -> {
+            try(var in=EntryMixinPlugin.class.getClassLoader().getResourceAsStream(name.replace('.','/')+".class")) {
+                return in!=null && expected.equals(InlineBytecode.sha256(in.readAllBytes()));
+            } catch(java.io.IOException e) { return false; }
+        });
+    }
     public boolean matches(String name) {
         return checked.computeIfAbsent(name,n->{
             String expected=HASHES.get(n);
@@ -218,6 +225,13 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "PerfEntityModelSetMixin" -> matches(target)
+                 && (matches("traben.entity_model_features.EMFManager")
+                     || matchesLegacy("traben.entity_model_features.EMFManager",
+                         "1d94bd8653848282b1782a2808018b13a1979beea0e177ceb41db0734459233f"))
+                 && (matches("traben.entity_texture_features.features.ETFManager")
+                     || matchesLegacy("traben.entity_texture_features.features.ETFManager",
+                         "e49c730554048390b908a1ad668499f522a769f40fe52bfb2a07c1f2d13f35eb"));
             case "PerfCreateBlockCuttingMixin" -> matches(target)
                  &&matches("com.simibubi.create.compat.jei.category.BlockCuttingCategory$CondensedBlockCuttingRecipe");
             case "PerfIrisBlockMappingMixin" -> matches(target)
@@ -355,7 +369,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  "PerfBlueprintRewardMixin", "PerfGameDataMixin",
                  "PerfAllTheLeaksIssue10684Mixin", "PerfForgeLayerDefinitionsMixin",
                  "PerfDynamicBakedModelProviderMixin", "PerfEmfManagerInitMixin",
-                 "PerfEtfManagerInitMixin", "PerfEntityModelSetMixin",
+                 "PerfEtfManagerInitMixin",
                  "PerfStateDefinitionMixin", "PerfRadiumReflectionMixin",
                  "PerfNativeImageAccessor" ->
                  matches(target);

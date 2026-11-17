@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Pseudo
 @Mixin(targets = "traben.entity_texture_features.features.ETFManager", remap = false)
-public abstract class PerfEtfManagerInitMixin {
+public abstract class PerfEtfManagerInitMixin implements dev.sunlit.bettersunlit.client.EmfLoadingContext.ConcurrentTextureManager {
     @Mutable
     @Shadow
     @Final

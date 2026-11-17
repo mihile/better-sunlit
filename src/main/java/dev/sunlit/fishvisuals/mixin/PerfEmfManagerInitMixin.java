@@ -31,7 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 @Pseudo
 @Mixin(targets = "traben.entity_model_features.EMFManager", remap = false)
-public abstract class PerfEmfManagerInitMixin {
+public abstract class PerfEmfManagerInitMixin implements dev.sunlit.bettersunlit.client.EmfLoadingContext.ConcurrentModelManager {
     @Mutable
     @Shadow
     @Final
