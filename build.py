@@ -38,9 +38,11 @@ classpath += sorted((INSTANCE / "minecraft/mods").glob("*.jar"))
 
 sourceRoot=ROOT/'src/main/java'
 sources=sorted(sourceRoot.rglob('*.java'))
-CLIENT_ONLY_MIXINS={'ItemEntityRendererMixin.java','ItemPickupParticleMixin.java','XpToastMixin.java','DisplayInfoMixin.java','FontSetMixin.java','StandardFontSetMixin.java'}
-entryMixinConfig=json.loads((ROOT/'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
-CLIENT_ONLY_MIXINS.update(name+'.java' for name in entryMixinConfig.get('client',[]))
+# Keep unregistered diagnostic sources client-only as well.
+CLIENT_ONLY_MIXINS={'DebugToastTraceMixin.java'}
+for configName in ('sunlit_fish_visuals.mixins.json','better_sunlit_entry.mixins.json'):
+ mixinConfig=json.loads((ROOT/'src/main/resources'/configName).read_text(encoding='utf8'))
+ CLIENT_ONLY_MIXINS.update(name+'.java' for name in mixinConfig.get('client',[]))
 if side=='server':
  sources=[s for s in sources if '/client/' not in s.as_posix() and s.name not in CLIENT_ONLY_MIXINS]
  common=sourceRoot/'dev/sunlit/fishvisuals/SunlitFishVisuals.java';text=common.read_text(encoding='utf8');old='context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,\n                    () -> () -> dev.sunlit.fishvisuals.client.ClientFishVisuals.receive(packet)));'
