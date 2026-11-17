@@ -1,0 +1,15 @@
+{
+  "build": 2026111802,
+  "label": "2026.11.18.2",
+  "title": "Oculus·Embeddium 렌더링 경로 최적화",
+  "changes": [
+    {
+      "title": "대형 정점 정렬 개선",
+      "detail": "검토한 Embeddium 0.3.31에서 256개 이상 정점의 안정적인 기수 정렬을 사용합니다. 같은 거리의 순서와 부호 있는 0의 비교를 유지하며 NaN은 원래 구현에 맡깁니다."
+    },
+    {
+      "title": "Oculus 프레임 작업 감소",
+      "detail": "검토한 Oculus 1.8.0의 uniform·sampler 목록을 할당 없이 순회하고 사용한 sampler 범위만 초기화합니다. 기존 Ember 계열의 구현과 다른 버전에는 중복 적용하지 않습니다."
+    }
+  ]
+}

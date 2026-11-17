@@ -127,7 +127,11 @@
     "LegacyEmfModelPartMixin",
     "LegacyLevelRendererWeatherMixin",
     "PerfClrwlComputeTransformPatcherMixin",
-    "PerfJourneyMapRgbMixin"
+    "PerfJourneyMapRgbMixin",
+    "PerfEmbeddiumVertexSortMixin",
+    "PerfOculusUniformLoopsMixin",
+    "PerfOculusSamplerLoopsMixin",
+    "PerfOculusSamplerUnbindMixin"
   ],
   "injectors": {
     "defaultRequire": 1
