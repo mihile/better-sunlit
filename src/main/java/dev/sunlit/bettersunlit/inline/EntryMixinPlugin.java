@@ -220,6 +220,26 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider","39ae004f99785e45c160a91876f911da948409046f1924cfb704b23f9a20f197"),
         Map.entry("de.odysseus.ithaka.digraph.util.fas.AbstractFeedbackArcSetProvider","29a38832590b045249aac9ba183ff74f766e3e238f75fa15a25350c32db5fcc9"),
         Map.entry("de.odysseus.ithaka.digraph.Digraphs","1edfec18f5f01807ed3edbf0f083da6c8ee9127d47aeea51615fca8f791ef8e5"));
+    private static final Map<String,String> JEI_UID_TARGETS = Map.of(
+        "EntryJeiPlainItemMixin","mezz.jei.library.ingredients.itemStacks.NormalizedTypedItem",
+        "EntryJeiItemHelperMixin","mezz.jei.library.plugins.vanilla.ingredients.ItemStackHelper",
+        "EntryJeiSubtypeManagerMixin","mezz.jei.library.ingredients.subtypes.SubtypeManager",
+        "EntryJeiSubtypeInterpretersMixin","mezz.jei.library.ingredients.subtypes.SubtypeInterpreters",
+        "EntryJeiRecipeUidMixin","mezz.jei.library.recipes.collect.RecipeMap");
+    private static final Map<String,String> JEI_UID_HASHES = Map.ofEntries(
+        Map.entry("mezz.jei.library.ingredients.itemStacks.NormalizedTypedItem","de94e7c50ca0a2de07ba4aa977bef9278eafe9f11ed0e96bf81cbd405a965a7b"),
+        Map.entry("mezz.jei.library.plugins.vanilla.ingredients.ItemStackHelper","b8c010c196713fa43f118dc294e6c68a8c8febbf2c401ce3dc430194cfafedd3"),
+        Map.entry("mezz.jei.library.ingredients.subtypes.SubtypeManager","6aa727c583d3a4d14da40d828d71568298c16087d5e01425b7f798afe8b3bdba"),
+        Map.entry("mezz.jei.library.ingredients.subtypes.SubtypeInterpreters","ecd00f0a6801293afd3cb89f23169f1228d40aec20541eaa648480b2614c3775"),
+        Map.entry("mezz.jei.library.recipes.collect.RecipeMap","98edf3c78ac63782d9f7d532fd2220b1d5d2bbdb38726fae958c892c5c25b4ef"),
+        Map.entry("mezz.jei.api.constants.VanillaTypes","0111483286748a076b2f3d15733505152e01bdf6710c81f05735bfe134ac68a0"),
+        Map.entry("mezz.jei.api.constants.VanillaTypes$1","c84837d2b5a3ece3186c5f9c9112c709b6ea094d288ab2dcfeecab95595590f1"),
+        Map.entry("mezz.jei.library.ingredients.itemStacks.TypedItemStack","d24191eb32f7f9b163fc08e2fbf26969b4dd8d357d5c2d756788b2c044b071cb"),
+        Map.entry("net.minecraft.world.item.ItemStack","c898ad391a70978d7e0d275e7387b61f04211ecc295f040b655c0b2b263ed0ba"));
+    private boolean plainUidReviewed() {
+        for (var entry : JEI_UID_HASHES.entrySet()) if (!matchesLegacy(entry.getKey(),entry.getValue())) return false;
+        return true;
+    }
     private static boolean hasWrapMethodApi() {
         try {
             Class.forName("com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod",false,EntryMixinPlugin.class.getClassLoader());
@@ -253,6 +273,11 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "EntryJeiPlainItemMixin", "EntryJeiItemHelperMixin", "EntryJeiSubtypeManagerMixin",
+                 "EntryJeiSubtypeInterpretersMixin", "EntryJeiRecipeUidMixin" ->
+                 target.equals(JEI_UID_TARGETS.get(shortName)) && plainUidReviewed();
+            case "PerfRenderSectionIndexMixin" -> matchesLegacy(target,"e8da6744c2701440a64f5dee65d34a5c411f9e50f8f69acbcc5b007171be5f75")
+                 || matchesLegacy(target,"05ca30161a603d8e17ae44377ce8b2e112947ca75083c37186af10d20ec92bde");
             case "PerfEmbeddiumVertexSortMixin" -> matchesLegacy(target,"5a50905acec917b1c8f070e088adfaaa8f311cef36800570bc851cf5faab6afa")
                  && matchesLegacy("me.jellysquid.mods.sodium.client.util.sorting.MergeSort","155209dc3a68097f9bcb33b4da6a530c6c26330a0f8d994642b79a29b1a83ffa")
                  && matchesLegacy("me.jellysquid.mods.sodium.client.util.sorting.InsertionSort","e915be27015c00a7b10fc9f2e98f7de416e7e8517e394f86c7b70c766408484d");
@@ -276,7 +301,12 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                      || matchesLegacy("traben.entity_texture_features.features.ETFManager",
                          "e49c730554048390b908a1ad668499f522a769f40fe52bfb2a07c1f2d13f35eb"));
             case "PerfCreateBlockCuttingMixin" -> matches(target)
-                 &&matches("com.simibubi.create.compat.jei.category.BlockCuttingCategory$CondensedBlockCuttingRecipe");
+                 &&matches("com.simibubi.create.compat.jei.category.BlockCuttingCategory$CondensedBlockCuttingRecipe")
+                 &&matchesLegacy("com.simibubi.create.foundation.item.ItemHelper","9d77a800b40d05f6092a90a6de723a9028d0bacf11819b5472f5e639250256e3")
+                 &&matchesLegacy("net.minecraft.world.item.crafting.Ingredient","4963d02316543eb7430671f46d3b8159cf3d760b2f0490a3ad099b105b35ad2d")
+                 &&matchesLegacy("net.minecraft.world.item.crafting.StonecutterRecipe","f7f369e6d248428fb17de34bd5b275692a9da3e13075617761f7f831eb695422")
+                 &&matchesLegacy("net.minecraft.world.item.crafting.SingleItemRecipe","4050f171a2aa9903e244563d426e150c0503fd5c4e016422aa0a6ceb4a6e1dd1")
+                 &&matchesLegacy("net.minecraft.world.item.ItemStack","c898ad391a70978d7e0d275e7387b61f04211ecc295f040b655c0b2b263ed0ba");
             case "PerfIrisBlockMappingMixin" -> matches(target)
                  &&matches("net.minecraft.world.level.block.state.properties.IntegerProperty");
             case "EntryJeiTypedCacheMixin", "PerfButterflyVariantMixin", "PerfButterflyEntityMixin",

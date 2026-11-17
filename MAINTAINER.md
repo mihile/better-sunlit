@@ -117,3 +117,17 @@ Iris·Colorwheel 디스크 캐시 키에는 실제 변환기 클래스의 SHA-25
 sampler 바인딩의 최대 사용 위치를 추적하여 빈 초기화를 생략합니다. multibind에서는 OpenGL의 null 포인터로 범위 내 바인딩을 0으로 지정하고, 미지원 환경에서는 기존 개별 바인딩 해제를 사용합니다. 렌더러 초기화 때 추적 상태를 초기화합니다. 무관한 외부 GL 상태를 임의로 캐시하지 않습니다.
 
 `RendererContracts`는 실제 원본 MergeSort와 무작위·동거리·0·무한대·NaN 입력, 반환 배열 독립성과 작업 스레드 격리를 비교합니다. sampler 패치의 실제 바이트코드에 기록용 GL 함수를 연결하여 빈/반복/최대 범위 및 두 GL 경로를 검사하고 uniform 호출 순서와 빈 목록도 확인합니다. `test_base_optimizations.py`에서 실행합니다. 게임 검증은 실제 OpenGL sampler 상태를 조회하고 복원하며 두 팩의 서버 접속·주입 표식을 확인합니다. 결과와 비교 자료는 로컬 `build/renderer-audit/`에 보관합니다. 기수 정렬 CPU 시간은 FPS 개선 수치가 아닙니다.
+
+## 첫 접속 반복 계산 보완 (2026.11.18.3)
+
+JEI 15.20.0.129의 일반 `NormalizedTypedItem`에 한해 원래 `RecipeMap.getIngredientUid`가 반환하는 등록 Item을 임시 ItemStack 없이 조회합니다. NormalizedTypedItem·ItemStackHelper·SubtypeManager·SubtypeInterpreters·RecipeMap·VanillaTypes·VanillaTypes$1·TypedItemStack·Minecraft ItemStack의 검토된 지문을 모두 검사합니다. 접근 Mixin의 표식이 하나라도 없거나 사용자 정의 helper/manager/registry라면 원래 경로를 유지합니다. NBT를 가진 정규화 항목과 하위 유형 해석이 필요한 아이템도 원래 경로를 사용합니다. 하위 유형 결과를 캐시하지 않고 현재 interpreter 맵을 매번 확인하므로 런타임 등록을 반영합니다.
+
+Create 6.0.8 석재 절단 그룹은 검토한 ItemHelper와 vanilla Recipe/Ingredient 바이너리에서만 후보 색인을 사용합니다. 배열 길이와 첫 아이템의 동일성은 필요 조건으로만 사용하며 최종 판정은 원래 ItemHelper를 호출합니다. 같은 키와 사용자 정의 재료 그룹을 생성 순서대로 병합해 첫 일치 그룹·호출 방향·출력 순서를 유지합니다. 사용자 정의 Recipe는 기존 순회를 유지하며, 재료 참조·후보 색인은 해당 호출 안에서만 보유합니다.
+
+GLSL 키는 길이 접두사와 UTF-8 바이트를 그대로 유지하고 큰 문자열을 제한된 작업 버퍼로 해시합니다. ASCII 복사 전 전체 입력을 확인하고, 유니코드 청크 경계의 surrogate 쌍을 분리하지 않습니다. 작은 문자열과 잘못된 surrogate의 대체 바이트는 기존 String.getBytes(UTF_8)와 일치합니다. 큰 원본 문자열이나 필드의 완성된 UTF-8 배열을 스레드 캐시에 보유하지 않습니다. 키 이름 공간과 저장 형식이 같으므로 기존 디스크 캐시를 계속 읽습니다.
+
+검토한 Embeddium 0.3.31 / Emberbium 0.3.32-beta.118의 RenderSectionManager는 시야 거리와 월드 섹션 수를 이용해 섹션 인덱스의 초기 용량만 정합니다. 예상 항목 수는 256..65,536으로 제한하고 시야 거리·로드 범위·키/값 동작은 유지합니다. fastutil은 초기 테이블 크기를 축소 하한으로 유지하므로 섹션 수가 줄어도 기본 생성자보다 큰 테이블을 보유할 수 있습니다. 새 지문에는 적용하지 않습니다.
+
+`Utf8DigestContracts`는 독립적인 JDK UTF-8/해시 결과, 청크 경계·잘못된 surrogate·스레드 격리 및 섹션 맵의 확장/조회/삭제를 검사합니다. `PlainUidContracts`는 실제 JEI 클래스에 접근 메서드를 연결한 CPU fixture로 fast-path와 사용자 정의 도우미·실시간 subtype 변경을 검사합니다. CPU fixture는 게임 레지스트리 부팅을 요구하지 않도록 해당 조회와 무관한 초기화만 격리합니다. 실제 게임의 전체 JEI 등록 항목, 실제 RecipeMap UID 조회, 출력 그룹과 NBT 비교는 별도의 로컬 검증 에이전트로 확인합니다.
+
+첫 접속 JFR·새 JVM 반복 실행·실제 주입 및 원본 팩 검증 자료는 `build/join-20261118/`에 보관합니다. 프로파일 기록은 접속 후 50초이며 데이터 검증 에이전트는 기록 종료 후 실행합니다. 인증 서버 오류로 접속하지 못한 실행과 타이밍 계측 에이전트를 사용한 진단 실행은 성능 비교에서 제외합니다. 버퍼 할당량과 등록 단계 감소를 전체 FPS 개선으로 표현하지 않습니다. 효과 없는 소스 해시 prefix 재사용과 초기 조명 대기열 분산 실험은 제품 코드에서 제외하고 로컬 자료에만 보존합니다.
