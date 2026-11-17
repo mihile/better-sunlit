@@ -74,7 +74,7 @@ public final class EmfCompatibilityTests {
                 check(n.methods.stream().anyMatch(m->m.name.equals("injectIntoModelRootGetter")&&m.desc.equals("(Lnet/minecraft/client/model/geom/ModelLayerLocation;Lnet/minecraft/client/model/geom/ModelPart;)Lnet/minecraft/client/model/geom/ModelPart;")),"actual EMF injection contract differs");
             }
         }
-        gates(cp,oldEmf,oldEtf,true,false);gates(cp,newEmf,newEtf,true,true);
+        gates(cp,oldEmf,oldEtf,true,true);gates(cp,newEmf,newEtf,true,true);
         gates(cp,null,newEtf,false,false);gates(cp,newEmf,null,false,true);
         Path changed=Path.of(args[5]);Files.createDirectories(changed.resolve("traben/entity_model_features"));
         try(var jar=new JarFile(oldEmf.toFile())) {

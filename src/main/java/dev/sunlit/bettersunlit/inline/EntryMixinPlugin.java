@@ -183,6 +183,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.minecraft.world.entity.Entity","4701eaf96a2590af14040385e0c90c0e8b3ef47d74c12c582cb3d489b5864f08"),
         Map.entry("io.github.mortuusars.horseman.mixin.fits_in_boat.EntityMixin","000488d4b99c86e649bcc277ad0415e00bf61c7dced096f41e27164d5b6deeec"));
     private static final Map<String,String> ALT_HASHES=Map.ofEntries(
+        Map.entry("traben.entity_model_features.EMFManager","1d94bd8653848282b1782a2808018b13a1979beea0e177ceb41db0734459233f"),
+        Map.entry("traben.entity_texture_features.features.ETFManager","e49c730554048390b908a1ad668499f522a769f40fe52bfb2a07c1f2d13f35eb"),
         Map.entry("net.minecraft.world.entity.Entity","6e12e82aa70dd496466481e185a947d4f76c374592b10610fb957c4ca64cea14"),
         Map.entry("net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase","2d0e63e450caead1710a462bc66ce913083a8c22e25be23e4e1cdaddb5d73e12"),
         Map.entry("net.minecraft.client.renderer.block.BlockModelShaper","2f56551223f6b64b195d9cb898877019cc7ca084aaa83a5eca60381cbd80936d"),
@@ -198,6 +200,32 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("net.minecraft.client.renderer.texture.MipmapGenerator","1c4e452d34cff6c168e4cfba8098219571d6e4bff6ea750f4323c99b772db6f8"),
         Map.entry("net.minecraft.client.renderer.texture.SpriteContents","505ab0e45498c9cb8ff81a6b7f219e1e736843cd466e893d61b09145b4bbaae9"),
         Map.entry("net.minecraft.CrashReport","8cdc6f8dc0bb3ba60a8c5055979162e2e813ad02bb7cac18bde751040f1c521f"));
+    private static final Map<String,String> BASE_PACK_HASHES=Map.ofEntries(
+        Map.entry("org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack","a11e33f91d79da3ec0f13a6b62cc9127d7afe3545376e05f60074bf85c86c432"),
+        Map.entry("traben.entity_model_features.models.parts.EMFModelPartCustom$EMFCube","0a72d7f428c9e3ca699b850878743a89b91a882a8bbd78902da3e77fbdd07b45"),
+        Map.entry("traben.entity_model_features.models.animation.math.variables.factories.ModelPartVariableFactory","4fe90eba3e6f27fd370d6d06b660114383cc946dcbf303cc31e35c5572576e96"),
+
+        Map.entry("pigcart.particlerain.particle.WeatherParticle","e9e5abc0befee19e84540dcfaab564c8f7a6b3a0f349894d0ca2355ee8eea71e"),
+        Map.entry("net.irisshaders.iris.shaderpack.materialmap.BlockMaterialMapping","b4bf5457956aa53577497261b854c4e3782dc672ddec65ab90f1d51028b6d4f6"),
+        Map.entry("net.irisshaders.iris.Iris","6443dc3ec3985a486b7b3668b066da58a3dcb59a5f92755574a5837d9ce70ab7"),
+        Map.entry("net.irisshaders.batchedentityrendering.impl.ordering.GraphTranslucencyRenderOrderManager","6c25cc023db9092ea51f7c6fe5d411c11dad8d10ff01762be1e45a4f89b5f70b"),
+        Map.entry("net.irisshaders.iris.pipeline.PipelineManager","5d2819cc104ed11aff2b77c2777cb208c40caa0058b2c80909fc84104f681d6b"),
+        Map.entry("net.irisshaders.iris.pipeline.transform.TransformPatcher","566012709c946994a42ef65b236069981004b6c278383559a8e8c23b45c38319"),
+        Map.entry("net.irisshaders.iris.gl.shader.StandardMacros","0c36651e198832bb184d53741e9d811b14d2c6b185eabadd542ca0e5aa5a8604"),
+        Map.entry("net.irisshaders.iris.gl.IrisRenderSystem","7c33c255ee78762039be84cdef06724a7b8674bc1848ea20c02b7fec06ede83e"),
+        Map.entry("net.irisshaders.iris.pipeline.transform.TransformPatcher$2","1adb3ae6c90b0262f72d23d43526c618eb20cf2ac548ce10826290b82439e74a"),
+        Map.entry("io.github.douira.glsl_transformer.ast.transform.ASTParser","c01dca22a87a5f8be8082e3aa0af7417f5b2b7ab37a307425f31536fefd399f9"),
+        Map.entry("io.github.douira.glsl_transformer.parser.CachingParser","6297e0a4b12a47b3914696cf32c6700dcf7d7dadf24e1f846c0901c449464ef6"),
+        Map.entry("io.github.douira.glsl_transformer.ast.data.TypedTreeCache","5dbfbc8ef8c082cc70187167f96de72f1e8077867ae2a16515d6843898956593"),
+        Map.entry("de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider","39ae004f99785e45c160a91876f911da948409046f1924cfb704b23f9a20f197"),
+        Map.entry("de.odysseus.ithaka.digraph.util.fas.AbstractFeedbackArcSetProvider","29a38832590b045249aac9ba183ff74f766e3e238f75fa15a25350c32db5fcc9"),
+        Map.entry("de.odysseus.ithaka.digraph.Digraphs","1edfec18f5f01807ed3edbf0f083da6c8ee9127d47aeea51615fca8f791ef8e5"));
+    private static boolean hasWrapMethodApi() {
+        try {
+            Class.forName("com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod",false,EntryMixinPlugin.class.getClassLoader());
+            return true;
+        } catch(ClassNotFoundException | LinkageError e) { return false; }
+    }
     private final Map<String,Boolean> checked=new HashMap<>();
     private boolean matchesLegacy(String name, String expected) {
         return checked.computeIfAbsent(name+"#"+expected, key -> {
@@ -213,7 +241,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             try(var in=EntryMixinPlugin.class.getClassLoader().getResourceAsStream(n.replace('.','/')+".class")) {
                 if(in==null)return false;
                 String actual=InlineBytecode.sha256(in.readAllBytes());
-                return actual.equals(expected)||actual.equals(ALT_HASHES.get(n));
+                return actual.equals(expected)||actual.equals(ALT_HASHES.get(n))||actual.equals(BASE_PACK_HASHES.get(n));
             }catch(java.io.IOException e){return false;}
         });
     }
@@ -225,6 +253,12 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "LegacyEmfModelPartMixin" -> matchesLegacy(target,"8b0f4741818980e7d8704bb86f42e46c98efda1c7d103fd4ebbae41d8994ed90") && matches("com.mojang.blaze3d.vertex.PoseStack") && matches("org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack");
+            case "LegacyParticleSpawnerMixin" -> hasWrapMethodApi() && matchesLegacy(target,"1f5457b859c9996f8941980a077fd068971b8c07c47b60f34dc328ec2d4f0750");
+            case "LegacyCustomParticleMixin" -> matchesLegacy(target,"2f3f8e3d43f975a9d9177f4f2d18609beccfb1b00c54161e4e087a3b8ffc868a");
+            case "LegacyLevelRendererWeatherMixin" -> matches(target) && matchesLegacy("pigcart.particlerain.config.ConfigData$CompatibilityOptions","bf2636131b1742d927d9e42f40b0ef4691c8b7ef33672a1058d0a8edd1e38e5a");
+
+            case "LegacyClrwlTransformPatcherMixin" -> matchesLegacy(target,"cc26715a2954be723a793b095e4e54404df8d9c213878719f6f43b62762316f4") && matchesLegacy("dev.djefrey.colorwheel.compile.transform.ClrwlTransformOutput","49991cc885a953beaf5a10c2352679c2550e586dd69053b47d1ac7c739b8eb73");
             case "PerfEntityModelSetMixin" -> matches(target)
                  && (matches("traben.entity_model_features.EMFManager")
                      || matchesLegacy("traben.entity_model_features.EMFManager",
@@ -406,7 +440,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfSpriteContentsTransparencyMixin"->applyClientPatch("patchSpriteContents",targetClass);
             case "PerfObeModelMixin"->applyClientPatch("patchBlockModelShaper",targetClass);
             case "PerfModelPartCubeMixin"->applyClientPatch("patchModelPartCube",targetClass);
-            case "PerfEmfModelPartMixin"->applyClientPatch("patchEmfModelPart",targetClass);
+            case "PerfEmfModelPartMixin", "LegacyEmfModelPartMixin"->applyClientPatch("patchEmfModelPart",targetClass);
             case "PerfEmfMathParserMixin"->applyClientPatch("patchMathExpressionParser",targetClass);
             case "PerfEmojiFontRendererMixin"->applyClientPatch("patchEmojiFontRenderer",targetClass);
             case "PerfChunkBuilderMeshingTaskMixin"->applyClientPatch("patchChunkBuilderMeshingTask",targetClass);

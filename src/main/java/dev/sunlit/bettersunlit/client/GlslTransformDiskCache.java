@@ -124,6 +124,18 @@ public final class GlslTransformDiskCache {
         }
     }
 
+    private static String engineFingerprint(String name) {
+        try (var in=GlslTransformDiskCache.class.getClassLoader().getResourceAsStream(name)) {
+            return in==null ? null : toHex(sha256().digest(in.readAllBytes()));
+        } catch (IOException e) { return null; }
+    }
+    private static final class IrisEngine {
+        static final String FINGERPRINT=engineFingerprint("net/irisshaders/iris/pipeline/transform/TransformPatcher.class");
+    }
+    private static final class ColorwheelEngine {
+        static final String FINGERPRINT=engineFingerprint("dev/djefrey/colorwheel/compile/transform/ClrwlTransformPatcher.class");
+    }
+
     public static String keyForIris(
             String name,
             Map<PatchShaderType, String> inputs,
@@ -133,7 +145,9 @@ public final class GlslTransformDiskCache {
             return null;
         }
         MessageDigest md = sha256();
-        writeStr(md, "iris-v1");
+        if (IrisEngine.FINGERPRINT == null) return null;
+        writeStr(md, "iris-v2");
+        writeStr(md, IrisEngine.FINGERPRINT);
         writeBool(md, debugOptions);
         writeStr(md, name);
         for (PatchShaderType type : PatchShaderType.values()) {
@@ -156,7 +170,9 @@ public final class GlslTransformDiskCache {
             return null;
         }
         MessageDigest md = sha256();
-        writeStr(md, "clrwl-str-v1");
+        if (ColorwheelEngine.FINGERPRINT == null) return null;
+        writeStr(md, "clrwl-str-v2");
+        writeStr(md, ColorwheelEngine.FINGERPRINT);
         writeStr(md, kind);
         writeStr(md, source);
         writeBool(md, isShadow);
@@ -175,7 +191,9 @@ public final class GlslTransformDiskCache {
             return null;
         }
         MessageDigest md = sha256();
-        writeStr(md, "clrwl-frag-v1");
+        if (ColorwheelEngine.FINGERPRINT == null) return null;
+        writeStr(md, "clrwl-frag-v2");
+        writeStr(md, ColorwheelEngine.FINGERPRINT);
         writeStr(md, source);
         writeBool(md, isShadow);
         writeBool(md, isSolid);

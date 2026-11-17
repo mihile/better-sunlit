@@ -81,10 +81,10 @@ def main():
         tasks.append((side + '-updater', commands))
 
     for name in ('test_font_compat', 'check_localization', 'test_inline_localization',
-                 'test_world_entry', 'test_emf_compat', 'test_perf_opts'):
+                 'test_world_entry', 'test_emf_compat', 'test_base_optimizations', 'test_perf_opts'):
         tasks.append((name, [[sys.executable, '-X', 'utf8', '-u', root/'tools'/(name + '.py')]]))
     order = {'test_inline_localization': 0, 'test_font_compat': 1, 'test_world_entry': 2,
-             'test_emf_compat': 3, 'test_perf_opts': 4, 'client-updater': 5, 'server-updater': 6, 'check_localization': 7}
+             'test_base_optimizations': 3, 'test_emf_compat': 3, 'test_perf_opts': 4, 'client-updater': 5, 'server-updater': 6, 'check_localization': 7}
     tasks.sort(key=lambda task: order[task[0]])
     run_tests(tasks)
 
