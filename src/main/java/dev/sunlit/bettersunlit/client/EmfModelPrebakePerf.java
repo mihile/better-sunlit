@@ -21,14 +21,16 @@ import java.util.function.Function;
 import java.util.stream.IntStream;
 
 /**
- * Parallelizes EMF {@code ModelLayerLocation} model baking and CEM/JEM tree construction across
- * worker threads during {@code EntityModelSet.onResourceManagerReload}, preserving EMF/Fusion
+ * Parallelizes {@code ModelLayerLocation} baking, plus CEM/JEM construction when EMF has reviewed
+ * thread-local context and concurrent caches, preserving EMF/Fusion
  * post-bake hooks and {@code EMFManager.lastCreatedRootModelPart} handoff on the render thread.
  */
 public final class EmfModelPrebakePerf {
     private static final ConcurrentHashMap<ModelLayerLocation, ModelPart> PREBAKED = new ConcurrentHashMap<>();
     private static final ThreadLocal<ModelLayerLocation> CURRENT_LAYER = new ThreadLocal<>();
     private static final ThreadLocal<ModelPart> PENDING_EMF_RESULT = new ThreadLocal<>();
+    private static final EmfLoadingContext CONTEXT = EmfLoadingContext.resolve(EMFManager.class);
+    private static boolean prebakedEmfResults;
 
     private EmfModelPrebakePerf() {
     }
@@ -65,15 +67,7 @@ public final class EmfModelPrebakePerf {
     }
 
     public static boolean hasSpecialContext() {
-        EMFManager mgr = EMFManager.getInstance();
-        if (mgr == null) {
-            return false;
-        }
-        if (mgr.currentBlockEntityTypeLoading != null) {
-            return true;
-        }
-        String specified = mgr.currentSpecifiedModelLoading.get();
-        return specified != null && !specified.isEmpty();
+        return CONTEXT.hasSpecialContext(EMFManager.getInstance());
     }
 
     private static boolean isSpecialLayer(ModelLayerLocation loc) {
@@ -99,13 +93,18 @@ public final class EmfModelPrebakePerf {
         PREBAKED.clear();
         CURRENT_LAYER.remove();
         PENDING_EMF_RESULT.remove();
+        prebakedEmfResults = false;
         if (rm == null || roots == null || roots.size() < 16 || EMF.testForForgeLoadingError()) {
             return;
         }
         EMFManager emf = EMFManager.getInstance();
-        ETFManager.getInstance();
-        // Warm EMFResourceCaching.populateCacheIfNeeded synchronously before worker threads run.
-        EMFResourceCaching.resourceExists(rm, new ResourceLocation("minecraft", "cem/__sunlit_warm__.jem"));
+        ETFManager textures = ETFManager.getInstance();
+        final boolean parallelEmf = CONTEXT.canBakeEmfInParallel(emf, textures);
+        prebakedEmfResults = parallelEmf;
+        if (parallelEmf) {
+            // Warm the reviewed concurrent EMF path before worker threads run.
+            EMFResourceCaching.resourceExists(rm, new ResourceLocation("minecraft", "cem/__sunlit_warm__.jem"));
+        }
 
         List<Map.Entry<ModelLayerLocation, LayerDefinition>> work = new ArrayList<>(roots.size());
         for (Map.Entry<ModelLayerLocation, LayerDefinition> entry : roots.entrySet()) {
@@ -127,7 +126,9 @@ public final class EmfModelPrebakePerf {
             try {
                 Map.Entry<ModelLayerLocation, LayerDefinition> entry = work.get(i);
                 ModelPart raw = entry.getValue().m_171564_();
-                ModelPart baked = emf.injectIntoModelRootGetter(entry.getKey(), raw);
+                // 3.2.4 has shared model-loading state: bake vanilla geometry in parallel,
+                // then let its normal render-thread EMF/Fusion hooks run exactly once.
+                ModelPart baked = parallelEmf ? emf.injectIntoModelRootGetter(entry.getKey(), raw) : raw;
                 PREBAKED.put(entry.getKey(), baked != null ? baked : raw);
             } catch (Throwable ignored) {
                 // Fall back to synchronous Render-thread evaluation for any entry that fails off-thread.
@@ -137,7 +138,7 @@ public final class EmfModelPrebakePerf {
                 }
             }
         });
-        EMFManager.lastCreatedRootModelPart = null;
+        if (parallelEmf) EMFManager.lastCreatedRootModelPart = null;
     }
 
     public static void beginLookup(ModelLayerLocation layer) {
@@ -150,7 +151,7 @@ public final class EmfModelPrebakePerf {
         if (loc != null && !hasSpecialContext()) {
             ModelPart pre = PREBAKED.remove(loc);
             if (pre != null) {
-                PENDING_EMF_RESULT.set(pre);
+                if (prebakedEmfResults) PENDING_EMF_RESULT.set(pre);
                 return pre;
             }
         }

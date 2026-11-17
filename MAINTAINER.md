@@ -91,3 +91,7 @@ python tools/publish.py --side client --changes releases/20261108.2.json
 서버 시작 스크립트는 `Update-Server.ps1`이 JAR 내부 보조 프로그램을 검증해 별도 파일로 꺼낸 뒤 실행합니다. Minecraft JVM에서 사용 중인 JAR을 덮어쓰지 않습니다. 서버 시작 실패 후 다음 실행에서 원래 해시가 맞는 백업만 복원합니다. `.better-sunlit-update/blocked.properties`에 실패한 빌드를 기록합니다. 원인을 해결하고 같은 빌드를 재시도하려면 서버를 종료한 상태에서 이 차단 기록을 별도 보관한 뒤 재시도합니다.
 
 배포 후 양쪽 공개 feed·JAR의 서명과 해시를 다시 확인합니다. 단위·보조 프로세스 테스트와 실제 인게임 확인은 따로 기록하고 미실행 항목을 통과했다고 표기하지 않습니다.
+
+## EMF 모델 사전 베이크 호환
+
+EMF 3.2.4 / ETF 7.1 및 EMF 3.3.12 / ETF 7.2.7을 검증합니다. `EmfLoadingContext`는 모델 로딩 상태의 실제 필드 형식(String 또는 ThreadLocal)을 시작 시 한 번 해석합니다. 일반 모델 형상 베이크는 두 버전 모두 병렬로 유지합니다. EMF 모델 생성까지 병렬로 처리하려면 ThreadLocal 형식과 실제 적용된 EMF·ETF 동시성 보완 Mixin의 표식이 모두 필요합니다. 공유 문자열을 사용하는 3.2.4에서는 원래 렌더 스레드의 EMF/Fusion 후처리를 한 번 수행하며, 원본 모델을 EMF 처리 완료 모델로 잘못 전달하지 않습니다. 미검토 EMF·ETF 바이너리에는 EntityModelSet 최적화를 적용하지 않습니다.
