@@ -1,0 +1,15 @@
+{
+  "build": 2026111702,
+  "label": "2026.11.17.2",
+  "title": "Better Sunlit 모드 정보 업데이트",
+  "changes": [
+    {
+      "title": "모드 메타데이터 및 GitHub 링크 정리",
+      "detail": "Prism Launcher 등에서 제작자(mihile), GitHub 저장소 링크 및 Better Sunlit 설명이 올바르게 표시되도록 mods.toml 메타데이터를 갱신했습니다."
+    },
+    {
+      "title": "서버 배포 빌드 실패 수정",
+      "detail": "클라이언트 전용 토스트 추적 Mixin이 서버 컴파일에 포함되어 양쪽 채널 배포가 중단되는 문제를 수정했습니다. 일반·성능 Mixin의 클라이언트 전용 제외 목록은 각 설정에서 읽도록 통일했습니다."
+    }
+  ]
+}
