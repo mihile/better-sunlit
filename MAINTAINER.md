@@ -95,3 +95,15 @@ python tools/publish.py --side client --changes releases/20261108.2.json
 ## EMF 모델 사전 베이크 호환
 
 EMF 3.2.4 / ETF 7.1 및 EMF 3.3.12 / ETF 7.2.7을 검증합니다. `EmfLoadingContext`는 모델 로딩 상태의 실제 필드 형식(String 또는 ThreadLocal)을 시작 시 한 번 해석합니다. 일반 모델 형상 베이크는 두 버전 모두 병렬로 유지합니다. EMF 모델 생성까지 병렬로 처리하려면 ThreadLocal 형식과 실제 적용된 EMF·ETF 동시성 보완 Mixin의 표식이 모두 필요합니다. 공유 문자열을 사용하는 3.2.4에서는 원래 렌더 스레드의 EMF/Fusion 후처리를 한 번 수행하며, 원본 모델을 EMF 처리 완료 모델로 잘못 전달하지 않습니다. 미검토 EMF·ETF 바이너리에는 EntityModelSet 최적화를 적용하지 않습니다.
+
+## 원본 팩 최적화 호환 (2026.11.18.1)
+
+원본 Oculus 1.8.0/EMF 3.2.4/ETF 7.1/Particle Rain 4.0.0-beta.10/Colorwheel 1.2.9와 기존 팩의 바이너리 지문을 별도로 검토합니다. 기본 지문과 기존 구현은 유지합니다. `BASE_PACK_HASHES`는 검토한 원본 클래스만 추가하며, 임의 버전 허용 목록이 아닙니다.
+
+Particle Rain 구버전은 `LegacyParticleSpawnerMixin`에서 원본 높이 범위와 조건 순서를 유지하고 높이 커서와 호출 범위 내 바이옴 조회를 재사용합니다. 스코프는 정상 반환·예외·중첩 호출에서 복원하며 월드 참조를 보유하지 않습니다. 구버전 전용 입자 틱/렌더 코드는 원본의 `opts`, 개별 필드, 화면 크기 옵션과 바람/페이드/충돌 순서를 유지합니다. 현대 버전의 `WindManager`나 존재하지 않는 높이 유틸리티를 호출하지 않습니다. MixinExtras API가 없으면 스코프 최적화를 허용하지 않습니다. 빌드 시 설치된 중첩 라이브러리에서 API만 추출하며 배포 JAR에는 중복 포함하지 않습니다.
+
+구버전 EMF 자식 배열은 같은 맵에서 같은 크기로 자식을 교체해도 참조를 갱신합니다. 기존 팩의 구현은 별도로 유지합니다. Colorwheel 구버전은 `gbufferType` 없는 메서드에 전용 주입을 사용하고 버전별 캐시 키를 구분합니다.
+
+OBE 미설치로 생기는 두 앵커 경로와 구버전 Embeddium에 존재하지 않는 `embeddium$processTransparentImages` 경로는 해당 기능 없음으로 제외합니다. `tools/test_base_optimizations.py`는 실제 원본 JAR, 기존 팩 적용 조건, 변조된 대상·제거한 의존성의 차단과 스코프/자식 맵 회귀를 검사합니다. 런타임 적용 및 서버/날씨/셰이더 검증 결과는 로컬 `build/base-audit/`에 보관합니다.
+
+Iris·Colorwheel 디스크 캐시 키에는 실제 변환기 클래스의 SHA-256을 포함합니다. 같은 인스턴스에서 모드 버전을 바꿔도 다른 변환기의 산출물을 재사용하지 않으며, 지문을 읽을 수 없으면 해당 디스크 캐시를 사용하지 않습니다. 기존 캐시 파일 형식은 유지하지만 새 키 이름 공간을 사용합니다.

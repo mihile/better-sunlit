@@ -121,6 +121,11 @@
     "PerfRenderedMothItemExtMixin",
     "PerfRenderedCatchingNetItemExtMixin",
     "PerfClrwlTransformPatcherMixin",
+    "LegacyClrwlTransformPatcherMixin",
+    "LegacyParticleSpawnerMixin",
+    "LegacyCustomParticleMixin",
+    "LegacyEmfModelPartMixin",
+    "LegacyLevelRendererWeatherMixin",
     "PerfClrwlComputeTransformPatcherMixin",
     "PerfJourneyMapRgbMixin"
   ],

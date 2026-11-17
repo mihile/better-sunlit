@@ -35,6 +35,32 @@ for relative in selected:
         matches = sorted((LIBRARIES / relative).parent.glob("*/*.jar"), reverse=True)[:1]
     classpath.extend(matches)
 classpath += sorted((INSTANCE / "minecraft/mods").glob("*.jar"))
+# Compile against the same bundled MixinExtras API that Forge loads at runtime.
+# Do not package a second copy or create a separate addon JAR.
+if side=='client':
+ def wrap_api(data,depth=0):
+  import io
+  with zipfile.ZipFile(io.BytesIO(data)) as nested:
+   if 'com/llamalad7/mixinextras/injector/wrapmethod/WrapMethod.class' in nested.namelist():return data
+   if depth<3:
+    for child in nested.namelist():
+     if child.endswith('.jar'):
+      found=wrap_api(nested.read(child),depth+1)
+      if found is not None:return found
+  return None
+ mixinExtras=None
+ for dependency in (INSTANCE/'minecraft/mods').glob('*.jar'):
+  with zipfile.ZipFile(dependency) as archive:
+   for name in archive.namelist():
+    if name.endswith('.jar') and 'mixinextras' in name.lower():
+     import io
+     data=wrap_api(archive.read(name))
+     if data is not None:
+      mixinExtras=BUILD/'compile-deps/mixinextras.jar';mixinExtras.parent.mkdir(parents=True,exist_ok=True);mixinExtras.write_bytes(data);break
+  if mixinExtras is not None:break
+ if mixinExtras is None:raise RuntimeError('Installed client pack must supply MixinExtras WrapMethod API')
+ classpath.append(mixinExtras)
+
 
 sourceRoot=ROOT/'src/main/java'
 sources=sorted(sourceRoot.rglob('*.java'))
