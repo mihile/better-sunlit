@@ -1,4 +1,6 @@
 import dev.sunlit.bettersunlit.client.ScopedCandidateCache;
+import dev.sunlit.bettersunlit.client.RecipeGrouping;
+import dev.sunlit.bettersunlit.client.PropertyNameCache;
 import dev.sunlit.bettersunlit.inline.EntryMixinPlugin;
 import com.google.common.base.Ticker;
 import com.google.common.cache.*;
@@ -33,6 +35,14 @@ public final class WorldEntryTests {
         return total;
     }
     public static void main(String[] args)throws Exception {
+        testRecipeGrouping();
+        for (int value=-256; value<65536; value++)
+            check(PropertyNameCache.integerName(value).equals(Integer.toString(value)), "integer property name changed");
+        for (int value : new int[]{Integer.MIN_VALUE, Integer.MAX_VALUE})
+            check(PropertyNameCache.integerName(value).equals(Integer.toString(value)), "extreme property name changed");
+        for (int value=0; value<256; value++)
+            check(PropertyNameCache.integerName(value)==PropertyNameCache.integerName(value), "small names allocated again");
+        check(new EntryMixinPlugin().canApplyGate("net.irisshaders.iris.shaderpack.materialmap.BlockMaterialMapping", "PerfIrisBlockMappingMixin"), "integer-name target hash rejected");
         Object registry=new Object();List<Entry> entries=new ArrayList<>(List.of(new Entry(1,false),new Entry(2,true),new Entry(3,true),new Entry(4,false)));
         var calls=new AtomicInteger();
         check(ScopedCandidateCache.candidates(registry,()->entries,e->{calls.incrementAndGet();return e.core;})==entries,"out-of-scope collection changed");
@@ -97,5 +107,76 @@ public final class WorldEntryTests {
         for(int i=0;i<5;i++){sink^=exercise(large,false,32);sink^=exercise(large,true,32);}
         long a=System.nanoTime();for(int i=0;i<20;i++)sink^=exercise(large,false,32);long b=System.nanoTime();for(int i=0;i<20;i++)sink^=exercise(large,true,32);long c=System.nanoTime();
         System.out.printf("PASS: %d world-entry checks, %d installed optional targets. Synthetic 40,000 entries x 32 tabs: original %.2f ms, scoped %.2f ms / 20 builds. Not an in-game benchmark.%n",checks,targetCount,(b-a)/1e6,(c-b)/1e6);
+    }
+
+    record Input(int ingredient, int output) {}
+    static final class Group {
+        final int ingredient;
+        final List<Input> outputs = new ArrayList<>();
+        Group(int ingredient) { this.ingredient = ingredient; }
+    }
+    static void testRecipeGrouping() throws Exception {
+        Random random = new Random(0x51A17);
+        for (int trial = 0; trial < 300; trial++) {
+            List<Input> inputs = new ArrayList<>();
+            for (int i = 0, n = random.nextInt(160); i < n; i++) inputs.add(new Input(random.nextInt(25), i));
+            // Include directional/non-transitive matches: bucketing or sorting would change results.
+            java.util.function.BiPredicate<Integer,Integer> match = switch (trial % 3) {
+                case 0 -> (a,b) -> a.equals(b);
+                case 1 -> (a,b) -> Math.abs(a-b) <= 1;
+                default -> (a,b) -> a >= b && a-b <= 2;
+            };
+            List<Group> expected = new ArrayList<>();
+            List<String> expectedCalls = new ArrayList<>(), actualCalls = new ArrayList<>();
+            for (Input input : inputs) {
+                Group selected = null;
+                for (Group group : expected) {
+                    expectedCalls.add(input.ingredient + ":" + group.ingredient);
+                    if (match.test(input.ingredient, group.ingredient)) { selected = group; break; }
+                }
+                if (selected == null) { selected = new Group(input.ingredient); expected.add(selected); }
+                selected.outputs.add(input);
+            }
+            AtomicInteger reads = new AtomicInteger();
+            List<Group> actual = RecipeGrouping.group(inputs, input -> { reads.incrementAndGet(); return input.ingredient; },
+                    (a,b) -> { actualCalls.add(a + ":" + b); return match.test(a,b); }, Group::new,
+                    (group,input) -> group.outputs.add(input));
+            check(reads.get() == inputs.size(), "ingredient read more than once per source recipe");
+            check(expectedCalls.equals(actualCalls), "first-match comparator ordering changed");
+            check(expected.size() == actual.size(), "recipe group count changed");
+            for (int i=0;i<actual.size();i++) {
+                check(expected.get(i).ingredient == actual.get(i).ingredient, "group ingredient/order changed");
+                var want = expected.get(i).outputs; var got = actual.get(i).outputs;
+                check(want.size() == got.size(), "output count changed");
+                for (int j=0;j<got.size();j++) check(want.get(j) == got.get(j), "output identity/order changed");
+            }
+        }
+        try {
+            RecipeGrouping.group(List.of(new Input(1,1)), Input::ingredient, Integer::equals, Group::new,
+                    (group,input) -> { throw new IllegalStateException("expected"); });
+            throw new AssertionError("append exception swallowed");
+        } catch (IllegalStateException expected) {}
+        check(RecipeGrouping.group(List.of(new Input(2,2)), Input::ingredient, Integer::equals, Group::new,
+                (group,input) -> group.outputs.add(input)).get(0).ingredient == 2, "group state survived exception");
+
+        var plugin = new EntryMixinPlugin();
+        for (String[] pair : new String[][] {
+                {"com.simibubi.create.compat.jei.category.BlockCuttingCategory", "PerfCreateBlockCuttingMixin"},
+                {"net.irisshaders.iris.shaderpack.materialmap.BlockMaterialMapping", "PerfIrisBlockMappingMixin"}}) {
+            check(plugin.canApplyGate(pair[0], pair[1]), "join patch rejected installed binary " + pair[0]);
+            check(!plugin.canApplyGate("missing.changed.Binary", pair[1]), "join patch accepted changed target");
+        }
+        var factory = Class.forName("dev.sunlit.fishvisuals.mixin.PerfIrisBlockMappingMixin")
+                .getDeclaredMethod("sunlit$sizeMaterialMap"); factory.setAccessible(true);
+        @SuppressWarnings("unchecked") var map = (it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<Object>) factory.invoke(null);
+        Object key = new Object();
+        check(map.defaultReturnValue() == 0, "Iris missing-state sentinel changed");
+        check(map.putIfAbsent(key, 7) == 0 && map.putIfAbsent(key, 9) == 7 && map.getInt(key) == 7,
+                "Iris first matching material ID changed");
+        var iris = node("net.irisshaders.iris.shaderpack.materialmap.BlockMaterialMapping"); int news=0;
+        for (var method : iris.methods) if (method.name.equals("createBlockStateIdMap"))
+            for (var insn : method.instructions) if (insn instanceof TypeInsnNode t && t.getOpcode()==Opcodes.NEW
+                    && t.desc.equals("it/unimi/dsi/fastutil/objects/Object2IntOpenHashMap")) news++;
+        check(news==1, "Iris constructor redirect missing/ambiguous");
     }
 }

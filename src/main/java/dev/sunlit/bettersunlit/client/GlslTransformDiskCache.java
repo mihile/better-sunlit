@@ -268,8 +268,13 @@ public final class GlslTransformDiskCache {
     }
 
     public static void flushWritesForTests() throws InterruptedException {
-        for (int i = 0; i < 200 && !WRITE_QUEUE.isEmpty(); i++) {
-            Thread.sleep(5);
+        // An empty queue can still have its last write in flight. A FIFO barrier waits for
+        // that write to finish before a test clears memory or switches the cache directory.
+        ensureWriterStarted();
+        var barrier = new java.util.concurrent.CountDownLatch(1);
+        WRITE_QUEUE.put(new WriteOp("", 0, barrier));
+        if (!barrier.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Timed out flushing GLSL cache writes");
         }
     }
 
@@ -292,7 +297,11 @@ public final class GlslTransformDiskCache {
             while (true) {
                 try {
                     WriteOp op = WRITE_QUEUE.take();
-                    writeEntry(op);
+                    if (op.kind == 0) {
+                        ((java.util.concurrent.CountDownLatch) op.payload).countDown();
+                    } else {
+                        writeEntry(op);
+                    }
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                     return;

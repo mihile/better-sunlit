@@ -24,6 +24,8 @@
     "PerfEntityHorsemanMixin"
   ],
   "client": [
+    "PerfCreateBlockCuttingMixin",
+    "PerfIrisBlockMappingMixin",
     "EntryJeiIngredientScopeMixin",
     "EntryCoreLibCandidatesMixin",
     "EntryJeiTypedCacheMixin",
