@@ -36,6 +36,8 @@ public final class WorldEntryTests {
     }
     public static void main(String[] args)throws Exception {
         testRecipeGrouping();
+        testKeyedGrouping();
+        Utf8DigestContracts.run();
         for (int value=-256; value<65536; value++)
             check(PropertyNameCache.integerName(value).equals(Integer.toString(value)), "integer property name changed");
         for (int value : new int[]{Integer.MIN_VALUE, Integer.MAX_VALUE})
@@ -115,6 +117,32 @@ public final class WorldEntryTests {
         final List<Input> outputs = new ArrayList<>();
         Group(int ingredient) { this.ingredient = ingredient; }
     }
+    static void testKeyedGrouping() {
+        Random random = new Random(20261118);
+        for(int trial=0;trial<400;trial++) {
+            List<Input> input=new ArrayList<>();
+            for(int i=0;i<300;i++) input.add(new Input(random.nextInt(250),i));
+            java.util.function.BiPredicate<Integer,Integer> match=(a,b)->a%7==b%7 && a>=b && a-b<=21;
+            List<String> baselineCalls=new ArrayList<>(), fastCalls=new ArrayList<>();
+            var expected=RecipeGrouping.group(input,Input::ingredient,(a,b)->{baselineCalls.add(a+":"+b);return match.test(a,b);},Group::new,(g,r)->g.outputs.add(r));
+            boolean mixed=trial%2==0;
+            var actual=RecipeGrouping.groupKeyed(input,Input::ingredient,a->mixed && a%13==0?null:a%7,(a,b)->{fastCalls.add(a+":"+b);return match.test(a,b);},Group::new,(g,r)->g.outputs.add(r));
+            var necessaryCalls=baselineCalls.stream().filter(pair->{var parts=pair.split(":");int a=Integer.parseInt(parts[0]),b=Integer.parseInt(parts[1]);return mixed&&(a%13==0||b%13==0)||a%7==b%7;}).toList();
+            check(fastCalls.equals(necessaryCalls),"keyed matcher changed directional/first-match ordering");
+            check(actual.size()==expected.size(),"keyed group count");
+            for(int i=0;i<expected.size();i++) {
+                check(actual.get(i).ingredient==expected.get(i).ingredient,"keyed input identity/order");
+                check(actual.get(i).outputs.equals(expected.get(i).outputs),"keyed output identity/order");
+            }
+        }
+        List<Input> input=new ArrayList<>();for(int i=0;i<8000;i++)input.add(new Input(i%2000,i));
+        AtomicInteger baselineCount=new AtomicInteger(),fastCount=new AtomicInteger();
+        RecipeGrouping.group(input,Input::ingredient,(a,b)->{baselineCount.incrementAndGet();return a.equals(b);},Group::new,(g,r)->g.outputs.add(r));
+        RecipeGrouping.groupKeyed(input,Input::ingredient,a->a%31,(a,b)->{fastCount.incrementAndGet();return a.equals(b);},Group::new,(g,r)->g.outputs.add(r));
+        check(fastCount.get()<baselineCount.get()/20,"coarse index did not reduce comparisons");
+        System.out.println("Keyed grouping matcher calls: "+baselineCount+" -> "+fastCount);
+    }
+
     static void testRecipeGrouping() throws Exception {
         Random random = new Random(0x51A17);
         for (int trial = 0; trial < 300; trial++) {

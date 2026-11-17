@@ -126,10 +126,11 @@ public class RendererContracts {
         String[][] paths={{"PerfEmbeddiumVertexSortMixin","me.jellysquid.mods.sodium.client.util.sorting.VertexSorters$AbstractVertexSorter"},
             {"PerfOculusUniformLoopsMixin","net.irisshaders.iris.gl.program.ProgramUniforms"},
             {"PerfOculusSamplerLoopsMixin","net.irisshaders.iris.gl.program.ProgramSamplers"},
-            {"PerfOculusSamplerUnbindMixin","net.irisshaders.iris.gl.IrisRenderSystem"}};
+            {"PerfOculusSamplerUnbindMixin","net.irisshaders.iris.gl.IrisRenderSystem"},
+            {"PerfRenderSectionIndexMixin","me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager"}};
         for (String[] path : paths) {
             check(BaseOptimizationContracts.isolatedGate(path[1],path[0],false,false,false),path[0]+" old gate");
-            check(!BaseOptimizationContracts.isolatedGate(path[1],path[0],false,false,true),path[0]+" duplicate modern patch");
+            check(BaseOptimizationContracts.isolatedGate(path[1],path[0],false,false,true)==path[0].equals("PerfRenderSectionIndexMixin"),path[0]+" modern gate");
             check(!BaseOptimizationContracts.isolatedGate(path[1],path[0],false,true,false),path[0]+" mutated binary");
             check(!BaseOptimizationContracts.isolatedGate(path[1],path[0],true,false,false),path[0]+" missing mod");
             ClassNode mix=BaseOptimizationContracts.node("dev.sunlit.fishvisuals.mixin."+path[0]), original=BaseOptimizationContracts.node(path[1]);
@@ -146,7 +147,7 @@ public class RendererContracts {
                     for(int i=0;i<annotation.values.size();i+=2) if(annotation.values.get(i).equals("method")) {
                         for(Object descriptor:(List<?>)annotation.values.get(i+1)) {
                             String target=descriptor.toString();int split=target.indexOf('(');
-                            check(split>0 && BaseOptimizationContracts.exists(original,target.substring(0,split),target.substring(split),false),path[0]+" missing injection target "+target);
+                            check(split<0 ? original.methods.stream().anyMatch(method->method.name.equals(target)) : BaseOptimizationContracts.exists(original,target.substring(0,split),target.substring(split),false),path[0]+" missing injection target "+target);
                         }
                     }
                 }

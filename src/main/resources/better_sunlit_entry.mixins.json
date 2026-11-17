@@ -131,7 +131,13 @@
     "PerfEmbeddiumVertexSortMixin",
     "PerfOculusUniformLoopsMixin",
     "PerfOculusSamplerLoopsMixin",
-    "PerfOculusSamplerUnbindMixin"
+    "PerfOculusSamplerUnbindMixin",
+    "PerfRenderSectionIndexMixin",
+    "EntryJeiPlainItemMixin",
+    "EntryJeiItemHelperMixin",
+    "EntryJeiSubtypeManagerMixin",
+    "EntryJeiSubtypeInterpretersMixin",
+    "EntryJeiRecipeUidMixin"
   ],
   "injectors": {
     "defaultRequire": 1

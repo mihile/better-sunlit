@@ -22,14 +22,16 @@ for jar in sorted((base/'minecraft/mods').glob('*.jar')):
  if jar.name=='better-sunlit.jar':continue
  cp.append(str(jar));nested_archives(jar.read_bytes())
 (out/'base-classpath.txt').write_text('\n'.join(cp),encoding='utf8')
-opts=['--release','17','-proc:none','-encoding','UTF-8','-cp',os.pathsep.join(cp),'-d',str(out),str(root/'tests/base/BaseOptimizationContracts.java'),str(root/'tests/base/RendererContracts.java'),str(root/'tests/base/RendererTestUniform.java')]
+opts=['--release','17','-proc:none','-encoding','UTF-8','-cp',os.pathsep.join(cp),'-d',str(out),str(root/'tests/base/BaseOptimizationContracts.java'),str(root/'tests/base/RendererContracts.java'),str(root/'tests/base/RendererTestUniform.java'),str(root/'tests/base/PlainUidContracts.java')]
 f=out/'javac.args';f.write_text('\n'.join('"'+s.replace('\\','/')+'"' for s in opts),encoding='utf8')
 subprocess.run([jdk/'javac.exe','-J-Dfile.encoding=UTF-8','@'+str(f)],check=True)
 line='Class-Path: '+' '.join(Path(p).resolve().as_uri()+('/' if Path(p).is_dir() else '') for p in [str(out),*cp]);lines=[line[:70]];line=line[70:]
 while line:lines.append(' '+line[:69]);line=line[69:]
 bridge=out/'classpath.jar'
 with zipfile.ZipFile(bridge,'w') as z:z.writestr('META-INF/MANIFEST.MF','Manifest-Version: 1.0\r\n'+'\r\n'.join(lines)+'\r\n\r\n')
-names=['PerfIrisBlockMappingMixin','LegacyParticleSpawnerMixin','PerfWeatherParticleMixin','LegacyCustomParticleMixin','PerfIrisDimensionMixin','PerfEmfCubeMixin','LegacyEmfModelPartMixin','PerfGraphOrderMixin','PerfPipelineManagerMixin','PerfTransformPatcherMixin','PerfEmfModelPartVariableMixin','LegacyLevelRendererWeatherMixin','PerfIrisLoadingCompleteMixin','PerfIrisAsyncLoadMixin','PerfIrisStandardMacrosMixin','PerfIrisRenderSystemMixin','LegacyClrwlTransformPatcherMixin']
+names=['PerfIrisBlockMappingMixin','LegacyParticleSpawnerMixin','PerfWeatherParticleMixin','LegacyCustomParticleMixin','PerfIrisDimensionMixin','PerfEmfCubeMixin','LegacyEmfModelPartMixin','PerfGraphOrderMixin','PerfPipelineManagerMixin','PerfTransformPatcherMixin','PerfEmfModelPartVariableMixin','LegacyLevelRendererWeatherMixin','PerfIrisLoadingCompleteMixin','PerfIrisAsyncLoadMixin','PerfIrisStandardMacrosMixin','PerfIrisRenderSystemMixin','LegacyClrwlTransformPatcherMixin','EntryJeiPlainItemMixin','EntryJeiItemHelperMixin','EntryJeiSubtypeManagerMixin','EntryJeiSubtypeInterpretersMixin','EntryJeiRecipeUidMixin']
 subprocess.run([jdk/'java.exe','-Xmx512m','-Dsunlit.base.classpath='+str(out/'base-classpath.txt'),'-Dsunlit.modern.classpath='+str(out/'modern-classpath.txt'),'-cp',bridge,'BaseOptimizationContracts',*names],check=True)
 
 subprocess.run([jdk/'java.exe','-Xmx512m','-Dsunlit.base.classpath='+str(out/'base-classpath.txt'),'-Dsunlit.modern.classpath='+str(out/'modern-classpath.txt'),'-cp',bridge,'RendererContracts'],check=True)
+
+subprocess.run([jdk/'java.exe','-Xmx512m','-Dsunlit.modern.classpath='+str(out/'modern-classpath.txt'),'-cp',bridge,'PlainUidContracts'],check=True)

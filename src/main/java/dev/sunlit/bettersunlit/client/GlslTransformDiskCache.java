@@ -567,13 +567,7 @@ public final class GlslTransformDiskCache {
     }
 
     private static void writeStr(MessageDigest md, String s) {
-        if (s == null) {
-            writeInt(md, -1);
-            return;
-        }
-        byte[] b = s.getBytes(StandardCharsets.UTF_8);
-        writeInt(md, b.length);
-        md.update(b);
+        Utf8Digest.write(md, s);
     }
 
     private static String toHex(byte[] bytes) {
