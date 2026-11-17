@@ -107,3 +107,13 @@ Particle Rain 구버전은 `LegacyParticleSpawnerMixin`에서 원본 높이 범�
 OBE 미설치로 생기는 두 앵커 경로와 구버전 Embeddium에 존재하지 않는 `embeddium$processTransparentImages` 경로는 해당 기능 없음으로 제외합니다. `tools/test_base_optimizations.py`는 실제 원본 JAR, 기존 팩 적용 조건, 변조된 대상·제거한 의존성의 차단과 스코프/자식 맵 회귀를 검사합니다. 런타임 적용 및 서버/날씨/셰이더 검증 결과는 로컬 `build/base-audit/`에 보관합니다.
 
 Iris·Colorwheel 디스크 캐시 키에는 실제 변환기 클래스의 SHA-256을 포함합니다. 같은 인스턴스에서 모드 버전을 바꿔도 다른 변환기의 산출물을 재사용하지 않으며, 지문을 읽을 수 없으면 해당 디스크 캐시를 사용하지 않습니다. 기존 캐시 파일 형식은 유지하지만 새 키 이름 공간을 사용합니다.
+
+## Oculus·Embeddium 렌더링 보완 (2026.11.18.2)
+
+실제 설치한 Emberbium 0.3.32-beta.118 / Emberlens 1.8.9와 원본 Embeddium 0.3.31 / Oculus 1.8.0의 코드를 비교하여 원본의 대형 정점 정렬, uniform·sampler 목록 순회와 sampler 초기화 범위를 보완합니다. 네 전용 Mixin은 원본 클래스의 정확한 지문을 검사하며 이미 해당 개선이 있는 Ember 계열에는 적용하지 않습니다. 기존 GLSL·그래프·밉맵 최적화는 유지합니다.
+
+정점 256개 이상에 안정적인 내림차순 기수 정렬을 사용하고 작은 입력과 NaN은 원래 MergeSort를 호출합니다. 기존 숫자 비교에서 같은 값인 +0/-0을 같은 키로 처리하여 동거리 정점 순서를 보존합니다. 스레드별 정수 작업 배열은 최대 65,536개까지만 보유하고 반환 배열을 재사용하지 않습니다. uniform·sampler 순회는 갱신 순서, 최초 uniform 설정, active texture 복원과 listener 해제를 유지합니다.
+
+sampler 바인딩의 최대 사용 위치를 추적하여 빈 초기화를 생략합니다. multibind에서는 OpenGL의 null 포인터로 범위 내 바인딩을 0으로 지정하고, 미지원 환경에서는 기존 개별 바인딩 해제를 사용합니다. 렌더러 초기화 때 추적 상태를 초기화합니다. 무관한 외부 GL 상태를 임의로 캐시하지 않습니다.
+
+`RendererContracts`는 실제 원본 MergeSort와 무작위·동거리·0·무한대·NaN 입력, 반환 배열 독립성과 작업 스레드 격리를 비교합니다. sampler 패치의 실제 바이트코드에 기록용 GL 함수를 연결하여 빈/반복/최대 범위 및 두 GL 경로를 검사하고 uniform 호출 순서와 빈 목록도 확인합니다. `test_base_optimizations.py`에서 실행합니다. 게임 검증은 실제 OpenGL sampler 상태를 조회하고 복원하며 두 팩의 서버 접속·주입 표식을 확인합니다. 결과와 비교 자료는 로컬 `build/renderer-audit/`에 보관합니다. 기수 정렬 CPU 시간은 FPS 개선 수치가 아닙니다.

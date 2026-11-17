@@ -5,7 +5,7 @@ public class BaseOptimizationContracts{static ClassLoader l=BaseOptimizationCont
  var urls=Files.readAllLines(Path.of(System.getProperty(prop))).stream().map(x->{try{return Path.of(x).toUri().toURL();}catch(Exception e){throw new RuntimeException(e);}}).toArray(URL[]::new);
  try(var loader=new URLClassLoader(urls,ClassLoader.getPlatformClassLoader()) {
   @Override public InputStream getResourceAsStream(String n){
-   if(missing&&(n.startsWith("pigcart/")||n.startsWith("net/irisshaders/")||n.startsWith("traben/entity_model_features/")||n.startsWith("traben/entity_texture_features/")||n.startsWith("dev/djefrey/colorwheel/")))return null;
+   if(missing&&(n.startsWith("me/jellysquid/mods/sodium/")||n.startsWith("pigcart/")||n.startsWith("net/irisshaders/")||n.startsWith("traben/entity_model_features/")||n.startsWith("traben/entity_texture_features/")||n.startsWith("dev/djefrey/colorwheel/")))return null;
    InputStream in=super.getResourceAsStream(n);
    if(changed&&n.equals(target.replace('.','/')+".class")&&in!=null)try(in){byte[] b=in.readAllBytes();return new ByteArrayInputStream(java.util.Arrays.copyOf(b,b.length+1));}catch(IOException e){throw new RuntimeException(e);}
    return in;
