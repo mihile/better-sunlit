@@ -9,8 +9,9 @@ import org.spongepowered.asm.mixin.injection.*;
 public abstract class EntryJeiTypedCacheMixin {
     @Redirect(method="<clinit>()V",at=@At(value="INVOKE",target="Lcom/google/common/cache/CacheBuilder;concurrencyLevel(I)Lcom/google/common/cache/CacheBuilder;"),require=1,remap=false)
     private static CacheBuilder<?,?> sunlit$avoidRepeatedCacheGrowth(CacheBuilder<?,?> builder,int concurrency) {
-        // Keep JEI's loader and one-second expiration. Sizing the table above
-        // modpack item counts (~100k) avoids repeated segment expansion during JEI init.
-        return builder.concurrencyLevel(concurrency).initialCapacity(131072);
+        // Keep JEI's loader and one-second expiration.
+        // The live pack grows this short-lived cache's table to 1,048,576 slots during recipe
+        // registration. Start at that capacity to avoid copying it on the render thread.
+        return builder.concurrencyLevel(concurrency).initialCapacity(1048576);
     }
 }

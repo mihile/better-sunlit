@@ -8,6 +8,10 @@ import java.util.*;
 /** Optional patches for reviewed binaries only; never initializes target classes. */
 public final class EntryMixinPlugin implements IMixinConfigPlugin {
     private static final Map<String,String> HASHES=Map.ofEntries(
+        Map.entry("net.minecraft.world.level.block.state.properties.IntegerProperty","4185a4b6a6eeffe5e873afb6dbe5f0ece0e5742cbf4cc5fecac422b4c089d820"),
+        Map.entry("com.simibubi.create.compat.jei.category.BlockCuttingCategory","5a9225b09d6d618adb9cd3569c7a4e6387df7015a654954a196dec3424be9767"),
+        Map.entry("com.simibubi.create.compat.jei.category.BlockCuttingCategory$CondensedBlockCuttingRecipe","639d235f4f28d56a4d4216dc801af1acaf72b77b1a4b3c15a961206080eed407"),
+        Map.entry("net.irisshaders.iris.shaderpack.materialmap.BlockMaterialMapping","317f12fbb3c8f88d31861c3c48394a26a3ff9c13759ff597c0b5aa826c5546f8"),
         Map.entry("mezz.jei.library.plugins.vanilla.VanillaPlugin","81a738a41333fb2eee326522493085fcea843546193c7c580eb60d77e6afc8ac"),
         Map.entry("mezz.jei.library.plugins.vanilla.ingredients.ItemStackListFactory","50b897b9b97845492dc76da225f5ed365a81fd20f9a04cb1f98864f0ef83c5d0"),
         Map.entry("mezz.jei.library.ingredients.itemStacks.TypedItemStack","d24191eb32f7f9b163fc08e2fbf26969b4dd8d357d5c2d756788b2c044b071cb"),
@@ -214,6 +218,10 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "PerfCreateBlockCuttingMixin" -> matches(target)
+                 &&matches("com.simibubi.create.compat.jei.category.BlockCuttingCategory$CondensedBlockCuttingRecipe");
+            case "PerfIrisBlockMappingMixin" -> matches(target)
+                 &&matches("net.minecraft.world.level.block.state.properties.IntegerProperty");
             case "EntryJeiTypedCacheMixin", "PerfButterflyVariantMixin", "PerfButterflyEntityMixin",
                  "PerfButterflyModelMixin", "PerfButterflyItemRendererMixin", "PerfMothItemRendererMixin",
                  "PerfRenderedButterflyItemExtMixin", "PerfRenderedMothItemExtMixin",
