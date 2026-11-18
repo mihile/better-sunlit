@@ -118,6 +118,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("dev.ftb.mods.ftbchunks.client.ClientTaskQueue","da66701c7470b3178f8a3f4941cd9a72d604977fa9c2ab52cfd3fd9f31368ff1"),
         Map.entry("dev.ftb.mods.ftbchunks.client.FTBChunksClientConfig","17085d58658730befeefb521c9fcc3445cb03ecf80642280f077c6dd784c4286"),
         Map.entry("dev.ftb.mods.ftbchunks.client.FTBChunksClient","158939e9e1df64f0832fcba3752c2b8587a598e9163c80f0dec0b8809f683366"),
+        Map.entry("dev.ftb.mods.ftbchunks.client.map.MapMode","cf4ed82f115b9a4e72a029a5de9aa64d8d943db9e1de3c96c8a3cd40fa247b26"),
         Map.entry("dev.ftb.mods.ftbchunks.client.map.MapTask","513c4210b2573e7a8656dc725372defe975410bdf44265589d23daca7153617a"),
         Map.entry("dev.ftb.mods.ftbchunks.client.map.MapRegion","1ce498fd44ab22d993e64946f35668953d9c5b934c1c2202687e899ad6e84c4f"),
         Map.entry("dev.ftb.mods.ftbchunks.client.map.MapRegionData","19d995918d9a212d73f12d693901efa62e173b73eb3d4ce619cb5f289a84a421"),
@@ -412,6 +413,9 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfFtbChunksRegionDataMixin" ->
                  matches(target)&&matches("dev.ftb.mods.ftbchunks.client.map.MapRegion")
                  &&matches("dev.ftb.mods.ftbchunks.client.FTBChunksClient");
+            case "PerfFtbChunksHiddenMinimapMixin" ->
+                 matches(target)&&matches("dev.ftb.mods.ftbchunks.client.FTBChunksClientConfig")
+                 &&matches("dev.ftb.mods.ftbchunks.client.map.MapMode");
             case "PerfJourneyMapImageUtilMixin", "PerfJourneyMapRgbMixin" ->
                  matches(target)&&matches("journeymap.client.cartography.color.RGB");
             case "PerfClrwlTransformPatcherMixin" ->
