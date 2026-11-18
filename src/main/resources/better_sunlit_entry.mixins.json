@@ -76,6 +76,8 @@
     "PerfFtbChunksRegionDataMixin",
     "PerfJourneyMapImageUtilMixin",
     "PerfIrisLoadingCompleteMixin",
+    "PerfJourneyMapResetMixin",
+    "PerfQuarkSharedChatMixin",
     "PerfMinecraftStartupTickMixin",
     "PerfLoadingOverlayMixin",
     "PerfKubeJsPackMixin",
