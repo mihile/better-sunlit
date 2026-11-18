@@ -70,6 +70,7 @@
     "PerfPalettedContainerMixin",
     "PerfSkillsLoginScanMixin",
     "PerfFtbChunksTaskQueueMixin",
+    "PerfFtbChunksHiddenMinimapMixin",
     "PerfFtbChunksRegionDataMixin",
     "PerfJourneyMapImageUtilMixin",
     "PerfIrisLoadingCompleteMixin",
