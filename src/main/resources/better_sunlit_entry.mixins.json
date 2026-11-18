@@ -28,6 +28,8 @@
     "PerfIrisBlockMappingMixin",
     "EntryJeiIngredientScopeMixin",
     "EntryCoreLibCandidatesMixin",
+    "EntryMoonlightForgeTabMixin",
+    "EntryEveryCompatTabMixin",
     "EntryJeiTypedCacheMixin",
     "PerfButterflyRendererMixin",
     "PerfMothRendererMixin",
