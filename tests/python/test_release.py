@@ -2,6 +2,7 @@
 from pathlib import Path
 from unittest import mock
 import importlib.util
+import base64
 import contextlib
 import io
 import json
@@ -22,6 +23,12 @@ publish_spec.loader.exec_module(publish)
 test_spec = importlib.util.spec_from_file_location('better_sunlit_test_runner', SCRIPT.parent / 'test.py')
 test_runner = importlib.util.module_from_spec(test_spec)
 test_spec.loader.exec_module(test_runner)
+
+
+def feed_envelope(side, label, sha256=''):
+    tag = f'{side}-build-{label}'
+    payload = f'channel={side}\nlabel={label}\ntag={tag}\nsha256={sha256}\n'
+    return 'payload=' + base64.b64encode(payload.encode()).decode() + '\nsignature=test\n'
 
 
 class ReleaseGitTests(unittest.TestCase):
@@ -68,6 +75,72 @@ class ReleaseGitTests(unittest.TestCase):
     def commit(self, message):
         self.git('add', '-A')
         self.git('commit', '-m', message)
+
+    def publish_snapshot(self, side, label):
+        self.git('tag', f'{side}-build-{label}')
+        self.write('feed/update.properties', feed_envelope(side, label))
+        self.commit(f'Publish {side} feed')
+        self.git('push', 'origin', side, f'refs/tags/{side}-build-{label}')
+
+    def test_maintenance_and_feed_changes_skip_both_channels_before_build_or_push(self):
+        self.publish_snapshot('client', '2026.11.14.1')
+        self.git('checkout', 'server')
+        self.publish_snapshot('server', '2026.11.14.1')
+        self.git('checkout', 'client')
+        self.write('tools/release.py', '# maintenance change\n')
+        self.write('releases/20261114.2.json', '{"build": 2026111402, "label": "2026.11.14.2"}\n')
+        self.commit('Unpublished maintenance and metadata')
+        refs = self.git('ls-remote', 'origin')
+        with mock.patch.object(release, 'known_remote_builds') as versions, \
+             mock.patch.object(release, 'choose_release') as choose, \
+             mock.patch.object(release, 'build_both') as build, \
+             mock.patch.object(release, 'publish_side') as publish_side:
+            release.release('both')
+        versions.assert_not_called()
+        choose.assert_not_called()
+        build.assert_not_called()
+        publish_side.assert_not_called()
+        self.assertEqual(self.git('ls-remote', 'origin'), refs)
+
+    def test_partial_publication_retries_only_channel_with_unreleased_source(self):
+        self.git('checkout', 'server')
+        self.publish_snapshot('server', '2026.11.14.1')
+        self.git('checkout', 'client')
+        self.write('src/main/resources/pack.mcmeta', '{}\n')
+        metadata = json.loads((self.root/'releases/20261114.1.json').read_text(encoding='utf8'))
+        metadata.update(build=2026111402, label='2026.11.14.2')
+        self.write('releases/20261114.2.json', json.dumps(metadata))
+        self.commit('Production resource change')
+        self.publish_snapshot('client', '2026.11.14.2')
+        actual_run = release.run
+
+        def run_stub(command, *, check=True):
+            if str(command[0]) == sys.executable:
+                return subprocess.CompletedProcess(command, 0)
+            return actual_run(command, check=check)
+
+        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026111402, 'server': 2026111401}), \
+             mock.patch.object(release, 'build_both') as build, \
+             mock.patch.object(release, 'verify_artifacts'), \
+             mock.patch.object(release, 'run', side_effect=run_stub), \
+             mock.patch.object(release, 'publish_side') as publish_side:
+            release.release('both')
+        build.assert_called_once()
+        publish_side.assert_called_once()
+        self.assertEqual(publish_side.call_args.args, ('server', self.root/'releases/20261114.2.json'))
+        self.assertEqual(self.git('show', 'server:src/main/resources/pack.mcmeta'), '{}')
+
+    def test_client_only_sources_do_not_trigger_server(self):
+        self.publish_snapshot('client', '2026.11.14.1')
+        self.git('checkout', 'server')
+        self.publish_snapshot('server', '2026.11.14.1')
+        self.git('checkout', 'client')
+        self.write('boot-agent/src/Agent.java', 'class Agent {}\n')
+        self.write('src/main/java/dev/sunlit/client/Presentation.java', 'class Presentation {}\n')
+        self.commit('Boot agent change')
+
+        self.assertTrue(release.needs_release('client'))
+        self.assertFalse(release.needs_release('server'))
 
     def test_merge_preserves_both_changes_and_each_channel(self):
         self.write('client-added.txt', 'client feature\n')
@@ -129,7 +202,8 @@ class ReleaseGitTests(unittest.TestCase):
             self.write('feed/update.properties', side + '-new\n')
             self.commit('Publish ' + side)
 
-        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026110804, 'server': 2026110804}), \
+        with mock.patch.object(release, 'needs_release', return_value=True), \
+             mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026110804, 'server': 2026110804}), \
              mock.patch.object(release, 'build_both', side_effect=lambda data: events.append('build')), \
              mock.patch.object(release, 'verify_artifacts'), \
              mock.patch.object(release, 'run', side_effect=run_stub), \
@@ -152,7 +226,8 @@ class ReleaseGitTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, command)
             return actual_run(command, check=check)
 
-        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
+        with mock.patch.object(release, 'needs_release', return_value=True), \
+             mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
              mock.patch.object(release, 'build_both'), \
              mock.patch.object(release, 'run', side_effect=run_stub), \
              mock.patch.object(release, 'publish_side', side_effect=lambda *args: published.append(args)):
@@ -182,7 +257,8 @@ class ReleaseGitTests(unittest.TestCase):
             self.assertEqual(self.git('branch', '--show-current'), side)
             events.append('publish-' + selected)
 
-        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
+        with mock.patch.object(release, 'needs_release', return_value=True), \
+             mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
              mock.patch.object(release, 'build_both', side_effect=lambda data: events.append('build')), \
              mock.patch.object(release, 'verify_artifacts'), \
              mock.patch.object(release, 'run', side_effect=run_stub), \
@@ -288,7 +364,6 @@ class RecoveryModeTests(unittest.TestCase):
     def test_both_verification_only_dispatches_saved_release_checks(self):
         with mock.patch.object(sys, 'argv', ['release.py', '--side', 'both', '--verify-only']), \
              mock.patch.object(release, 'release_lock', return_value=contextlib.nullcontext()), \
-             mock.patch.object(release, 'latest_release_meta', return_value=(Path('releases/saved.json'), {})), \
              mock.patch.object(release, 'release') as publish_new, \
              mock.patch.object(release, 'run') as run:
             release.main()
@@ -298,6 +373,23 @@ class RecoveryModeTests(unittest.TestCase):
             command = call.args[0]
             self.assertIn('--verify-only', command)
             self.assertEqual(command[command.index('--side')+1], side)
+
+    def test_verification_uses_saved_channel_release_after_a_rebuild(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root/'build/server'
+            saved = build/'release'
+            saved.mkdir(parents=True)
+            jar = saved/'better-sunlit.jar'
+            jar.write_bytes(b'published server')
+            (saved/'update.properties').write_text(feed_envelope('server', '2026.11.14.1', publish.sha256(jar)),
+                                                  encoding='utf8')
+            (build/'better-sunlit.jar').write_bytes(b'later build')
+            args = SimpleNamespace(side='server', changes=None, java_home=Path('jdk'))
+            with mock.patch.object(publish, 'ROOT', root), mock.patch.object(publish, 'run'):
+                _, _, _, verified_jar, tag, *_ = publish.verification_inputs(args)
+            self.assertEqual(verified_jar, jar)
+            self.assertEqual(tag, 'server-build-2026.11.14.1')
 
 
 class ParallelRunnerTests(unittest.TestCase):

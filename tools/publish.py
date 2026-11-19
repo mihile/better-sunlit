@@ -1,6 +1,7 @@
 """Sign a build, publish its immutable release and verify the public feed."""
 from pathlib import Path
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -32,6 +33,21 @@ def require(condition, message):
 
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def release_feed_metadata(side, envelope):
+    try:
+        encoded = next(line.removeprefix('payload=') for line in envelope.splitlines()
+                       if line.startswith('payload='))
+        payload = base64.b64decode(encoded, validate=True).decode('utf8')
+        metadata = dict(line.split('=', 1) for line in payload.split('\n') if '=' in line)
+        label = metadata['label']
+        if not (metadata['channel'] == side and re.fullmatch(r'\d{4}\.\d{2}\.\d{2}\.\d+', label)
+                and metadata['tag'] == f'{side}-build-{label}'):
+            raise ValueError('invalid release identity')
+        return metadata
+    except (StopIteration, ValueError, KeyError) as error:
+        raise RuntimeError(f'{side} 피드에서 릴리스 태그를 확인하지 못했습니다.') from error
 
 
 def prepare(args):
@@ -148,21 +164,24 @@ def verify_public_release(args, prepared, commit=None):
 
 
 def verification_inputs(args):
-    # Recovery reads the original artifacts and never signs or creates a release.
+    # Each channel retains its signed artifacts even if a later run rebuilds both JARs.
     build = ROOT / 'build' / args.side
-    report = json.loads((build/'build-report.json').read_text(encoding='utf8'))
-    changes = json.loads(args.changes.read_text(encoding='utf8'))
-    jar = build/FILENAME
-    require(report['side'] == args.side and report['build'] == changes['build'] and
-            report['label'] == changes['label'] and sha256(jar) == report['sha256'],
-            '재검증할 기존 빌드와 릴리스 설명이 일치하지 않습니다.')
+    release = build/'release'
+    metadata = release_feed_metadata(args.side, (release/'update.properties').read_text(encoding='utf8'))
+    jar = release/FILENAME
+    require(sha256(jar) == metadata['sha256'], '재검증할 기존 JAR이 보관된 피드와 일치하지 않습니다.')
+    changes = None
+    if args.changes is not None:
+        changes = json.loads(args.changes.read_text(encoding='utf8'))
+        require(metadata['build'] == str(changes['build']) and metadata['label'] == changes['label'],
+                '재검증할 기존 빌드와 릴리스 설명이 일치하지 않습니다.')
     tools = build/'maintainer-tools'
     tools.mkdir(exist_ok=True)
     java = args.java_home/'bin/java.exe'
     run([args.java_home/'bin/javac.exe', '--release', '17', '-cp', jar, '-d', tools,
          ROOT/'tools/VerifyRelease.java'])
-    return (build, report, changes, jar, args.side+'-build-'+changes['label'], build/'release',
-            java, str(tools)+os.pathsep+str(jar))
+    return (build, metadata, changes, jar, metadata['tag'], release, java,
+            str(tools)+os.pathsep+str(jar))
 
 
 def publish(args, prepared):
@@ -213,7 +232,7 @@ def publish(args, prepared):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--side', choices=['client', 'server'], required=True)
-    parser.add_argument('--changes', type=Path, default=ROOT/'releases/20261108.1.json')
+    parser.add_argument('--changes', type=Path)
     parser.add_argument('--keys', type=Path, default=Path.home()/'.codex/secrets/better-sunlit')
     parser.add_argument('--prepare-only', action='store_true')
     parser.add_argument('--verify-only', action='store_true')
@@ -225,6 +244,8 @@ def main():
             parser.error('--verify-only and --prepare-only cannot be combined')
         verify_public_release(args, verification_inputs(args))
         return
+    if args.changes is None:
+        args.changes = ROOT/'releases/20261108.1.json'
     prepared = prepare(args)
     if not args.prepare_only:
         publish(args, prepared)
