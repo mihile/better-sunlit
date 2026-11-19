@@ -11,6 +11,12 @@
 
 `/realfishing 3 4 1`: 3초 활발함 → 4초 동안 1초 간격으로 약해짐. 설정과 저장 데이터는 기존 모드에서 이어집니다.
 
+`/realfishing version 1`은 물고기 전체가 기울고 흔들리는 연출이며 기본값입니다. `/realfishing version 2`는 낚은 물고기의 몸을 머리부터 꼬리까지 네 구간으로 나눠 순서대로 옆으로 휘게 합니다. 두 버전 모두 낚여 나온 물고기에는 평상시 수영 동작을 적용하지 않습니다. 변경은 다음에 낚는 물고기부터 적용되며, `/realfishing`으로 현재 설정을 확인할 수 있습니다.
+
+`/realfishing off`로 연출을 끄면 다음에 낚는 물고기부터 Stardew Fishing의 원래 보상 동작을 사용합니다. `/realfishing on`으로 켜면 저장해 둔 버전과 시간 설정으로 연출을 재개합니다. 기본값은 켜짐입니다.
+
+Stardew Fishing의 `/stardew_fishing toggle_minigame`으로 본인의 미니게임을 건너뛰어도 낚은 물고기에 펄떡임이 적용됩니다. 물고기 연출은 `/realfishing on`과 `/realfishing off`로 따로 제어합니다.
+
 </details>
 
 <details>
