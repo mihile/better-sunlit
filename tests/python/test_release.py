@@ -27,7 +27,7 @@ test_spec.loader.exec_module(test_runner)
 
 def feed_envelope(side, label, sha256=''):
     tag = f'{side}-build-{label}'
-    payload = f'channel={side}\nlabel={label}\ntag={tag}\nsha256={sha256}\n'
+    payload = f'channel={side}\r\nlabel={label}\r\ntag={tag}\r\nsha256={sha256}\r\n'
     return 'payload=' + base64.b64encode(payload.encode()).decode() + '\nsignature=test\n'
 
 
