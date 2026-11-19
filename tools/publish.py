@@ -40,7 +40,8 @@ def release_feed_metadata(side, envelope):
         encoded = next(line.removeprefix('payload=') for line in envelope.splitlines()
                        if line.startswith('payload='))
         payload = base64.b64decode(encoded, validate=True).decode('utf8')
-        metadata = dict(line.split('=', 1) for line in payload.split('\n') if '=' in line)
+        lines = payload.replace('\r\n', '\n').split('\n')
+        metadata = dict(line.split('=', 1) for line in lines if '=' in line)
         label = metadata['label']
         if not (metadata['channel'] == side and re.fullmatch(r'\d{4}\.\d{2}\.\d{2}\.\d+', label)
                 and metadata['tag'] == f'{side}-build-{label}'):
