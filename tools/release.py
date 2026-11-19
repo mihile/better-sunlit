@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from publication_guard import check_worktree, check_git_tree
+from publish import release_feed_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTANCE = ROOT.parents[1]
@@ -101,6 +102,28 @@ def known_remote_builds():
             number = int(year + month + day + sequence.zfill(2))
             builds[side] = max(builds[side], number)
     return builds
+
+
+def needs_release(side):
+    remote = f'origin/{side}'
+    feed = 'feed/update.properties'
+    if not git('ls-tree', '--name-only', remote, '--', feed):
+        return True
+
+    metadata = release_feed_metadata(side, git('show', f'{remote}:{feed}'))
+    tag = metadata['tag']
+    ref = f'refs/tags/{tag}'
+    run(['git', 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', f'{ref}:{ref}'])
+    paths = ['src/main', 'build.py', f'keys/{side}-public.der']
+    if side == 'client':
+        paths.extend(['boot-agent/src', 'tools/build_boot.py'])
+    else:
+        paths.append(':(exclude,glob)src/main/java/**/client/**')
+    if git('diff', '--name-only', f'{ref}^{{commit}}', 'HEAD', '--', *paths):
+        return True
+
+    print(f'{side}: 공개 릴리스 {tag} 이후 JAR 빌드 입력 변경 없음. 배포를 건너뜁니다.', flush=True)
+    return False
 
 
 def save_work():
@@ -215,10 +238,13 @@ def verify_artifacts(data):
             raise RuntimeError(f'{side} 산출물의 빌드 번호, 채널 또는 해시가 일치하지 않습니다.')
 
 
+def shared_changes(first, second):
+    return git('diff', '--name-only', first, second, '--', '.',
+               ':(exclude)feed', ':(exclude)release-channel.properties')
+
+
 def assert_shared_equal(first, second):
-    result = subprocess.run(['git', 'diff', '--quiet', first, second, '--', '.',
-                             ':(exclude)feed', ':(exclude)release-channel.properties'], cwd=ROOT)
-    if result.returncode != 0:
+    if shared_changes(first, second):
         raise RuntimeError('양쪽 브랜치의 공통 소스가 달라 검증한 산출물을 재사용할 수 없습니다.')
 
 
@@ -251,15 +277,19 @@ def release(requested, prepare_only=False):
     initial = git('branch', '--show-current')
     if initial not in SIDES:
         raise RuntimeError('client 또는 server 브랜치에서 실행하세요.')
-    # Do all read-only network checks before making local commits or changing branches.
     step('원격 브랜치 확인', run, ['git', 'fetch', '--no-tags', 'origin'])
-    remote_builds = step('공개 릴리스 및 태그 확인', known_remote_builds)
     save_work()
     update_local_branches(initial)
     other = 'server' if initial == 'client' else 'client'
-    step('공통 변경 동기화', sync_from, other)
+    if shared_changes(initial, other):
+        step('공통 변경 동기화', sync_from, other)
 
-    sides = [initial, other] if requested == 'both' else [requested]
+    candidates = [initial, other] if requested == 'both' else [requested]
+    sides = [side for side in candidates if needs_release(side)]
+    if not sides:
+        return
+
+    remote_builds = step('공개 릴리스 및 태그 확인', known_remote_builds)
     if sides[0] != initial:
         run(['git', 'checkout', sides[0]])
         step('대상 브랜치 동기화', sync_from, initial)
@@ -307,11 +337,10 @@ def main():
         parser.error('--local-only, --prepare-only and --verify-only cannot be combined')
     with release_lock():
         if args.verify_only:
-            changes, _ = latest_release_meta()
             sides = SIDES if args.side == 'both' else (args.side,)
             for side in sides:
                 step(f'{side} 기존 공개 빌드 재검증', run, [sys.executable, '-X', 'utf8', 'tools/publish.py',
-                    '--side', side, '--changes', changes, '--verify-only'])
+                    '--side', side, '--verify-only'])
         elif args.local_only:
             local_build(args.side)
         else:
