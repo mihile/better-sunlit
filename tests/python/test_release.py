@@ -44,7 +44,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.write('shared.txt', 'base\n')
         self.write('releases/20261114.1.json', json.dumps({
             'build': 2026111401, 'label': '2026.11.14.1', 'title': 'Title',
-            'features': [{'title': 'Feature', 'detail': 'Description'}],
+            'changes': [{'title': 'Feature', 'detail': 'Description'}],
         }))
         self.commit('base')
         self.git('checkout', '-b', 'server')
@@ -109,6 +109,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.write('src/main/resources/pack.mcmeta', '{}\n')
         metadata = json.loads((self.root/'releases/20261114.1.json').read_text(encoding='utf8'))
         metadata.update(build=2026111402, label='2026.11.14.2')
+        metadata['changes'][0]['title'] = 'Update pack resources'
         self.write('releases/20261114.2.json', json.dumps(metadata))
         self.commit('Production resource change')
         self.publish_snapshot('client', '2026.11.14.2')
@@ -280,24 +281,23 @@ class ReleaseGitTests(unittest.TestCase):
                 with release.release_lock():
                     self.fail('second lock should not be acquired')
 
-    def test_new_version_exceeds_both_channels_and_keeps_feature_notes(self):
-        with mock.patch.object(release, 'ROOT', self.root):
-            path, data = release.choose_release(['client', 'server'],
-                                                {'client': 2026110804, 'server': 2026111401})
-        self.assertGreater(data['build'], 2026111401)
-        self.assertEqual(data['features'][0]['detail'], 'Description')
-        self.assertTrue(path.is_file())
-        self.assertTrue((self.root/'releases/20261114.1.json').is_file())
+    def test_release_requires_new_metadata_instead_of_copying_old_notes(self):
+        with self.assertRaisesRegex(RuntimeError, '높은 번호'):
+            release.choose_release(['client', 'server'], {'client': 2026110804, 'server': 2026111401})
+        self.assertEqual(len(list((self.root/'releases').glob('*.json'))), 1)
 
-    def test_new_version_preserves_changelog_entries(self):
-        path = self.root/'releases/20261114.1.json'
-        data = json.loads(path.read_text())
-        data['changes'] = data.pop('features')
+    def test_rejects_duplicate_notes_and_keeps_authored_notes(self):
+        old = self.root/'releases/20261114.1.json'
+        data = json.loads(old.read_text())
+        data.update(build=2026111402, label='2026.11.14.2')
+        new = old.with_name('20261114.2.json')
+        new.write_text(json.dumps(data), encoding='utf8')
+        with self.assertRaisesRegex(RuntimeError, '변경 내역이 .* 같습니다'):
+            release.choose_release(['client'], {'client': 2026111401})
         data['changes'][0]['title'] = 'Fixed startup hang'
-        path.write_text(json.dumps(data), encoding='utf8')
+        new.write_text(json.dumps(data), encoding='utf8')
         _, selected = release.choose_release(['client'], {'client': 2026111401})
-        self.assertEqual(selected['changes'][0]['title'], 'Fixed startup hang')
-        self.assertNotIn('features', selected)
+        self.assertEqual(selected, data)
 
     def test_remote_versions_include_drafts_and_tags_without_releases(self):
         pages = [[{'tag_name': 'client-build-2026.11.14.1', 'draft': True}],

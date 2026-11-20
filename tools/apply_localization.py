@@ -1,4 +1,4 @@
-"""Merge reviewed Korean assets and external book files into a stopped instance."""
+"""Merge reviewed Korean assets and update a book title into a stopped instance."""
 from pathlib import Path
 from datetime import datetime
 import argparse
@@ -32,17 +32,12 @@ for source in sorted((ROOT/'src/main/resources/assets/better_sunlit/lang').glob(
         continue
     old.update(patch)
     planned.append((dest, (json.dumps(old, ensure_ascii=False, indent=2)+'\n').encode('utf8')))
-for source in sorted((ROOT/'localization/pack-files').rglob('*.json')):
-    dest = game/source.relative_to(ROOT/'localization/pack-files')
-    # This external entry already has Korean prose. Only correct the reviewed name.
-    assert source.name == 'warped_wooly_cow.json'
-    if not dest.exists():
-        continue
-    book = json.loads(dest.read_text(encoding='utf-8-sig'))
-    desired = json.loads(source.read_text(encoding='utf8'))['pages'][1]['name']
+book_path = game/'patchouli_books/almanac/ko_kr/entries/animals/warped_wooly_cow.json'
+if book_path.is_file():
+    book = json.loads(book_path.read_text(encoding='utf-8-sig'))
     if book['pages'][1]['name'] == 'Warped Wooly Cow':
-        book['pages'][1]['name'] = desired
-        planned.append((dest, (json.dumps(book, ensure_ascii=False, indent=2)+'\n').encode('utf8')))
+        book['pages'][1]['name'] = '뒤틀린 털 소'
+        planned.append((book_path, (json.dumps(book, ensure_ascii=False, indent=2)+'\n').encode('utf8')))
 manifest = []
 for dest, raw in planned:
     assert dest.resolve().is_relative_to(game.resolve()), dest

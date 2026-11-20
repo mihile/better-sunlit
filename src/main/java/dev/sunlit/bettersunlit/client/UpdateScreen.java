@@ -97,7 +97,8 @@ public final class UpdateScreen extends Screen {
         String verLine = hasUpdate ? (Build.LABEL + "  →  " + rel.label()) : ("현재 버전 " + Build.LABEL);
         g.m_280488_(f_96547_, verLine, x + 14, y + 31, 0xFFACA6B8);
         g.m_280509_(x + 12, y + 49, x + boxW - 12, y + 50, 0xFF494153);
-        g.m_280488_(f_96547_, "최근 변경 내역", x + 14, y + 55, 0xFFB8A6D2);
+        String notesLabel = (hasUpdate ? rel.label() : Build.LABEL) + " 변경 내역";
+        g.m_280488_(f_96547_, notesLabel, x + 14, y + 55, 0xFFB8A6D2);
 
         List<Row> list = rows();
         int visible = notesBottom - notesTop;
