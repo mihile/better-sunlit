@@ -2,20 +2,43 @@ package dev.sunlit.bettersunlit.client;
 import dev.sunlit.bettersunlit.update.*;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import java.nio.file.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
-import net.minecraft.client.Minecraft;import net.minecraft.client.gui.screens.TitleScreen;import net.minecraft.client.gui.screens.Screen;import net.minecraft.client.gui.components.Button;import net.minecraft.network.chat.Component;
+import net.minecraft.client.Minecraft;import net.minecraft.client.gui.GuiGraphics;import net.minecraft.client.gui.screens.TitleScreen;import net.minecraft.client.gui.screens.Screen;import net.minecraft.client.gui.components.Button;import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;import net.minecraftforge.fml.common.Mod;import net.minecraftforge.eventbus.api.SubscribeEvent;import net.minecraftforge.event.TickEvent;import net.minecraftforge.client.event.ScreenEvent;import net.minecraftforge.fml.loading.FMLPaths;
 @Mod.EventBusSubscriber(modid=SunlitFishVisuals.ID,value=Dist.CLIENT)
 public final class UpdateClient {
  static final ExecutorService IO=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"Better Sunlit updater");t.setDaemon(true);return t;});
  static final AtomicBoolean BUSY=new AtomicBoolean();static volatile SignedRelease release;static volatile String status="업데이트 확인 중…";static volatile boolean queued,failed;static volatile long downloaded;
- static final Set<Long> SHOWN=new HashSet<>();static boolean first,auto=true;static long lastCheck;static Screen renderedTitle;
+ static boolean first,auto=true;static long lastCheck;static Screen renderedTitle;
  static Path game(){return FMLPaths.GAMEDIR.get().toAbsolutePath().normalize();}
  static Path root()throws Exception{return UpdateFiles.directory(game().resolve(".better-sunlit-update"));}
- @SubscribeEvent public static void init(ScreenEvent.Init.Post event){if(!(event.getScreen() instanceof TitleScreen))return;Screen s=event.getScreen();event.addListener(Button.m_253074_(Component.m_237113_("Better Sunlit"),b->open(s)).m_252987_(Math.max(4,s.f_96543_-108),6,102,20).m_253136_());renderedTitle=null;}
+ @SubscribeEvent public static void init(ScreenEvent.Init.Post event) {
+  if (!(event.getScreen() instanceof TitleScreen title)) return;
+  event.addListener(new UpdateButton(title));
+  renderedTitle = null;
+ }
+
+ private static final class UpdateButton extends Button {
+  UpdateButton(TitleScreen title) {
+   super(Math.max(4, title.f_96543_ - 108), 6, 102, 20, Component.m_237113_("Better Sunlit"),
+         button -> open(title), f_252438_);
+  }
+
+  @Override
+  protected void m_87963_(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+   super.m_87963_(graphics, mouseX, mouseY, partialTick);
+   SignedRelease available = release;
+   if (available == null || available.build() <= Build.NUMBER || queued) return;
+
+   int right = m_252754_() + m_93694_();
+   int top = m_252907_();
+   graphics.m_280509_(right - 11, top, right, top + 11, 0xFF2D2026);
+   graphics.m_280509_(right - 10, top + 1, right - 1, top + 10, 0xFFD43F54);
+   graphics.m_280488_(Minecraft.m_91087_().f_91062_, "!", right - 6, top + 2, 0xFFFFFFFF);
+  }
+ }
  @SubscribeEvent public static void rendered(ScreenEvent.Render.Post event){if(event.getScreen() instanceof TitleScreen)renderedTitle=event.getScreen();}
  @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event){if(event.phase!=TickEvent.Phase.END)return;Minecraft mc=Minecraft.m_91087_();if(!(mc.f_91080_ instanceof TitleScreen)||mc.f_91080_!=renderedTitle||mc.m_91265_()!=null)return;
   if(!first){first=true;try{Path p=game().resolve("config/better-sunlit-updater.properties");if(Files.isRegularFile(p))auto=Boolean.parseBoolean(SignedRelease.properties(Files.readAllBytes(p)).getProperty("enabled","true"));FancyIsolation.register();}catch(Exception e){SunlitFishVisuals.LOG.warn("Better Sunlit updater preference/isolation unavailable",e);}if(auto)check();}
-  if(auto&&release!=null&&release.build()>Build.NUMBER&&SHOWN.add(release.build()))mc.m_91152_(new UpdateScreen(mc.f_91080_));
  }
  static void open(Screen parent){try{FancyIsolation.register();}catch(Exception ignored){}Minecraft.m_91087_().m_91152_(new UpdateScreen(parent));if(release==null&&!queued)check();}
  static void check(){if(!BUSY.compareAndSet(false,true))return;status="업데이트 확인 중…";failed=false;IO.execute(()->{try{release=SignedRelease.verify(new SafeHttp().manifest(),SignedRelease.publicKey());status=release.build()>Build.NUMBER?"새 업데이트가 있어요":"최신 버전입니다";lastCheck=System.currentTimeMillis();}catch(Exception e){failed=true;status="업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.";SunlitFishVisuals.LOG.warn("Better Sunlit update check failed; installed mod retained",e);}finally{BUSY.set(false);}});}
