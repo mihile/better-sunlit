@@ -192,9 +192,7 @@ public final class SunlitBootAgent {
         return SunlitBootTransformer.transformPostProcessors(loader, bytes);
     }
 
-    public static byte[] transformModList(ClassLoader loader, byte[] bytes) {
-        return SunlitBootTransformer.transformModList(loader, bytes);
-    }
+
 
     public static byte[] transformModernUiOutlineFont(byte[] bytes) {
         return SunlitBootTransformer.transformModernUiOutlineFont(bytes);

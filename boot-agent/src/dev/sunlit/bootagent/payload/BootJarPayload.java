@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -134,53 +133,6 @@ public final class BootJarPayload {
             }
         }
     }
-    private static final String[] LPT_HEAVY_MOD_IDS = {
-            "kubejs", "easy_npc", "create", "watermedia", "servercore", "wildernature",
-            "quark", "supplementaries", "everycomp", "emi", "ribbits", "ftbquests",
-            "sophisticatedcore", "sophisticatedstorage", "sophisticatedbackpacks",
-            "fancymenu", "domesticationinnovation", "entity_texture_features",
-            "modernui", "botania", "oculus", "alexsmobs", "jei", "farmersdelight",
-            "voxy", "cataclysm", "mowziesmobs", "railways", "refinedstorage", "ftbchunks",
-            "waystones", "journeymap", "relics", "numismatics", "createrailwaysnavigator",
-            "architectury", "moonlight", "zeta", "puzzleslib", "blueprint", "citadel",
-            "kotlinforforge", "geckolib", "curios", "bookshelf", "placebo", "framework",
-            "resourcefullib", "resourcefulconfig", "cloth_config", "balm", "coroutil",
-            "creativecore", "octolib", "supermartijn642corelib", "supermartijn642configlib",
-            "ftblibrary", "ftbteams", "itemfilters", "polylib", "rhino",
-            "apexcore", "commonality", "doapi", "pandalib", "smartbrainlib",
-            "kambrik", "konkrete", "melody", "yungsapi", "paraglider",
-            "fantasyfurniture", "create_central_kitchen", "viaromana", "cluttered",
-            "biomesoplenty", "meadow", "vinery", "brewery", "nethervinery",
-            "simplehats", "gag", "artifacts", "aquaculture", "atmospheric", "autumnity",
-            "environmental", "upgrade_aquatic", "neapolitan", "buzzier_bees",
-            "caverns_and_chasms", "endergetic", "savage_and_ravage", "windswept",
-            "woodworks", "clayworks", "dramaticdoors", "chipped", "handcrafted",
-            "furniture", "amendments", "immersive_aircraft", "smallships", "carryon",
-            "corpse", "jade", "kiwi", "railway_depot", "createnumismatics", "puffish_skills",
-            "exposure", "structurify", "trofers", "oreganized", "snowrealmagic",
-            "sereneseasons", "toughasnails", "stardew_fishing", "aquamirae", "obscure_api"
-    };
-
-    public static Map buildLptIndexedMods(Map raw) {
-        if (raw == null || raw.size() <= 1) {
-            return raw;
-        }
-        LinkedHashMap ordered = new LinkedHashMap(raw.size() * 4 / 3 + 1);
-        for (int i = 0; i < LPT_HEAVY_MOD_IDS.length; i++) {
-            String key = LPT_HEAVY_MOD_IDS[i];
-            Object val = raw.get(key);
-            if (val != null) {
-                ordered.put(key, val);
-            }
-        }
-        Iterator it = raw.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry e = (Map.Entry) it.next();
-            ordered.putIfAbsent(e.getKey(), e.getValue());
-        }
-        return ordered;
-    }
-
     static {
         NON_EVENT_SUPERS.put("java/lang/Object", Boolean.TRUE);
         NON_EVENT_SUPERS.put("java/lang/Enum", Boolean.TRUE);
