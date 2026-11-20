@@ -22,16 +22,6 @@ python tools/test.py
 
 `tools/test.py`와 `tools/test_perf_opts.py`는 이미 만들어진 두 JAR을 검사하며 다시 빌드하지 않습니다. 전체 검사 전후에 JAR·업데이트 도우미·빌드 보고서가 그대로인지 확인합니다. 독립적인 검사는 최대 3개씩 병렬로 실행하고 전체 출력은 `build/test-logs/`에 남깁니다. 따라서 직접 실행할 때도 먼저 두 채널을 동일한 빌드 번호로 빌드해야 합니다.
 
-모드의 한국어 보완 파일은 `src/main/resources/assets/<namespace>/lang/ko_kr.json`에 누적합니다. 로컬 적용 파일은 인스턴스의 `minecraft/kubejs/assets/<namespace>/lang/ko_kr.json`에도 병합합니다. 기존 한국어와 이리듐 등 모드팩 명칭을 덮어쓰지 말고, 같은 키가 다른 namespace에도 있으면 영어 값이 다시 덮어쓰지 않는지 확인합니다. 치환 인자의 의미·순서, 색상 코드, 명령어 예시와 파일명을 보존합니다. 로컬 상세 점검 및 복원 목록은 무시되는 `build/localization-all/`와 `local-backups/`에 남깁니다.
-
-## 코드 및 스크립트의 한국어 보완
-
-코드에 직접 적힌 문구는 `assets/better_sunlit/inline/rules.json`의 검토된 호출 위치에서만 번역 컴포넌트로 바꿉니다. 메서드 명령어 지문이 달라지면 원문을 유지합니다. 다른 모드가 주입한 문구는 원본 Mixin 클래스 해시와 병합된 메서드의 텍스트 지문도 검사합니다. 별도 선택적 Mixin 설정을 사용하며 기존 낚시·글꼴 Mixin의 필수 적용 규칙은 유지합니다. 영어 fallback을 포함하여 서버의 `getString()` 결과를 보존합니다. 임의 채팅·사용자 입력에는 전역 치환을 하지 않습니다.
-
-KubeJS의 네 안내문은 `inline/scripts.json`의 전체 소스 해시와 문자열 범위가 맞을 때만 메모리에서 `Text.translatable`로 바꿉니다. 디스크의 스크립트 로직은 수정하지 않습니다. `python tools/apply_localization.py --instance <경로>`는 한국어 자산을 독립 백업 후 로컬에 병합하고, 이미 설치된 Patchouli 도감의 해당 엔티티 표시 이름만 교정합니다. 게임이 종료된 상태에서 실행하세요.
-
-`tools/test_inline_localization.py`는 실제 설치된 클라이언트·서버 클래스에 대한 변환, 스택 검증, 변경된 버전의 적용 차단, 사용자 인자·서버 영어 fallback 보존, 언어 전환 및 스크립트 지문을 검사합니다. Forge·게임·서버·그래픽 컨텍스트를 실행하지 않으므로 실제 화면 검증과 구분합니다.
-
 ## 월드 진입 시 반복 계산 보완
 
 `better_sunlit_entry.mixins.json`은 JEI 15.20.0.129와 SuperMartijn642 Core Lib 1.1.19의 검토된 클래스 SHA-256이 일치할 때만 클라이언트에서 적용합니다. JEI의 `ItemStackListFactory.create` 한 번을 실행하는 동안에만 CoreLib의 기본 아이템 종류 후보를 캐시합니다. 아이템 레지스트리가 잠겨 있을 때만 사용하며, 기존 탭별 표시 조건과 순서는 그대로 평가합니다. 스레드별 범위는 정상 반환·예외·중첩 호출 모두에서 해제합니다. 레시피 등록을 다른 스레드로 옮기거나 생략하지 않습니다.
@@ -40,7 +30,6 @@ JEI `TypedItemStack`의 Guava 캐시는 초기 테이블 용량만 1,048,576으�
 
 Create 6.0.8의 `BlockCuttingCategory.condenseRecipes`는 호출 중에만 그룹의 재료 참조를 보관합니다. 원본 `ItemHelper.matchIngredients`의 호출 방향·순서, 첫 일치 그룹 선택, 출력 객체와 순서는 유지하고 그룹을 비교할 때마다 만들어지던 `NonNullList`를 줄입니다. Iris `BlockMaterialMapping.createBlockStateIdMap`은 초기 용량만 131,072로 지정합니다. 정수 속성 0..255의 이름은 변경 불가능한 문자열 표를 재사용합니다. 정확히 vanilla `IntegerProperty`인 경우만 적용하고 사용자 정의 속성·범위 밖 정수는 원래 이름 계산을 유지합니다. 패치는 검토한 대상 클래스 해시가 맞을 때만 적용합니다.
 
-클라이언트 빌드에서 선택적 번역 Mixin의 대상 목록을 현재 클래스패스에 존재하는 클래스로 제한합니다. 비활성화한 모드의 클래스가 다중 대상 Mixin에 남아 클래스 로딩 때마다 조회 실패를 반복하지 않게 합니다. 모드 재활성화 후 해당 하드코딩 문구 보완까지 복원하려면 로컬 빌드를 다시 실행합니다.
 
 ## 성능 최적화 회귀 검사
 

@@ -36,7 +36,20 @@ public final class InlineLocalizationTests {
     }
     public static void main(String[] args)throws Exception {
         JsonObject rules=read("assets/better_sunlit/inline/rules.json");
-        JsonObject ko=read("assets/better_sunlit/lang/ko_kr.json");
+        JsonObject localized=new JsonObject();
+        for (var entry : rules.getAsJsonObject("rules").entrySet()) {
+            JsonObject rule=entry.getValue().getAsJsonObject();
+            StringBuilder template=new StringBuilder("Localized");
+            for (int i=1;i<rule.getAsJsonArray("segments").size();i++) {
+                template.append(" %").append(i).append("$s");
+            }
+            localized.addProperty(rule.get("key").getAsString(),template.toString());
+            if (rule.has("variants")) for (JsonElement variant : rule.getAsJsonArray("variants")) {
+                for (var v : variant.getAsJsonObject().entrySet()) {
+                    localized.addProperty(v.getValue().getAsString(),"Localized "+v.getKey());
+                }
+            }
+        }
         Language original=Language.m_128107_();
         Map<String,String> samples=new HashMap<>();
         for(var group:rules.getAsJsonObject("groups").entrySet())for(var id:group.getValue().getAsJsonArray()) {
@@ -48,16 +61,16 @@ public final class InlineLocalizationTests {
             check(InlineText.match(text,key)!=null,"rule did not match "+id);
             Language.m_128114_(new Locale(new JsonObject()));
             check(InlineText.literal(text,key).getString().equals(text),"English server fallback changed "+id+": "+text);
-            Language.m_128114_(new Locale(ko));
-            String expected=format(ko.get(rule.get("key").getAsString()).getAsString(),values);
-            check(InlineText.literal(text,key).getString().equals(expected),"Korean arguments changed "+id);
+            Language.m_128114_(new Locale(localized));
+            String expected=format(localized.get(rule.get("key").getAsString()).getAsString(),values);
+            check(InlineText.literal(text,key).getString().equals(expected),"Localized arguments changed "+id);
             if(rule.has("variants"))for(int i=0;i<rule.getAsJsonArray("variants").size();i++)for(var v:rule.getAsJsonArray("variants").get(i).getAsJsonObject().entrySet()) {
                 List<String> branch=new ArrayList<>(values);branch.set(i,v.getKey());
                 StringBuilder variant=new StringBuilder(segments.get(0).getAsString());for(int n=1;n<segments.size();n++)variant.append(branch.get(n-1)).append(segments.get(n).getAsString());
                 String variantText=variant.toString();
                 Language.m_128114_(new Locale(new JsonObject()));check(InlineText.literal(variantText,key).getString().equals(variantText),"branch fallback changed");
-                branch.set(i,ko.get(v.getValue().getAsString()).getAsString());Language.m_128114_(new Locale(ko));
-                check(InlineText.literal(variantText,key).getString().equals(format(ko.get(rule.get("key").getAsString()).getAsString(),branch)),"branch Korean changed");
+                branch.set(i,localized.get(v.getValue().getAsString()).getAsString());Language.m_128114_(new Locale(localized));
+                check(InlineText.literal(variantText,key).getString().equals(format(localized.get(rule.get("key").getAsString()).getAsString(),branch)),"localized branch changed");
             }
             samples.put(key,text);
         }
@@ -66,7 +79,7 @@ public final class InlineLocalizationTests {
         check(InlineText.append(Component.m_237113_("prefix:"),"tail","unknown").getString().equals("prefix:tail"),"append changed");
         var sample=samples.entrySet().iterator().next();
         Language.m_128114_(new Locale(new JsonObject()));String first=InlineTextClient.localize(sample.getValue(),sample.getKey());
-        Language.m_128114_(new Locale(ko));check(!first.equals(InlineTextClient.localize(sample.getValue(),sample.getKey())),"GUI locale cache did not invalidate");
+        Language.m_128114_(new Locale(localized));check(!first.equals(InlineTextClient.localize(sample.getValue(),sample.getKey())),"GUI locale cache did not invalidate");
         Language.m_128114_(original);
 
         Map<String,byte[]> classes=new HashMap<>();
