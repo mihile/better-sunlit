@@ -44,7 +44,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.write('shared.txt', 'base\n')
         self.write('releases/20261114.1.json', json.dumps({
             'build': 2026111401, 'label': '2026.11.14.1', 'title': 'Title',
-            'features': [{'title': 'Feature', 'detail': 'Description'}],
+            'changes': [{'title': 'Feature', 'detail': 'Description'}],
         }))
         self.commit('base')
         self.git('checkout', '-b', 'server')
@@ -109,6 +109,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.write('src/main/resources/pack.mcmeta', '{}\n')
         metadata = json.loads((self.root/'releases/20261114.1.json').read_text(encoding='utf8'))
         metadata.update(build=2026111402, label='2026.11.14.2')
+        metadata['changes'][0]['title'] = 'Update pack resources'
         self.write('releases/20261114.2.json', json.dumps(metadata))
         self.commit('Production resource change')
         self.publish_snapshot('client', '2026.11.14.2')
@@ -281,14 +282,14 @@ class ReleaseGitTests(unittest.TestCase):
                     self.fail('second lock should not be acquired')
 
     def test_release_requires_new_metadata_instead_of_copying_old_notes(self):
-        with self.assertRaisesRegex(RuntimeError, '더 높은 번호'):
+        with self.assertRaisesRegex(RuntimeError, '높은 번호'):
             release.choose_release(['client', 'server'], {'client': 2026110804, 'server': 2026111401})
         self.assertEqual(len(list((self.root/'releases').glob('*.json'))), 1)
 
     def test_rejects_duplicate_notes_and_keeps_authored_notes(self):
         old = self.root/'releases/20261114.1.json'
         data = json.loads(old.read_text())
-        data.update(build=2026111402, label='2026.11.14.2', changes=data.pop('features'))
+        data.update(build=2026111402, label='2026.11.14.2')
         new = old.with_name('20261114.2.json')
         new.write_text(json.dumps(data), encoding='utf8')
         with self.assertRaisesRegex(RuntimeError, '변경 내역이 .* 같습니다'):

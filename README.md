@@ -40,4 +40,8 @@ Minecraft와 선릿밸리의 비공식 애드온입니다. 이 저장소에는 �
 
 서버 업데이트는 배포 소스의 `scripts/Update-Server.ps1`을 서버의 `tools/better-sunlit/`에 두고, 시작 BAT에서 Minecraft 실행 전에 호출합니다. 서명 검증 키는 JAR에 포함되고 개인 서명 키는 배포하지 않습니다.
 
+## 라이선스
+
+Better Sunlit의 자체 코드는 [MIT 라이선스](LICENSE)를 따릅니다. 클라이언트 부팅 에이전트에 포함된 ASM은 [외부 라이브러리 고지](THIRD_PARTY_NOTICES.txt)를 참고하세요. 기존 모드와 모드팩에서 가져온 한국어 문구에는 각 원본의 배포 조건이 적용됩니다. 관련 출처는 [번역 출처 목록](localization-sources.json)에 있습니다.
+
 개발·배포 방법과 복원 절차는 [MAINTAINER.md](MAINTAINER.md)를 참고하세요.
