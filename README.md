@@ -22,7 +22,7 @@ Stardew Fishing의 `/stardew_fishing toggle_minigame`으로 본인의 미니게�
 <details>
 <summary>새 기능 설명을 펼쳐 보고 업데이트합니다</summary>
 
-새 업데이트가 있으면 클라이언트 메인 메뉴의 **Better Sunlit** 버튼 모서리에 느낌표가 표시됩니다. 버튼을 눌러 변경 내역을 확인하고 **업데이트**를 선택하면 내려받습니다. 설치는 게임 종료 후 진행되며, 자동 확인은 팝업에서 끌 수 있습니다.
+새 업데이트가 있으면 클라이언트 메인 메뉴의 **Better Sunlit** 버튼 모서리에 가볍게 뛰는 빨간 느낌표가 표시됩니다. 버튼을 눌러 변경 내역을 확인하고 **업데이트**를 선택하면 내려받습니다. 설치는 게임 종료 후 진행되며, 자동 확인은 팝업에서 끌 수 있습니다.
 
 서버는 시작 전에 `server` 배포를 확인합니다. 새 버전의 정상 시작이 확인되지 않으면 다음 실행에서 직전 백업을 복원하고 해당 버전을 다시 설치하지 않습니다. 통신 실패 시 설치된 버전을 유지합니다.
 
@@ -30,7 +30,11 @@ Stardew Fishing의 `/stardew_fishing toggle_minigame`으로 본인의 미니게�
 
 ## 설치
 
-각 브랜치에 대응하는 [Releases](https://github.com/mihile/better-sunlit/releases)의 `better-sunlit.jar`을 사용합니다. 클라이언트에는 `client-build-*`, 서버에는 `server-build-*` 배포를 설치합니다. 기존 `sunlit-fishing-visuals-*.jar`은 게임 종료 후 별도 보관하고 `mods`에는 한 버전만 둡니다.
+- **클라이언트**는 [최신 클라이언트 릴리스](https://github.com/mihile/better-sunlit/releases/latest)에서 `better-sunlit.jar`을 받습니다.
+- **전용 서버**는 [서버 릴리스 목록](https://github.com/mihile/better-sunlit/releases?q=server-build-&expanded=true)에서 최신 `server-build-*`의 `better-sunlit.jar`을 받습니다.
+- 각 릴리스의 `SHA256SUMS.txt`에서 다운로드 파일의 해시를 확인할 수 있습니다. 기존 `sunlit-fishing-visuals-*.jar`은 게임 종료 후 별도 보관하고 `mods`에는 한 버전만 둡니다.
+
+Minecraft와 선릿밸리의 비공식 애드온입니다. 이 저장소에는 애드온만 있으며, 필요한 게임·모드팩·의존 모드는 각 공식 배포처에서 설치합니다. 클라이언트는 자동 업데이트 확인을 끌 수 있고, 다운로드와 교체는 사용자가 선택합니다.
 
 낚시 연출을 보려면 서버와 클라이언트 양쪽에 설치합니다. 네트워크 프로토콜은 기존 1.2.4와 같은 `3`을 유지합니다. 기존 설정·데이터를 보존하기 위해 Forge mod ID `sunlit_fish_visuals`를 유지하며 표시 이름과 배포 파일 이름은 Better Sunlit입니다.
 

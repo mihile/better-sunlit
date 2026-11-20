@@ -210,7 +210,7 @@ def publish(args, prepared):
     feed_pushed = False
     try:
         run(['gh', 'release', 'create', tag, '--repo', REPO, '--target', head,
-             '--title', changes['title'] + ' · ' + args.side, '--notes-file', release/'notes.md',
+             '--title', f"Better Sunlit {changes['label']} · {args.side}", '--notes-file', release/'notes.md',
              '--latest=false', release/FILENAME, release/'update.properties', release/'SHA256SUMS.txt'])
         created = True
         # Advance only this channel after its immutable signed assets exist.
@@ -223,6 +223,8 @@ def publish(args, prepared):
         feed_pushed = True
 
         verify_public_release(args, prepared, output(['git', '-C', ROOT, 'rev-parse', 'HEAD']))
+        if args.side == 'client':
+            run(['gh', 'release', 'edit', tag, '--repo', REPO, '--latest'])
     except Exception:
         if created:
             state = '피드는 push되었지만 공개 검증이 완료되지 않았습니다' if feed_pushed else '피드 push가 완료되지 않았을 수 있습니다'

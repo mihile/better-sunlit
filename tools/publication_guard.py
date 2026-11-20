@@ -87,6 +87,8 @@ def check_release_jar(path):
                     'better_sunlit_entry.mixins.json', 'assets/better_sunlit/update-helper.jar',
                     'assets/better_sunlit/sunlit-boot.jar')
                 allowed = allowed or (name.startswith('assets/') and member.suffix in ('.json', '.png'))
+            if kind in ('main', 'boot'):
+                allowed = allowed or name in ('META-INF/LICENSE', 'META-INF/THIRD_PARTY_NOTICES.txt')
             if (not allowed or name in names or '..' in member.parts or member.is_absolute()
                     or entry.file_size > 64*1024*1024 or (entry.external_attr >> 16) & 0o170000 == 0o120000):
                 raise RuntimeError(f'배포 JAR에 허용되지 않은 항목이 있습니다: {name}')

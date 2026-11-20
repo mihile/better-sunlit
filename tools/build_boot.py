@@ -171,6 +171,8 @@ OUT_JAR = (cli.out.resolve() if cli.out else INSTANCE / 'minecraft/config/sunlit
 OUT_JAR.parent.mkdir(parents=True, exist_ok=True)
 with zipfile.ZipFile(OUT_JAR, 'w', zipfile.ZIP_DEFLATED) as zf:
     zf.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\r\nPremain-Class: dev.sunlit.bootagent.SunlitBootAgent\r\nCan-Redefine-Classes: false\r\nCan-Retransform-Classes: true\r\n\r\n')
+    for notice in ('LICENSE', 'THIRD_PARTY_NOTICES.txt'):
+        zf.write(ROOT/notice, 'META-INF/' + notice)
     for root_dir in [AGENT_CLASSES, SHADE_CLASSES]:
         for f in sorted(root_dir.rglob('*.class')):
             zf.write(f, f.relative_to(root_dir).as_posix())

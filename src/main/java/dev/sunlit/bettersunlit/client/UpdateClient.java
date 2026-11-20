@@ -29,11 +29,17 @@ public final class UpdateClient {
    SignedRelease available = release;
    if (available == null || available.build() <= Build.NUMBER || queued) return;
 
-   int right = m_252754_() + m_93694_();
-   int top = m_252907_();
-   graphics.m_280509_(right - 11, top, right, top + 11, 0xFF2D2026);
-   graphics.m_280509_(right - 10, top + 1, right - 1, top + 10, 0xFFD43F54);
-   graphics.m_280488_(Minecraft.m_91087_().f_91062_, "!", right - 6, top + 2, 0xFFFFFFFF);
+   // A short hop followed by a pause keeps the notification legible at every GUI scale.
+   double phase = Math.floorMod(System.nanoTime(), 2_400_000_000L) / 650_000_000.0;
+   int lift = phase < 1.0 ? (int) Math.round(3.0 * Math.sin(Math.PI * phase)) : 0;
+   int x = m_252754_() + m_93694_() - 7;
+   int y = m_252907_() + 1 - lift;
+   int outline = 0xFF391622;
+   int red = 0xFFFF4959;
+   graphics.m_280509_(x - 1, y - 1, x + 4, y + 6, outline);
+   graphics.m_280509_(x - 1, y + 6, x + 4, y + 11, outline);
+   graphics.m_280509_(x, y, x + 3, y + 5, red);
+   graphics.m_280509_(x, y + 7, x + 3, y + 10, red);
   }
  }
  @SubscribeEvent public static void rendered(ScreenEvent.Render.Post event){if(event.getScreen() instanceof TitleScreen)renderedTitle=event.getScreen();}

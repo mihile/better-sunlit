@@ -143,6 +143,8 @@ if side=='server':
 jar=BUILD/'better-sunlit.jar'
 with zipfile.ZipFile(jar,'w',zipfile.ZIP_DEFLATED) as z:
  z.writestr('META-INF/MANIFEST.MF','Manifest-Version: 1.0\r\nMixinConfigs: sunlit_fish_visuals.mixins.json,\r\n better_sunlit_inline.mixins.json,better_sunlit_entry.mixins.json\r\n\r\n')
+ for notice in ('LICENSE', 'THIRD_PARTY_NOTICES.txt'):
+     z.write(ROOT/notice, 'META-INF/' + notice)
  for base in [CLASSES,resources]:
   for f in sorted(base.rglob('*')):
    if f.is_file():z.write(f,f.relative_to(base).as_posix())

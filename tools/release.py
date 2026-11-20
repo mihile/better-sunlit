@@ -3,7 +3,6 @@ from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import argparse
-import datetime
 import hashlib
 import json
 import os
@@ -182,17 +181,17 @@ def choose_release(sides, remote_builds):
     path, data = latest_release_meta()
     published = max(remote_builds[side] for side in sides)
     if int(data['build']) <= published:
-        today = int(datetime.date.today().strftime('%Y%m%d')) * 100 + 1
-        number = max(today, max(remote_builds.values()) + 1, int(data['build']) + 1)
-        value = str(number)
-        date, sequence = value[:8], int(value[8:])
-        label = f'{date[:4]}.{date[4:6]}.{date[6:8]}.{sequence}'
-        data = dict(data, build=number, label=label)
-        path = ROOT / 'releases' / f'{date}.{sequence}.json'
-        if path.exists():
-            raise RuntimeError(f'릴리스 파일이 이미 존재합니다: {path}')
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
-        print(f'새 릴리스 설명: {path.name}', flush=True)
+        raise RuntimeError(
+            f'releases/에 게시할 채널의 기존 빌드({published})보다 높은 번호와 '
+            '이번 버전의 변경 내역을 담은 JSON을 추가하세요.')
+    entries = data.get('changes')
+    if not entries:
+        raise RuntimeError(f'{path.name}의 changes에 이번 버전의 변경 내역을 작성하세요.')
+    for previous_path in (ROOT / 'releases').glob('*.json'):
+        previous = json.loads(previous_path.read_text(encoding='utf8'))
+        if (int(previous['build']) in {remote_builds[side] for side in sides} and
+                entries == previous.get('changes', previous.get('features'))):
+            raise RuntimeError(f'{path.name}의 변경 내역이 {previous_path.name}과 같습니다. 이번 변경 사항을 작성하세요.')
     return path, data
 
 
