@@ -12,6 +12,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.sun.management.ThreadMXBean;
+import de.keksuccino.fancymenu.util.file.type.FileMediaType;
+import de.keksuccino.fancymenu.util.resource.ResourceSupplier;
+import de.keksuccino.fancymenu.util.resource.resources.texture.ITexture;
+import de.keksuccino.fancymenu.util.resource.resources.texture.SimpleTexture;
 import de.odysseus.ithaka.digraph.Digraph;
 import de.odysseus.ithaka.digraph.Digraphs;
 import de.odysseus.ithaka.digraph.MapDigraph;
@@ -38,6 +42,7 @@ import dev.sunlit.bettersunlit.perf.BlockOcclusionPerf;
 import dev.sunlit.bettersunlit.perf.LogBegonePerf;
 import dev.sunlit.bettersunlit.perf.LongwingsVariantPerf;
 import dev.sunlit.bettersunlit.perf.SeasonPerf;
+import dev.sunlit.fishvisuals.mixin.FancyMenuPanoramaMixin;
 import io.github.douira.glsl_transformer.ast.transform.ASTParser;
 import mezz.jei.common.platform.IPlatformRegistry;
 import net.irisshaders.iris.shaderpack.DimensionId;
@@ -318,12 +323,48 @@ public final class PerfOptTests {
         testRandomSpreadStructurePlacementClamp();
         testJoinPerfOpts();
         testStartupPerfOpts();
+        testFancyMenuPanoramaPendingFaces();
         testIter7StartupPerfOpts();
         testIter8StartupPerfOpts();
         testSpriteTransparencyOptimization();
         testMipmapCandidateAgainstIris();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
+    }
+
+    private static void testFancyMenuPanoramaPendingFaces() throws Exception {
+        var check = FancyMenuPanoramaMixin.class.getDeclaredMethod("sunlit$hasPendingFaces", List.class);
+        check.setAccessible(true);
+        class Face extends SimpleTexture {
+            void markReady() { decoded = true; }
+            void markFailed() { loadingFailed = true; }
+        }
+        Face pending = new Face();
+        Face ready = new Face();
+        ready.markReady();
+        Face failed = new Face();
+        failed.markFailed();
+
+        AtomicInteger requested = new AtomicInteger();
+        List<ResourceSupplier<ITexture>> images = new ArrayList<>();
+        for (ITexture texture : Arrays.asList(pending, ready, ready, ready, failed, null)) {
+            images.add(new ResourceSupplier<>(ITexture.class, FileMediaType.IMAGE, "") {
+                @Override public ITexture get() {
+                    requested.incrementAndGet();
+                    return texture;
+                }
+            });
+        }
+        assertTrue((boolean) check.invoke(null, images), "Pending PNG must defer the panorama");
+        assertEquals(6, requested.get(), "Every panorama face starts loading before the check returns");
+        pending.markReady();
+        assertFalse((boolean) check.invoke(null, images), "Ready or failed PNGs must not block rendering");
+
+        var plugin = new EntryMixinPlugin();
+        assertTrue(plugin.canApplyGate("de.keksuccino.fancymenu.customization.panorama.LocalTexturePanoramaRenderer",
+                FancyMenuPanoramaMixin.class.getName()), "Installed FancyMenu renderer must pass the gate");
+        assertFalse(plugin.canApplyGate("com.example.missing.PanoramaRenderer",
+                FancyMenuPanoramaMixin.class.getName()), "Unknown FancyMenu renderer must be skipped");
     }
 
     private static void testMipmapCandidateAgainstIris() throws Exception {

@@ -20,7 +20,7 @@ common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
 assert len(common_mixins) == 37, common_mixins
 assert {"PerfQuarkSharedChatMixin", "PerfJourneyMapResetMixin", "PerfQuickPackMixin", "PerfObjTokenizerMixin", "PerfCodepointMapMixin"}.issubset(client_mixins)
-assert len(client_mixins) == 125, client_mixins
+assert len(client_mixins) == 126, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
@@ -77,6 +77,8 @@ subprocess.run([str(JDK / 'javac.exe'), '-J-Dfile.encoding=UTF-8', '@' + to_cmd_
 extra_runtime_jars = [str(p) for p in sorted((LIBRARIES / 'com/ibm/icu/icu4j').glob('71.1/icu4j-*.jar')) if p.is_file()]
 if not extra_runtime_jars:
     extra_runtime_jars = [str(p) for p in sorted((LIBRARIES / 'com/ibm/icu/icu4j').glob('*/icu4j-*.jar'))[:1] if p.is_file()]
+# FancyMenu initializes Log4j, whose ModLauncher selector uses SecureJarHandler.
+extra_runtime_jars.append(str(LIBRARIES / 'cpw/mods/securejarhandler/2.1.10/securejarhandler-2.1.10.jar'))
 for entry in filtered_entries:
     ep = Path(entry)
     if ep.name.startswith('lwjgl-') and ep.name.endswith('.jar') and 'natives' not in ep.name:
