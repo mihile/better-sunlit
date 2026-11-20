@@ -272,12 +272,21 @@ public class VerifyBootAgent {
                 zos.putNextEntry(new ZipEntry("hello.txt"));
                 zos.write("world".getBytes());
                 zos.closeEntry();
+                zos.putNextEntry(new ZipEntry("caf\\u00e9.txt"));
+                zos.write("bonjour".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zos.closeEntry();
             }
             try (FileSystem roFs = FileSystems.newFileSystem(tempZip, Map.of("sunlit.readOnly", Boolean.TRUE))) {
                 if (!roFs.isReadOnly()) throw new AssertionError("sunlit.readOnly ZipFS must be readOnly");
                 if (!"world".equals(Files.readString(roFs.getPath("hello.txt")))) throw new AssertionError("ZipFS read failed");
                 if (Files.readAttributes(roFs.getPath("hello.txt"), java.nio.file.attribute.BasicFileAttributes.class).size() != 5L) {
                     throw new AssertionError("ZipFS BasicFileAttributes size failed");
+                }
+                @SuppressWarnings("unchecked")
+                java.util.function.Predicate<String> exists = (java.util.function.Predicate<String>) roFs;
+                if (!exists.test("hello.txt") || !exists.test("./hello.txt")
+                        || !exists.test("/caf\\u00e9.txt") || exists.test("/absent-\\u00e9.txt")) {
+                    throw new AssertionError("ZipFS predicate fallback changed path lookup");
                 }
                 try {
                     Files.writeString(roFs.getPath("fail.txt"), "x");
@@ -427,6 +436,9 @@ public class VerifyBootAgent {
                     zos.putNextEntry(new java.util.zip.ZipEntry("assets/sunlit/hello.txt"));
                     zos.write("zip-ok".getBytes(java.nio.charset.StandardCharsets.UTF_8));
                     zos.closeEntry();
+                    zos.putNextEntry(new java.util.zip.ZipEntry("assets/sunlit/caf\\u00e9.txt"));
+                    zos.write("bonjour".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    zos.closeEntry();
                     java.util.zip.ZipEntry zeStored = new java.util.zip.ZipEntry("assets/sunlit/stored.bin");
                     zeStored.setMethod(java.util.zip.ZipEntry.STORED);
                     zeStored.setSize(storedBytes.length);
@@ -447,6 +459,12 @@ public class VerifyBootAgent {
                     }
                     if (Files.exists(jMiss) || !Files.notExists(jMiss)) {
                         throw new AssertionError("Embedded Jar UnionFS miss failed");
+                    }
+                    Path unicodeHit = jarUfs.getPath("assets", "sunlit", "caf\\u00e9.txt");
+                    Path unicodeMiss = jarUfs.getPath("assets", "sunlit", "absent-\\u00e9.txt");
+                    if (!Files.exists(unicodeHit) || !Files.readString(unicodeHit).equals("bonjour")
+                            || Files.exists(unicodeMiss) || !Files.notExists(unicodeMiss)) {
+                        throw new AssertionError("Embedded Jar UnionFS Unicode lookup failed");
                     }
                     byte[] exact = dev.sunlit.bootagent.payload.BootJarPayload.readAllBytesExact(jHit);
                     if (!"zip-ok".equals(new String(exact, java.nio.charset.StandardCharsets.UTF_8))) {

@@ -131,6 +131,7 @@
     "PerfCreateModelSwapperMixin",
     "PerfClientModLoaderMixin",
     "PerfMcefUtilMixin",
+    "FancyMenuPanoramaMixin",
     "PerfBlueprintRewardMixin",
     "PerfGameDataMixin",
     "PerfAllTheLeaksIssue10684Mixin",

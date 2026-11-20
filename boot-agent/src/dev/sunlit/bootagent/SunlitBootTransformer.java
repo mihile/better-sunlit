@@ -460,6 +460,9 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                     Opcodes.INVOKEVIRTUAL, ZIPFS_CLS, "exists", "([B)Z", false));
             testM.instructions.add(new InsnNode(Opcodes.IRETURN));
             testM.instructions.add(slowFallback);
+            // ZipPath.exists() is private on some Java 17 builds. Use its underlying
+            // lookup on this filesystem after the JDK resolves the path.
+            testM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
             testM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
             testM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
             testM.instructions.add(new InsnNode(Opcodes.ICONST_0));
@@ -468,7 +471,9 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                     Opcodes.INVOKEVIRTUAL, ZIPFS_CLS, "getPath",
                     "(Ljava/lang/String;[Ljava/lang/String;)Ljdk/nio/zipfs/ZipPath;", false));
             testM.instructions.add(new MethodInsnNode(
-                    Opcodes.INVOKEVIRTUAL, "jdk/nio/zipfs/ZipPath", "exists", "()Z", false));
+                    Opcodes.INVOKEVIRTUAL, "jdk/nio/zipfs/ZipPath", "getResolvedPath", "()[B", false));
+            testM.instructions.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, ZIPFS_CLS, "exists", "([B)Z", false));
             testM.instructions.add(new InsnNode(Opcodes.IRETURN));
             testM.instructions.add(notString);
             testM.instructions.add(new InsnNode(Opcodes.ICONST_0));
