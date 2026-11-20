@@ -1,6 +1,0 @@
-{
-  "botaniamisc.conversionChanceBiome": "확률: %s, 생물 군계: %s",
-  "botaniamisc.requestMsg": "요청: %d × %s (전체: %d개). %d개를 가져왔습니다.",
-  "botaniamisc.flugelBound": "연결 대상: %s, 위치: %s",
-  "block.botania.kekimurus.reference": "이 꽃은 거짓말입니다"
-}
