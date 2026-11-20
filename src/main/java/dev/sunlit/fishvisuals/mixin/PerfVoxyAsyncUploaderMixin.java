@@ -1,8 +1,8 @@
 package dev.sunlit.fishvisuals.mixin;
 
-import me.cortex.voxy.client.core.gl.AsyncTextureUploader;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -11,7 +11,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Skips Voxy's PBO allocation/mapping overhead for initial atlas uploads while no world is
  * loaded, letting vanilla {@code _texSubImage2D} upload startup sprites directly.
  */
-@Mixin(value = AsyncTextureUploader.class, remap = false)
+@Pseudo
+@Mixin(targets = "me.cortex.voxy.client.core.gl.AsyncTextureUploader", remap = false)
 public abstract class PerfVoxyAsyncUploaderMixin {
     @Inject(method = "upload", at = @At("HEAD"), cancellable = true)
     private static void sunlit$skipPboDuringMenuStartup(
