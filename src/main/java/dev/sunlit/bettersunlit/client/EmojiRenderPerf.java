@@ -15,6 +15,7 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.FormattedCharSink;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -168,6 +169,19 @@ public final class EmojiRenderPerf {
         if (strings == null || strings.isEmpty()) {
             return false;
         }
+        Boolean knownNoMeta = cachedIndex.hasMeta(emoji);
+        if (knownNoMeta != null) {
+            if (knownNoMeta) {
+                return true;
+            }
+            for (int i = 0, n = strings.size(); i < n; i++) {
+                String s = strings.get(i);
+                if (s == null || s.isEmpty() || cleanText.indexOf(s) >= 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
         for (int i = 0, n = strings.size(); i < n; i++) {
             String s = strings.get(i);
             if (s == null || s.isEmpty() || containsUnescapedRegexMeta(s) || cleanText.indexOf(s) >= 0) {
@@ -191,6 +205,11 @@ public final class EmojiRenderPerf {
     public static void invalidateIndex() {
         cachedIndex = EMPTY_INDEX;
         invalidateRecentStrings();
+    }
+
+    /** Prebuilds {@link EmojiIndex} off the Render thread right after emoji loading finishes. */
+    public static void prewarmIndex() {
+        getOrBuildIndex();
     }
 
     private static void invalidateRecentStrings() {
@@ -358,6 +377,7 @@ public final class EmojiRenderPerf {
         private final boolean empty;
         private final Emoji[] sources;
         private final String[][] triggers;
+        private final IdentityHashMap<Emoji, Boolean> metaMap;
         boolean unindexableFallback;
 
         // 256 * 4 = 1024 longs = 8 KB L1-friendly exact ASCII/Latin-1 (c0, c1) bigram bitsets.
@@ -388,14 +408,35 @@ public final class EmojiRenderPerf {
             this.empty = empty;
             if (listRef == null) {
                 sources = new Emoji[0]; triggers = new String[0][];
+                metaMap = new IdentityHashMap<>(0);
             } else {
                 sources = listRef.toArray(new Emoji[0]);
                 triggers = new String[sources.length][];
+                metaMap = new IdentityHashMap<>(sources.length);
                 for (int i = 0; i < sources.length; i++) {
-                    List<String> strings = sources[i] == null ? null : sources[i].strings;
-                    triggers[i] = strings == null ? null : strings.toArray(new String[0]);
+                    Emoji em = sources[i];
+                    List<String> strings = em == null ? null : em.strings;
+                    String[] arr = strings == null ? null : strings.toArray(new String[0]);
+                    triggers[i] = arr;
+                    if (em != null && isStandardEmojiClass(em)) {
+                        boolean hasMeta = false;
+                        if (arr != null) {
+                            for (int j = 0; j < arr.length; j++) {
+                                String s = arr[j];
+                                if (s == null || s.isEmpty() || containsUnescapedRegexMeta(s)) {
+                                    hasMeta = true;
+                                    break;
+                                }
+                            }
+                        }
+                        metaMap.put(em, Boolean.valueOf(hasMeta));
+                    }
                 }
             }
+        }
+
+        Boolean hasMeta(Emoji emoji) {
+            return metaMap.get(emoji);
         }
 
         boolean matches(List<Emoji> list, int size, Emoji head, Emoji tail) {

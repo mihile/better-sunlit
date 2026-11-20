@@ -4,6 +4,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import dev.sunlit.bettersunlit.perf.StateDefinitionPerf;
 import fuzs.puzzleslib.api.client.event.v1.ModelEvents;
 import fuzs.puzzleslib.api.event.v1.core.EventResultHolder;
 import fuzs.puzzleslib.impl.PuzzlesLib;
@@ -66,7 +67,7 @@ public final class PuzzlesModelPerf {
             if (extra != null) {
                 return extra;
             }
-            return evt.getModelBakery().m_119341_(rl);
+            return loadUnbakedForDiagonal(evt.getModelBakery(), rl);
         };
         BiConsumer<ResourceLocation, UnbakedModel> modelAdder = (rl, unbaked) -> {
             if (rl instanceof ModelResourceLocation) {
@@ -124,6 +125,18 @@ public final class PuzzlesModelPerf {
                         .map(m -> "    " + m.m_119193_() + ":" + m.m_119203_())
                         .collect(Collectors.joining("\n"))));
         PuzzlesLib.LOGGER.info("Modifying unbaked models took {}ms", stopwatch.stop().elapsed().toMillis());
+    }
+
+    private static UnbakedModel loadUnbakedForDiagonal(ModelBakery bakery, ResourceLocation rl) {
+        if (rl instanceof ModelResourceLocation mrl && !"inventory".equals(mrl.m_119448_())) {
+            StateDefinitionPerf.setSingleStateThread(Thread.currentThread());
+            try {
+                return bakery.m_119341_(rl);
+            } finally {
+                StateDefinitionPerf.setSingleStateThread(null);
+            }
+        }
+        return bakery.m_119341_(rl);
     }
 
     static List<Block> collectDiagonalBlocks() {

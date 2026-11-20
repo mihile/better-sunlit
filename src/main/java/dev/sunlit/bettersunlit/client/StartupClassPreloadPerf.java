@@ -194,7 +194,7 @@ public final class StartupClassPreloadPerf {
     }
 
     public static int computeWorkerCount(int availableProcessors) {
-        return Math.max(2, Math.min(8, availableProcessors / 2));
+        return Math.max(1, Math.min(2, availableProcessors / 4));
     }
 
     static void schedulePreload(ClassLoader loader, List<String> targets) {

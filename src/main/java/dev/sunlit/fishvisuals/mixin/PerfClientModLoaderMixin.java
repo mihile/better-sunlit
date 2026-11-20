@@ -3,7 +3,9 @@ package dev.sunlit.fishvisuals.mixin;
 import dev.sunlit.bettersunlit.client.BootAgentSync;
 import dev.sunlit.bettersunlit.client.KubeJsPackPerf;
 import dev.sunlit.bettersunlit.client.ModelBakePerf;
+import dev.sunlit.bettersunlit.client.QuickPackPerf;
 import dev.sunlit.bettersunlit.client.StartupClassPreloadPerf;
+import dev.sunlit.bettersunlit.perf.StateDefinitionPerf;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.resources.ReloadableResourceManager;
@@ -34,6 +36,7 @@ public abstract class PerfClientModLoaderMixin {
             ReloadableResourceManager mcResourceManager,
             CallbackInfo ci) {
         KubeJsPackPerf.scheduleEarlyClientPrefetch();
+        StateDefinitionPerf.addOnFirstPopulate(QuickPackPerf::schedulePrescan);
         BootAgentSync.scheduleSync();
     }
 

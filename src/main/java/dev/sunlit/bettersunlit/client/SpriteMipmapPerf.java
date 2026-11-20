@@ -5,7 +5,6 @@ import dev.sunlit.fishvisuals.mixin.PerfNativeImageAccessor;
 import me.jellysquid.mods.sodium.client.util.color.ColorSRGB;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
 import net.minecraftforge.client.ForgeHooksClient;
 import org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel;
 import org.lwjgl.system.MemoryUtil;
@@ -23,6 +22,18 @@ import java.util.concurrent.ForkJoinTask;
 public final class SpriteMipmapPerf {
     private static final ThreadLocal<int[]> TL_SRC = ThreadLocal.withInitial(() -> new int[4096]);
     private static final ThreadLocal<int[]> TL_DST = ThreadLocal.withInitial(() -> new int[1024]);
+    private static final float[] SRGB_TO_LINEAR = new float[256];
+    private static final float[] SRGB_TO_LINEAR_QUARTER = new float[256];
+    private static final float[] SRGB_TO_LINEAR_255 = new float[256];
+
+    static {
+        for (int i = 0; i < 256; i++) {
+            float v = ColorSRGB.srgbToLinear(i);
+            SRGB_TO_LINEAR[i] = v;
+            SRGB_TO_LINEAR_QUARTER[i] = v * 0.25F;
+            SRGB_TO_LINEAR_255[i] = v * 255.0F;
+        }
+    }
 
     private SpriteMipmapPerf() {
     }
@@ -31,7 +42,10 @@ public final class SpriteMipmapPerf {
         int[] buf = tl.get();
         if (buf.length < required) {
             buf = new int[required];
-            tl.set(buf);
+            // Never pin >=256 KB (or G1 humongous) scratch arrays permanently across worker threads.
+            if (required <= 65536) {
+                tl.set(buf);
+            }
         }
         return buf;
     }
@@ -129,6 +143,7 @@ public final class SpriteMipmapPerf {
     }
 
     private static void downsampleQuad(int[] src, int srcW, int[] dst, int dstW, int dstH) {
+        final float[] qLut = SRGB_TO_LINEAR_QUARTER;
         for (int y = 0; y < dstH; y++) {
             int row0 = (y << 1) * srcW;
             int row1 = row0 + srcW;
@@ -141,6 +156,13 @@ public final class SpriteMipmapPerf {
                 int c3 = src[row1 + sx + 1];
                 if (c0 == c1 && c2 == c3 && c0 == c2) {
                     dst[dstRow + x] = c0;
+                } else if (((c0 & c1 & c2 & c3) >>> 24) == 255) {
+                    float r = qLut[c0 & 0xFF] + qLut[c1 & 0xFF] + qLut[c2 & 0xFF] + qLut[c3 & 0xFF];
+                    float g = qLut[(c0 >>> 8) & 0xFF] + qLut[(c1 >>> 8) & 0xFF]
+                            + qLut[(c2 >>> 8) & 0xFF] + qLut[(c3 >>> 8) & 0xFF];
+                    float b = qLut[(c0 >>> 16) & 0xFF] + qLut[(c1 >>> 16) & 0xFF]
+                            + qLut[(c2 >>> 16) & 0xFF] + qLut[(c3 >>> 16) & 0xFF];
+                    dst[dstRow + x] = linearToSrgbFast(r, g, b, 255);
                 } else {
                     dst[dstRow + x] = weightedAverageColor(
                             weightedAverageColor(c0, c1),
@@ -151,16 +173,13 @@ public final class SpriteMipmapPerf {
     }
 
     public static int weightedAverageColor(int one, int two) {
-        int a1 = FastColor.ABGR32.m_266503_(one);
-        int a2 = FastColor.ABGR32.m_266503_(two);
+        int a1 = (one >>> 24) & 0xFF;
+        int a2 = (two >>> 24) & 0xFF;
         if (a1 == a2) {
-            float r = (ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266313_(one))
-                    + ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266313_(two))) * 0.5F;
-            float g = (ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266446_(one))
-                    + ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266446_(two))) * 0.5F;
-            float b = (ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266247_(one))
-                    + ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266247_(two))) * 0.5F;
-            return ColorSRGB.linearToSrgb(r, g, b, a1);
+            float r = (SRGB_TO_LINEAR[one & 0xFF] + SRGB_TO_LINEAR[two & 0xFF]) * 0.5F;
+            float g = (SRGB_TO_LINEAR[(one >>> 8) & 0xFF] + SRGB_TO_LINEAR[(two >>> 8) & 0xFF]) * 0.5F;
+            float b = (SRGB_TO_LINEAR[(one >>> 16) & 0xFF] + SRGB_TO_LINEAR[(two >>> 16) & 0xFF]) * 0.5F;
+            return linearToSrgbFast(r, g, b, a1);
         }
         if (a1 == 0) {
             return (two & 0x00FFFFFF) | ((a2 >> 2) << 24);
@@ -171,13 +190,10 @@ public final class SpriteMipmapPerf {
         float scale = 1.0F / (a1 + a2);
         float w1 = a1 * scale;
         float w2 = a2 * scale;
-        float r = ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266313_(one)) * w1
-                + ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266313_(two)) * w2;
-        float g = ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266446_(one)) * w1
-                + ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266446_(two)) * w2;
-        float b = ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266247_(one)) * w1
-                + ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266247_(two)) * w2;
-        return ColorSRGB.linearToSrgb(r, g, b, (a1 + a2) >> 1);
+        float r = SRGB_TO_LINEAR[one & 0xFF] * w1 + SRGB_TO_LINEAR[two & 0xFF] * w2;
+        float g = SRGB_TO_LINEAR[(one >>> 8) & 0xFF] * w1 + SRGB_TO_LINEAR[(two >>> 8) & 0xFF] * w2;
+        float b = SRGB_TO_LINEAR[(one >>> 16) & 0xFF] * w1 + SRGB_TO_LINEAR[(two >>> 16) & 0xFF] * w2;
+        return linearToSrgbFast(r, g, b, (a1 + a2) >> 1);
     }
 
     public static SpriteTransparencyLevel processTransparentFast(NativeImage image, boolean fillInTransparent) {
@@ -207,12 +223,30 @@ public final class SpriteMipmapPerf {
 
     /** Returns transparency ordinal, with bit 2 set when transparent pixels were filled. */
     public static int processTransparentPixels(int[] px, int totalPixels, boolean fillInTransparent) {
-        boolean sawZeroAlpha = false;
-        boolean sawTranslucent = false;
-
         if (!fillInTransparent) {
-            for (int i = 0; i < totalPixels; i++) {
-                int a = FastColor.ABGR32.m_266503_(px[i]);
+            boolean sawZeroAlpha = false;
+            int i = 0;
+            int unrollLimit = totalPixels & ~3;
+            while (i < unrollLimit) {
+                int p0 = px[i];
+                int p1 = px[i + 1];
+                int p2 = px[i + 2];
+                int p3 = px[i + 3];
+                if ((p0 & p1 & p2 & p3 & 0xFF000000) != 0xFF000000) {
+                    int a0 = p0 >>> 24;
+                    int a1 = p1 >>> 24;
+                    int a2 = p2 >>> 24;
+                    int a3 = p3 >>> 24;
+                    if ((a0 != 0 && a0 < 255) || (a1 != 0 && a1 < 255)
+                            || (a2 != 0 && a2 < 255) || (a3 != 0 && a3 < 255)) {
+                        return 2;
+                    }
+                    sawZeroAlpha = true;
+                }
+                i += 4;
+            }
+            while (i < totalPixels) {
+                int a = px[i++] >>> 24;
                 if (a == 0) {
                     sawZeroAlpha = true;
                 } else if (a < 255) {
@@ -222,44 +256,127 @@ public final class SpriteMipmapPerf {
             return sawZeroAlpha ? 1 : 0;
         }
 
+        int i;
+        if (totalPixels >= 16
+                && (px[0] & px[totalPixels - 1] & px[totalPixels >>> 1] & 0xFF000000) == 0xFF000000) {
+            i = 0;
+            while (i + 4 <= totalPixels && (px[i] & px[i + 1] & px[i + 2] & px[i + 3] & 0xFF000000) == 0xFF000000) {
+                i += 4;
+            }
+            while (i < totalPixels && (px[i] & 0xFF000000) == 0xFF000000) {
+                i++;
+            }
+            if (i == totalPixels) {
+                return 0;
+            }
+        }
+
+        boolean sawZeroAlpha = false;
+        boolean sawTranslucent = false;
+
+        final float[] lut = SRGB_TO_LINEAR;
+        final float[] lut255 = SRGB_TO_LINEAR_255;
         float rSum = 0.0F;
         float gSum = 0.0F;
         float bSum = 0.0F;
         float totalWeight = 0.0F;
 
-        for (int i = 0; i < totalPixels; i++) {
-            int color = px[i];
-            int a = FastColor.ABGR32.m_266503_(color);
-            if (a > 0) {
-                if (a < 255) {
-                    sawTranslucent = true;
+        for (i = 0; i < totalPixels; ) {
+            if (i + 4 <= totalPixels) {
+                int c0 = px[i];
+                int c1 = px[i + 1];
+                int c2 = px[i + 2];
+                int c3 = px[i + 3];
+                if (((c0 | c1 | c2 | c3) & 0xFF000000) == 0) {
+                    sawZeroAlpha = true;
+                    i += 4;
+                    continue;
                 }
-                float w = a;
-                rSum += ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266313_(color)) * w;
-                gSum += ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266446_(color)) * w;
-                bSum += ColorSRGB.srgbToLinear(FastColor.ABGR32.m_266247_(color)) * w;
-                totalWeight += w;
-            } else {
+                if ((c0 & c1 & c2 & c3 & 0xFF000000) == 0xFF000000) {
+                    rSum += lut255[c0 & 0xFF] + lut255[c1 & 0xFF] + lut255[c2 & 0xFF] + lut255[c3 & 0xFF];
+                    gSum += lut255[(c0 >>> 8) & 0xFF] + lut255[(c1 >>> 8) & 0xFF]
+                            + lut255[(c2 >>> 8) & 0xFF] + lut255[(c3 >>> 8) & 0xFF];
+                    bSum += lut255[(c0 >>> 16) & 0xFF] + lut255[(c1 >>> 16) & 0xFF]
+                            + lut255[(c2 >>> 16) & 0xFF] + lut255[(c3 >>> 16) & 0xFF];
+                    totalWeight += 1020.0F;
+                    i += 4;
+                    continue;
+                }
+            }
+            int color = px[i++];
+            int a = color >>> 24;
+            if (a == 255) {
+                rSum += lut255[color & 0xFF];
+                gSum += lut255[(color >>> 8) & 0xFF];
+                bSum += lut255[(color >>> 16) & 0xFF];
+                totalWeight += 255.0F;
+            } else if (a == 0) {
                 sawZeroAlpha = true;
+            } else {
+                sawTranslucent = true;
+                float w = a;
+                rSum += lut[color & 0xFF] * w;
+                gSum += lut[(color >>> 8) & 0xFF] * w;
+                bSum += lut[(color >>> 16) & 0xFF] * w;
+                totalWeight += w;
             }
         }
-
         int level = sawTranslucent ? 2 : (sawZeroAlpha ? 1 : 0);
+        if (!sawZeroAlpha) {
+            return level;
+        }
 
-        if (sawZeroAlpha && totalWeight > 0.0F) {
-            int fillColor = ColorSRGB.linearToSrgb(
+        if (totalWeight > 0.0F) {
+            int fillColor = linearToSrgbFast(
                     rSum / totalWeight,
                     gSum / totalWeight,
                     bSum / totalWeight,
                     0);
-            for (int i = 0; i < totalPixels; i++) {
-                if (FastColor.ABGR32.m_266503_(px[i]) == 0) {
+            for (i = 0; i < totalPixels; i++) {
+                if ((px[i] & 0xFF000000) == 0) {
                     px[i] = fillColor;
                 }
             }
             return level | 4;
         }
         return level;
+    }
+
+    private static final float LINEAR_MIN_BOUND = Float.intBitsToFloat(956301312);
+    private static final float LINEAR_MAX_BOUND = Float.intBitsToFloat(1065353215);
+    private static final int[] TO_SRGB8_TABLE = {
+            7536653, 7995405, 8388621, 8847373, 9240589, 9699341, 10092557, 10551309,
+            10944538, 11796506, 12648474, 13500442, 14286874, 15138842, 15990810, 16842778,
+            17694771, 19398707, 21037107, 22741043, 24444979, 26148915, 27787315, 29491251,
+            31195239, 34537575, 37945447, 41287783, 44695655, 48037991, 51445863, 54788199,
+            58196174, 64946382, 71696590, 78446798, 85197006, 91947205, 98369724, 104530101,
+            110559576, 121766210, 132317488, 142278944, 151716114, 160694534, 169279740, 177537266,
+            185532875, 200540590, 214630805, 227869056, 240517486, 252510558, 263979344, 274923843,
+            285672036, 305660478, 324469277, 342229505, 359006697, 374997459, 390332864, 405012911,
+            419300145, 446038782, 471139026, 494797485, 517210765, 538575472, 559022678, 578617920,
+            597623875, 633340926, 666829764, 698418066, 728367975, 756876097, 784204575, 810353408,
+            835782064, 883426645, 928122119, 970261701, 1010238603, 1048314968, 1084752938, 1119683585,
+            1153566616, 1217267486, 1276905142, 1333134941, 1386546704, 1437337036, 1485964687, 1532560729,
+            1577847331, 1662781824, 1742407926, 1817512063, 1888749592, 1956644797, 2021459820, 2083718947
+    };
+
+    private static int linearToSrgb8(float c, int[] table) {
+        if (!(c > LINEAR_MIN_BOUND)) {
+            c = LINEAR_MIN_BOUND;
+        } else if (c > LINEAR_MAX_BOUND) {
+            c = LINEAR_MAX_BOUND;
+        }
+        int bits = Float.floatToRawIntBits(c);
+        int entry = table[(bits - 956301312) >> 20];
+        return (((entry >>> 16) << 9) + ((entry & 0xFFFF) * ((bits >>> 12) & 0xFF))) >>> 16;
+    }
+
+    private static int linearToSrgbFast(float r, float g, float b, int a) {
+        final int[] table = TO_SRGB8_TABLE;
+        return ((a & 0xFF) << 24)
+                | (linearToSrgb8(b, table) << 16)
+                | (linearToSrgb8(g, table) << 8)
+                | linearToSrgb8(r, table);
     }
 
     public static void generateMipLevelsParallel(Map<ResourceLocation, TextureAtlasSprite> sprites, int mipLevel) {

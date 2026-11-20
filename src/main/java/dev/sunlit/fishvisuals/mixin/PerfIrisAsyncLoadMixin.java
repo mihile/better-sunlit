@@ -38,11 +38,12 @@ public abstract class PerfIrisAsyncLoadMixin {
             flag.isUsable();
         }
         StandardMacros.createStandardEnvironmentDefines();
-        IrisShaderLoadPerf.startAsync(() -> {
+        Runnable loadTask = () -> {
             GlslTransformDiskCache.preload();
             Iris.loadShaderpack();
             Iris.getCurrentPack().ifPresent(pack -> pack.getProgramSet(DimensionId.OVERWORLD));
-        });
+        };
+        IrisShaderLoadPerf.deferUntilPostStartup(loadTask);
     }
 
     @Inject(method = "getCurrentPack()Ljava/util/Optional;", at = @At("HEAD"))
@@ -65,7 +66,7 @@ public abstract class PerfIrisAsyncLoadMixin {
         IrisShaderLoadPerf.awaitLoaded();
     }
 
-    @Inject(method = {"reload()V", "onLoadingComplete()V"}, at = @At("HEAD"))
+    @Inject(method = "reload()V", at = @At("HEAD"))
     private static void sunlit$awaitVoidOps(CallbackInfo ci) {
         IrisShaderLoadPerf.awaitLoaded();
     }

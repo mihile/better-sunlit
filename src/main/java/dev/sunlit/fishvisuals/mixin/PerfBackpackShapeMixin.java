@@ -64,9 +64,14 @@ public abstract class PerfBackpackShapeMixin {
             Block block = supplier.get();
             allStates.addAll(block.m_49965_().m_61056_());
         }
-        this.shapeCache = BackpackShapePerf.buildDeduplicatedShapes(
+        this.shapeCache = BackpackShapePerf.buildFastBackpackShapes(
                 allStates,
                 PerfBackpackShapeMixin::sunlit$canonicalizeState,
+                canonical -> mc.m_91289_().m_110910_(canonical),
+                canonical -> canonical.m_61143_(BackpackBlock.FACING),
+                canonical -> canonical.m_61143_(BackpackBlock.LEFT_TANK),
+                canonical -> canonical.m_61143_(BackpackBlock.RIGHT_TANK),
+                canonical -> canonical.m_61143_(BackpackBlock.BATTERY),
                 canonical -> this.sunlit$computeShapeFromLoadedModel(mc, canonical));
     }
 

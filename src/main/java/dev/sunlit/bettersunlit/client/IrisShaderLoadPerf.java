@@ -9,8 +9,43 @@ public final class IrisShaderLoadPerf {
     private static final Object LOCK = new Object();
     private static Thread loaderThread;
     private static volatile boolean loading;
+    private static volatile Runnable deferredTask;
 
     private IrisShaderLoadPerf() {
+    }
+
+    private static void setDeferredPendingFlag(boolean pending) {
+        try {
+            Class.forName("dev.sunlit.bootagent.payload.BootJarPayload")
+                    .getField("irisDeferredPending")
+                    .setBoolean(null, pending);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static void deferUntilPostStartup(Runnable loadTask) {
+        if (loadTask == null) {
+            return;
+        }
+        setDeferredPendingFlag(true);
+        synchronized (LOCK) {
+            deferredTask = loadTask;
+        }
+    }
+
+    public static void triggerPostStartupIfPending() {
+        Runnable task = deferredTask;
+        if (task == null) {
+            return;
+        }
+        synchronized (LOCK) {
+            task = deferredTask;
+            if (task == null) {
+                return;
+            }
+            deferredTask = null;
+        }
+        startAsync(task);
     }
 
     public static void startAsync(Runnable loadTask) {
@@ -24,21 +59,40 @@ public final class IrisShaderLoadPerf {
                 try {
                     loadTask.run();
                 } finally {
+                    setDeferredPendingFlag(false);
                     synchronized (LOCK) {
                         if (loaderThread == Thread.currentThread()) {
                             loading = false;
                             loaderThread = null;
                         }
                     }
+                    try {
+                        var mc = net.minecraft.client.Minecraft.m_91087_();
+                        if (mc != null) {
+                            mc.execute(() -> {
+                                try {
+                                    Class.forName("dev.engine_room.flywheel.impl.BackendManagerImpl")
+                                            .getMethod("onEndClientResourceReload", boolean.class)
+                                            .invoke(null, false);
+                                } catch (Throwable ignored) {
+                                }
+                            });
+                        }
+                    } catch (Throwable ignored) {
+                    }
                 }
             }, "BetterSunlit-Iris-Shaderpack");
             t.setDaemon(true);
+            t.setPriority(Thread.MIN_PRIORITY);
             loaderThread = t;
             t.start();
         }
     }
 
     public static void awaitLoaded() {
+        if (deferredTask != null) {
+            triggerPostStartupIfPending();
+        }
         if (!loading) {
             return;
         }

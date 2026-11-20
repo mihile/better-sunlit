@@ -56,8 +56,8 @@ public abstract class PerfModelBakeEventHelperMixin {
     private void sunlit$applyPrewarmedBlocks(Set set, Consumer action) {
         ModelBakePerf.PrewarmData prewarm = ModelBakePerf.getActivePrewarm();
         if (prewarm != null) {
-            this.topLevelModelLocations = prewarm.topLevelModelLocations.clone();
-            this.namespacesWithModels = prewarm.namespacesWithModels.clone();
+            this.topLevelModelLocations = prewarm.claimTopLevel();
+            this.namespacesWithModels = prewarm.claimNamespaces();
             return;
         }
         set.forEach(action);

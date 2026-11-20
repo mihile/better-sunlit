@@ -1,17 +1,27 @@
 package dev.sunlit.bettersunlit.client;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import dev.latvian.mods.kubejs.DevProperties;
 import dev.latvian.mods.kubejs.KubeJS;
 import dev.latvian.mods.kubejs.KubeJSPaths;
+import dev.latvian.mods.kubejs.client.GeneratedClientResourcePack;
+import dev.latvian.mods.kubejs.generator.AssetJsonGenerator;
 import dev.latvian.mods.kubejs.script.data.GeneratedData;
 import dev.latvian.mods.kubejs.script.data.GeneratedResourcePack;
 import dev.latvian.mods.kubejs.util.ConsoleJS;
 import dev.latvian.mods.kubejs.util.Lazy;
+import dev.latvian.mods.rhino.mod.util.JsonUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.util.GsonHelper;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.lang.ref.WeakReference;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
@@ -27,14 +37,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
  * Lock-free identity-cached index for KubeJS {@code GeneratedResourcePack} lookups and single-pass
  * {@code walkFileTree} validation replacing nested stream/stat scans.
  */
 public final class KubeJsPackPerf {
+    private static final Pattern UNSUPPORTED_FORMAT_PATTERN = Pattern.compile("%(\\d+\\$)?[\\d.]*[df]");
     private static final Object INDEX_LOCK = new Object();
     private static volatile PackEntry[] INDEX_ENTRIES = new PackEntry[0];
     private static final Object PREFETCH_LOCK = new Object();
@@ -42,6 +55,12 @@ public final class KubeJsPackPerf {
             new IdentityHashMap<>();
     private static final ThreadLocal<Boolean> IN_PREFETCH = ThreadLocal.withInitial(() -> Boolean.FALSE);
     private static volatile CompletableFuture<Map<ResourceLocation, GeneratedData>> EARLY_CLIENT_PREFETCH;
+    private static volatile CompletableFuture<Void> EARLY_LANG_PREFETCH;
+    private static volatile boolean EARLY_PREFETCH_SCHEDULED;
+    private static final ConcurrentHashMap<Path, JsonObject> PRELOADED_LANG_FILES = new ConcurrentHashMap<>(1024);
+    private static final ThreadLocal<JsonObject> CURRENT_PRELOADED_LANG = new ThreadLocal<>();
+    private static final ConcurrentHashMap<ResourceLocation, JsonObject> DIRECT_LANG_JSON_BY_LOC =
+            new ConcurrentHashMap<>(512);
 
     private KubeJsPackPerf() {
     }
@@ -85,13 +104,14 @@ public final class KubeJsPackPerf {
     }
 
     public static void scheduleEarlyClientPrefetch() {
-        if (EARLY_CLIENT_PREFETCH != null) {
+        if (EARLY_PREFETCH_SCHEDULED) {
             return;
         }
         synchronized (PREFETCH_LOCK) {
-            if (EARLY_CLIENT_PREFETCH != null) {
+            if (EARLY_PREFETCH_SCHEDULED) {
                 return;
             }
+            EARLY_PREFETCH_SCHEDULED = true;
             EARLY_CLIENT_PREFETCH = CompletableFuture.supplyAsync(() -> {
                 Path root = KubeJSPaths.get(PackType.CLIENT_RESOURCES);
                 Map<ResourceLocation, GeneratedData> preloaded = new HashMap<>();
@@ -104,7 +124,139 @@ public final class KubeJsPackPerf {
                         data -> data.id().m_135815_().startsWith("lang/"));
                 return preloaded;
             }, ForkJoinPool.commonPool());
+            EARLY_LANG_PREFETCH = CompletableFuture.runAsync(
+                    () -> preloadLangFiles(KubeJSPaths.get(PackType.CLIENT_RESOURCES)),
+                    ForkJoinPool.commonPool());
         }
+    }
+
+    private static String resolveActiveLangJsonName() {
+        try {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.m_91087_();
+            if (mc != null && mc.f_91066_ != null) {
+                String code = mc.f_91066_.f_92075_;
+                if (code != null && !code.isEmpty()) {
+                    return code.toLowerCase(Locale.ROOT) + ".json";
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static boolean isOtherLocaleJson(String fileName, String activeLangJson) {
+        if (activeLangJson == null || "en_us.json".equals(fileName) || activeLangJson.equals(fileName)) {
+            return false;
+        }
+        // Standard Minecraft locale JSON names are "<ll>_<rr>.json" (e.g. zh_cn.json, fr_fr.json).
+        int len = fileName.length();
+        if (len != 10 || fileName.charAt(2) != '_' || !fileName.endsWith(".json")) {
+            return false;
+        }
+        return (fileName.charAt(0) >= 'a' && fileName.charAt(0) <= 'z')
+                && (fileName.charAt(1) >= 'a' && fileName.charAt(1) <= 'z')
+                && (fileName.charAt(3) >= 'a' && fileName.charAt(3) <= 'z')
+                && (fileName.charAt(4) >= 'a' && fileName.charAt(4) <= 'z');
+    }
+
+    private static void preloadLangFiles(Path root) {
+        if (root == null || !Files.isDirectory(root)) {
+            return;
+        }
+        String activeLangJson = resolveActiveLangJsonName();
+        List<Path> langFiles = new ArrayList<>(1024);
+        try (DirectoryStream<Path> nsDirs = Files.newDirectoryStream(root, Files::isDirectory)) {
+            for (Path nsDir : nsDirs) {
+                Path langDir = nsDir.resolve("lang");
+                if (!Files.isDirectory(langDir)) {
+                    continue;
+                }
+                try (DirectoryStream<Path> files = Files.newDirectoryStream(langDir)) {
+                    for (Path file : files) {
+                        if (Files.isRegularFile(file)) {
+                            String name = file.getFileName().toString();
+                            if (name.endsWith(".json") && !isOtherLocaleJson(name, activeLangJson)) {
+                                langFiles.add(file.toAbsolutePath().normalize());
+                            }
+                        }
+                    }
+                } catch (IOException ignored) {
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        if (langFiles.isEmpty()) {
+            return;
+        }
+        langFiles.parallelStream().forEach(file -> {
+            try (BufferedReader reader = Files.newBufferedReader(file)) {
+                JsonObject obj = JsonUtils.GSON.fromJson(reader, JsonObject.class);
+                if (obj != null) {
+                    PRELOADED_LANG_FILES.put(file, obj);
+                }
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    public static BufferedReader openLangBufferedReader(Path file) throws IOException {
+        CompletableFuture<Void> langFuture = EARLY_LANG_PREFETCH;
+        if (langFuture != null) {
+            EARLY_LANG_PREFETCH = null;
+            try {
+                langFuture.join();
+            } catch (RuntimeException ignored) {
+            }
+        }
+        if (file != null && !PRELOADED_LANG_FILES.isEmpty()) {
+            JsonObject preloaded = PRELOADED_LANG_FILES.remove(file.toAbsolutePath().normalize());
+            if (preloaded != null) {
+                CURRENT_PRELOADED_LANG.set(preloaded);
+                return null;
+            }
+        }
+        return Files.newBufferedReader(file);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T parseLangJson(Gson gson, Reader reader, Class<T> type) {
+        if (reader == null) {
+            JsonObject preloaded = CURRENT_PRELOADED_LANG.get();
+            CURRENT_PRELOADED_LANG.remove();
+            return (T) preloaded;
+        }
+        return gson.fromJson(reader, type);
+    }
+
+    public static void registerGeneratedLangJson(
+            AssetJsonGenerator generator, ResourceLocation id, JsonElement json) {
+        if (id != null && json instanceof JsonObject obj) {
+            DIRECT_LANG_JSON_BY_LOC.put(
+                    new ResourceLocation(id.m_135827_(), id.m_135815_() + ".json"),
+                    obj);
+        }
+        generator.json(id, json);
+    }
+
+    public static boolean tryLoadDirectLang(
+            Resource resource, ResourceLocation location, Map<String, String> target) {
+        if (resource == null || location == null || target == null
+                || !(resource.m_247173_() instanceof GeneratedClientResourcePack)) {
+            return false;
+        }
+        JsonObject obj = DIRECT_LANG_JSON_BY_LOC.get(location);
+        if (obj == null) {
+            return false;
+        }
+        for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+            String key = entry.getKey();
+            String raw = GsonHelper.m_13805_(entry.getValue(), key);
+            String val = raw.indexOf('%') >= 0
+                    ? UNSUPPORTED_FORMAT_PATTERN.matcher(raw).replaceAll("%$1s")
+                    : raw;
+            target.put(key, val);
+        }
+        return true;
     }
 
     public static void populateGeneratedFromDisk(
