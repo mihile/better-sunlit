@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +25,15 @@ public abstract class PerfClientLanguageMixin {
     @Shadow
     private static void m_235035_(String langCode, List<Resource> resources, Map<String, String> target) {
         throw new AssertionError();
+    }
+
+    @Redirect(
+            method = "m_264420_",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/google/common/collect/Maps;newHashMap()Ljava/util/HashMap;"))
+    private static HashMap<String, String> sunlit$presizeLanguageMap() {
+        return ClientLanguagePerf.newPresizedLanguageMap();
     }
 
     @Inject(method = "m_264420_", at = @At("HEAD"))

@@ -156,7 +156,127 @@ public final class ClientPostApplyPatches {
         target.instructions.insertBefore(cirNew, guard);
         target.maxStack = Math.max(target.maxStack, 4);
         target.maxLocals = Math.max(target.maxLocals, cirVar + 1);
+
+        patchBlockModelShaperCaching(cn, target);
         return true;
+    }
+
+    private static void patchBlockModelShaperCaching(ClassNode cn, MethodNode getBlockModel) {
+        String shaperPerf = "dev/sunlit/bettersunlit/client/BlockModelShaperPerf";
+        String iModelHolding = "org/embeddedt/modernfix/duck/IModelHoldingBlockState";
+        MethodInsnNode setModelCall = null;
+        boolean alreadyMarked = false;
+        for (AbstractInsnNode insn = getBlockModel.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m) {
+                if (shaperPerf.equals(m.owner) && "markModelCached".equals(m.name)) {
+                    alreadyMarked = true;
+                } else if (iModelHolding.equals(m.owner) && "mfix$setModel".equals(m.name)) {
+                    setModelCall = m;
+                }
+            }
+        }
+        if (!alreadyMarked && setModelCall != null) {
+            InsnList markList = new InsnList();
+            markList.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            markList.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, shaperPerf, "markCachedState", "(Ljava/lang/Object;)V", false));
+            getBlockModel.instructions.insertBefore(setModelCall, markList);
+        }
+
+        MethodNode replaceMap = null;
+        for (MethodNode m : cn.methods) {
+            if ("(Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V".equals(m.desc)
+                    && ("replaceModelMap".equals(m.name) || m.name.endsWith("$replaceModelMap"))) {
+                replaceMap = m;
+                break;
+            }
+        }
+        if (replaceMap == null) {
+            return;
+        }
+        FieldInsnNode putMapField = null;
+        boolean sawRegistryLoop = false;
+        for (AbstractInsnNode insn = replaceMap.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && shaperPerf.equals(m.owner)
+                    && ("consumeNeedsClear".equals(m.name) || "consumeStatesToClear".equals(m.name))) {
+                return;
+            }
+            if (putMapField == null && insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
+                    && cn.name.equals(f.owner) && "f_110877_".equals(f.name)) {
+                putMapField = f;
+            } else if (putMapField != null && insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC
+                    && "net/minecraft/core/registries/BuiltInRegistries".equals(f.owner)
+                    && "f_256975_".equals(f.name)) {
+                sawRegistryLoop = true;
+            }
+        }
+        if (putMapField == null || !sawRegistryLoop) {
+            return;
+        }
+        int arrSlot = Math.max(2, replaceMap.maxLocals);
+        int idxSlot = arrSlot + 1;
+        int lenSlot = arrSlot + 2;
+        LabelNode clearAllLabel = new LabelNode();
+        LabelNode loopStart = new LabelNode();
+        LabelNode loopDone = new LabelNode();
+        InsnList fastSkip = new InsnList();
+        fastSkip.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC, shaperPerf, "consumeStatesToClear", "()[Ljava/lang/Object;", false));
+        fastSkip.add(new InsnNode(Opcodes.DUP));
+        fastSkip.add(new VarInsnNode(Opcodes.ASTORE, arrSlot));
+        fastSkip.add(new JumpInsnNode(Opcodes.IFNULL, clearAllLabel));
+        fastSkip.add(new VarInsnNode(Opcodes.ALOAD, arrSlot));
+        fastSkip.add(new InsnNode(Opcodes.ARRAYLENGTH));
+        fastSkip.add(new VarInsnNode(Opcodes.ISTORE, lenSlot));
+        fastSkip.add(new InsnNode(Opcodes.ICONST_0));
+        fastSkip.add(new VarInsnNode(Opcodes.ISTORE, idxSlot));
+        fastSkip.add(loopStart);
+        fastSkip.add(new FrameNode(
+                Opcodes.F_FULL,
+                5,
+                new Object[] {
+                        cn.name,
+                        "org/spongepowered/asm/mixin/injection/callback/CallbackInfo",
+                        "[Ljava/lang/Object;",
+                        Opcodes.INTEGER,
+                        Opcodes.INTEGER
+                },
+                0,
+                new Object[0]));
+        fastSkip.add(new VarInsnNode(Opcodes.ILOAD, idxSlot));
+        fastSkip.add(new VarInsnNode(Opcodes.ILOAD, lenSlot));
+        fastSkip.add(new JumpInsnNode(Opcodes.IF_ICMPGE, loopDone));
+        fastSkip.add(new VarInsnNode(Opcodes.ALOAD, arrSlot));
+        fastSkip.add(new VarInsnNode(Opcodes.ILOAD, idxSlot));
+        fastSkip.add(new InsnNode(Opcodes.AALOAD));
+        fastSkip.add(new TypeInsnNode(Opcodes.CHECKCAST, iModelHolding));
+        fastSkip.add(new InsnNode(Opcodes.ACONST_NULL));
+        fastSkip.add(new MethodInsnNode(
+                Opcodes.INVOKEINTERFACE,
+                iModelHolding,
+                "mfix$setModel",
+                "(L" + BAKED_MODEL + ";)V",
+                true));
+        fastSkip.add(new org.objectweb.asm.tree.IincInsnNode(idxSlot, 1));
+        fastSkip.add(new JumpInsnNode(Opcodes.GOTO, loopStart));
+        fastSkip.add(loopDone);
+        fastSkip.add(new FrameNode(
+                Opcodes.F_FULL,
+                2,
+                new Object[] { cn.name, "org/spongepowered/asm/mixin/injection/callback/CallbackInfo" },
+                0,
+                new Object[0]));
+        fastSkip.add(new InsnNode(Opcodes.RETURN));
+        fastSkip.add(clearAllLabel);
+        fastSkip.add(new FrameNode(
+                Opcodes.F_FULL,
+                2,
+                new Object[] { cn.name, "org/spongepowered/asm/mixin/injection/callback/CallbackInfo" },
+                0,
+                new Object[0]));
+        replaceMap.instructions.insert(putMapField, fastSkip);
+        replaceMap.maxStack = Math.max(replaceMap.maxStack, 4);
+        replaceMap.maxLocals = Math.max(replaceMap.maxLocals, lenSlot + 1);
     }
 
     /**
@@ -595,6 +715,17 @@ public final class ClientPostApplyPatches {
                 false));
         preGuard.add(new JumpInsnNode(Opcodes.IFEQ, preLoopReturnJump.label));
         m.instructions.insertBefore(emojiListGet, preGuard);
+        // Replace `GETSTATIC Constants.EMOJI_LIST` with indexed candidate list so 0-3 emojis are scanned instead of 2,016.
+        InsnList candCall = new InsnList();
+        candCall.add(new VarInsnNode(Opcodes.ALOAD, cleanVar));
+        candCall.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                "dev/sunlit/bettersunlit/client/EmojiCandidatePerf",
+                "candidatesForClean",
+                "(Ljava/lang/String;)Ljava/util/List;",
+                false));
+        m.instructions.insertBefore(emojiListGet, candCall);
+        m.instructions.remove(emojiListGet);
 
         InsnList loopGuard = new InsnList();
         loopGuard.add(new VarInsnNode(Opcodes.ALOAD, emojiVar));

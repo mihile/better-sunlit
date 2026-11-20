@@ -4334,13 +4334,13 @@ public final class PerfOptTests {
         assertEquals("shape(canonical_7)", builtShapes.get("canonical_7_open"),
                 "Expected open/closed variants to share canonical shape");
 
-        // 11. Iter 9: StartupClassPreloadPerf scales worker count cleanly between 2 and 8.
-        assertEquals(2, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(2),
-                "Minimum worker count should be 2");
-        assertEquals(8, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(16),
-                "16-thread CPU should allocate 8 preload workers");
-        assertEquals(8, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(32),
-                "Worker count should cap at 8");
+        // 11. Iter 9: StartupClassPreloadPerf scales worker count cleanly between 1 and 2 to avoid Mixin contention.
+        assertEquals(1, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(2),
+                "Minimum worker count should be 1");
+        assertEquals(2, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(16),
+                "16-thread CPU should allocate 2 preload workers");
+        assertEquals(2, dev.sunlit.bettersunlit.client.StartupClassPreloadPerf.computeWorkerCount(32),
+                "Worker count should cap at 2");
 
         // 12. Iter 10: DrippyFontPerf runs prepare asynchronously on backgroundExecutor and applies on applyExecutor.
         java.util.List<String> fontEvents = new java.util.ArrayList<>();

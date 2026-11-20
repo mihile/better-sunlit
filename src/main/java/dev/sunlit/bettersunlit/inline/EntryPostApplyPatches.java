@@ -571,6 +571,7 @@ public final class EntryPostApplyPatches {
         }
         for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
             if (insn instanceof MethodInsnNode m && STATE_DEF_PERF.equals(m.owner) && "populateAllStates".equals(m.name)) {
+                patchPossibleStatesGetter(cn);
                 return true;
             }
         }
@@ -692,7 +693,40 @@ public final class EntryPostApplyPatches {
             init.instructions.insert(replacement);
         }
         init.maxStack = Math.max(init.maxStack, 7);
+        for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn.getOpcode() == Opcodes.RETURN) {
+                init.instructions.insertBefore(
+                        insn,
+                        new MethodInsnNode(Opcodes.INVOKESTATIC, STATE_DEF_PERF, "finishStateDefinition", "()V", false));
+            }
+        }
+        patchPossibleStatesGetter(cn);
         return true;
+    }
+
+    private static void patchPossibleStatesGetter(ClassNode cn) {
+        MethodNode getter = findMethod(cn, "m_61056_", "()Lcom/google/common/collect/ImmutableList;");
+        if (getter == null || getter.instructions == null) {
+            return;
+        }
+        for (AbstractInsnNode insn = getter.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && STATE_DEF_PERF.equals(m.owner) && "getPossibleStates".equals(m.name)) {
+                return;
+            }
+        }
+        for (AbstractInsnNode insn = getter.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn.getOpcode() == Opcodes.ARETURN) {
+                getter.instructions.insertBefore(
+                        insn,
+                        new MethodInsnNode(
+                                Opcodes.INVOKESTATIC,
+                                STATE_DEF_PERF,
+                                "getPossibleStates",
+                                "(Lcom/google/common/collect/ImmutableList;)Lcom/google/common/collect/ImmutableList;",
+                                false));
+                return;
+            }
+        }
     }
 
     private static AbstractInsnNode prevRealInsnLocal(AbstractInsnNode insn) {
@@ -758,6 +792,272 @@ public final class EntryPostApplyPatches {
         target.instructions.insertBefore(firstReal, guard);
         target.maxStack = Math.max(target.maxStack, 1);
         target.maxLocals = Math.max(target.maxLocals, 2);
+        return true;
+    }
+
+    /**
+     * Replaces Moonlight {@code BlocksColorInternal.scanRegistryAndDetectSets}'s inner color-key
+     * string concatenation loop with zero-allocation prefix/suffix matching via
+     * {@code MoonlightColorPerf}.
+     */
+    public static boolean patchBlocksColorInternal(ClassNode cn) {
+        if (cn == null) return false;
+        MethodNode target = findMethod(
+                cn,
+                "scanRegistryAndDetectSets",
+                "(Ljava/util/Map;Ljava/util/List;Lnet/minecraft/core/Registry;)Ljava/util/Map;");
+        if (target == null) {
+            LOG.warn("[BetterSunlit-Perf] Skipping BlocksColorInternal rewrite: scanRegistryAndDetectSets missing");
+            return false;
+        }
+        String colorPerf = "dev/sunlit/bettersunlit/perf/MoonlightColorPerf";
+        for (AbstractInsnNode insn = target.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && colorPerf.equals(m.owner) && "findColorMatch".equals(m.name)) {
+                return true;
+            }
+        }
+
+        MethodInsnNode containsCall = null;
+        for (AbstractInsnNode insn = target.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && "java/lang/String".equals(m.owner)
+                    && "contains".equals(m.name) && "(Ljava/lang/CharSequence;)Z".equals(m.desc)) {
+                containsCall = m;
+                break;
+            }
+        }
+        if (containsCall == null
+                || !(prevRealInsnLocal(containsCall) instanceof LdcInsnNode ldc && "_".equals(ldc.cst))
+                || !(prevRealInsnLocal(prevRealInsnLocal(containsCall)) instanceof VarInsnNode pathLoad && pathLoad.getOpcode() == Opcodes.ALOAD)
+                || !(nextRealInsn(containsCall) instanceof JumpInsnNode ifneInner && ifneInner.getOpcode() == Opcodes.IFNE)
+                || !(nextRealInsn(ifneInner) instanceof JumpInsnNode gotoOuter && gotoOuter.getOpcode() == Opcodes.GOTO)) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected String.contains layout", cn.name);
+            return false;
+        }
+        int pathVar = pathLoad.var;
+        LabelNode continueLabel = gotoOuter.label;
+
+        AbstractInsnNode replaceStart = nextRealInsn(ifneInner.label);
+        if (!(replaceStart instanceof VarInsnNode keysLoad && keysLoad.getOpcode() == Opcodes.ALOAD)
+                || !(nextRealInsn(keysLoad) instanceof MethodInsnNode iterCall
+                        && "java/util/List".equals(iterCall.owner) && "iterator".equals(iterCall.name))
+                || !(nextRealInsn(iterCall) instanceof VarInsnNode iterStore && iterStore.getOpcode() == Opcodes.ASTORE)) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected colorKeys iterator layout", cn.name);
+            return false;
+        }
+        int colorKeysVar = keysLoad.var;
+        int encVar = iterStore.var;
+
+        boolean sawConcat = false;
+        int rlVar = -1;
+        JumpInsnNode ifnullAfterMatch = null;
+        for (AbstractInsnNode cur = replaceStart; cur != null; cur = cur.getNext()) {
+            if (cur instanceof InvokeDynamicInsnNode indy && "makeConcatWithConstants".equals(indy.name)) {
+                sawConcat = true;
+            } else if (cur instanceof MethodInsnNode m
+                    && "net/minecraft/resources/ResourceLocation".equals(m.owner)
+                    && "m_135827_".equals(m.name) && "()Ljava/lang/String;".equals(m.desc)
+                    && prevRealInsnLocal(m) instanceof VarInsnNode rlLoad && rlLoad.getOpcode() == Opcodes.ALOAD) {
+                rlVar = rlLoad.var;
+            } else if (cur instanceof JumpInsnNode j && j.getOpcode() == Opcodes.IFNULL
+                    && nextRealInsn(j) instanceof VarInsnNode mapArg && mapArg.getOpcode() == Opcodes.ALOAD && mapArg.var == 1) {
+                ifnullAfterMatch = j;
+                break;
+            }
+        }
+        if (!sawConcat || rlVar < 0 || ifnullAfterMatch == null
+                || !(prevRealInsnLocal(ifnullAfterMatch) instanceof VarInsnNode matchLoad && matchLoad.getOpcode() == Opcodes.ALOAD)
+                || !(nextRealInsn(nextRealInsn(ifnullAfterMatch)) instanceof VarInsnNode keyLoad && keyLoad.getOpcode() == Opcodes.ALOAD)) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected color match tail layout", cn.name);
+            return false;
+        }
+        int matchVar = matchLoad.var;
+        int colorKeyVar = keyLoad.var;
+        LabelNode notMatchedLabel = ifnullAfterMatch.label;
+
+        JumpInsnNode setColorGoto = null;
+        for (AbstractInsnNode cur = nextRealInsn(ifnullAfterMatch); cur != null; cur = cur.getNext()) {
+            if (cur instanceof MethodInsnNode m && "setColor".equals(m.name)
+                    && nextRealInsn(m) instanceof JumpInsnNode g && g.getOpcode() == Opcodes.GOTO && g.label == continueLabel) {
+                setColorGoto = g;
+                break;
+            }
+        }
+        AbstractInsnNode afterNotMatched = notMatchedLabel == null ? null : nextRealInsn(notMatchedLabel);
+        AbstractInsnNode secondGoto = afterNotMatched == null ? null : nextRealInsn(afterNotMatched);
+        if (setColorGoto == null
+                || !(afterNotMatched instanceof JumpInsnNode gBack && gBack.getOpcode() == Opcodes.GOTO)
+                || !(secondGoto instanceof JumpInsnNode gOuter2 && gOuter2.getOpcode() == Opcodes.GOTO && gOuter2.label == continueLabel)) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: unexpected setColor loop exit layout", cn.name);
+            return false;
+        }
+
+        // Fail closed if any label outside the replaced/dead ranges targets inside them.
+        Set<LabelNode> deadLabels = new HashSet<>();
+        boolean inInner = false;
+        boolean inTail = false;
+        for (AbstractInsnNode cur = target.instructions.getFirst(); cur != null; cur = cur.getNext()) {
+            if (cur == replaceStart) inInner = true;
+            if (cur == setColorGoto) inTail = true;
+            if ((inInner || inTail) && cur instanceof LabelNode lbl && cur != continueLabel) {
+                deadLabels.add(lbl);
+            }
+            if (cur == ifnullAfterMatch) inInner = false;
+            if (cur == secondGoto) inTail = false;
+        }
+        inInner = false;
+        inTail = false;
+        for (AbstractInsnNode cur = target.instructions.getFirst(); cur != null; cur = cur.getNext()) {
+            if (cur == replaceStart) inInner = true;
+            if (cur == setColorGoto) inTail = true;
+            boolean inside = inInner || (inTail && cur != setColorGoto);
+            if (!inside && cur instanceof JumpInsnNode j && deadLabels.contains(j.label)) {
+                LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: external jump into replaced range", cn.name);
+                return false;
+            }
+            if (cur == ifnullAfterMatch) inInner = false;
+            if (cur == secondGoto) inTail = false;
+        }
+
+        AbstractInsnNode insertAfter = replaceStart.getPrevious();
+        for (AbstractInsnNode cur = replaceStart; cur != null; ) {
+            AbstractInsnNode next = cur.getNext();
+            boolean stop = (cur == ifnullAfterMatch);
+            if (cur.getOpcode() >= 0 || cur instanceof FrameNode) {
+                target.instructions.remove(cur);
+            }
+            if (stop) break;
+            cur = next;
+        }
+        for (AbstractInsnNode cur = setColorGoto.getNext(); cur != null; ) {
+            AbstractInsnNode next = cur.getNext();
+            boolean stop = (cur == secondGoto);
+            if (cur.getOpcode() >= 0 || cur instanceof FrameNode) {
+                target.instructions.remove(cur);
+            }
+            if (stop) break;
+            cur = next;
+        }
+
+        InsnList repl = new InsnList();
+        repl.add(new VarInsnNode(Opcodes.ALOAD, pathVar));
+        repl.add(new VarInsnNode(Opcodes.ALOAD, colorKeysVar));
+        repl.add(new MethodInsnNode(Opcodes.INVOKESTATIC, colorPerf, "findColorMatch",
+                "(Ljava/lang/String;Ljava/util/List;)I", false));
+        repl.add(new VarInsnNode(Opcodes.ISTORE, encVar));
+        repl.add(new VarInsnNode(Opcodes.ILOAD, encVar));
+        repl.add(new JumpInsnNode(Opcodes.IFLT, continueLabel));
+        repl.add(new VarInsnNode(Opcodes.ALOAD, colorKeysVar));
+        repl.add(new VarInsnNode(Opcodes.ILOAD, encVar));
+        repl.add(new InsnNode(Opcodes.ICONST_1));
+        repl.add(new InsnNode(Opcodes.IUSHR));
+        repl.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get",
+                "(I)Ljava/lang/Object;", true));
+        repl.add(new TypeInsnNode(Opcodes.CHECKCAST, "java/lang/String"));
+        repl.add(new VarInsnNode(Opcodes.ASTORE, colorKeyVar));
+        repl.add(new TypeInsnNode(Opcodes.NEW, "net/minecraft/resources/ResourceLocation"));
+        repl.add(new InsnNode(Opcodes.DUP));
+        repl.add(new VarInsnNode(Opcodes.ALOAD, rlVar));
+        repl.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/resources/ResourceLocation",
+                "m_135827_", "()Ljava/lang/String;", false));
+        repl.add(new VarInsnNode(Opcodes.ALOAD, pathVar));
+        repl.add(new VarInsnNode(Opcodes.ALOAD, colorKeyVar));
+        repl.add(new VarInsnNode(Opcodes.ILOAD, encVar));
+        repl.add(new MethodInsnNode(Opcodes.INVOKESTATIC, colorPerf, "extractSubpath",
+                "(Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/String;", false));
+        repl.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "net/minecraft/resources/ResourceLocation",
+                "<init>", "(Ljava/lang/String;Ljava/lang/String;)V", false));
+        repl.add(new VarInsnNode(Opcodes.ASTORE, matchVar));
+        target.instructions.insert(insertAfter, repl);
+        if (target.localVariables != null) {
+            target.localVariables.removeIf(lv ->
+                    lv.index == encVar || lv.index == colorKeyVar || lv.index == matchVar
+                            || deadLabels.contains(lv.start) || deadLabels.contains(lv.end));
+        }
+        target.maxStack = Math.max(target.maxStack, 6);
+        return true;
+    }
+
+    private static final String BITSET_JOIN_DESC =
+            "(Lnet/minecraft/world/phys/shapes/DiscreteVoxelShape;"
+                    + "Lnet/minecraft/world/phys/shapes/DiscreteVoxelShape;"
+                    + "Lnet/minecraft/world/phys/shapes/IndexMerger;"
+                    + "Lnet/minecraft/world/phys/shapes/IndexMerger;"
+                    + "Lnet/minecraft/world/phys/shapes/IndexMerger;"
+                    + "Lnet/minecraft/world/phys/shapes/BooleanOp;)"
+                    + "Lnet/minecraft/world/phys/shapes/BitSetDiscreteVoxelShape;";
+
+    public static boolean patchBitSetDiscreteVoxelShape(ClassNode cn) {
+        MethodNode m = findMethod(cn, "m_82641_", BITSET_JOIN_DESC);
+        if (m == null) {
+            LOG.warn("[BetterSunlit-Perf] Fail-closed abort on {}: missing m_82641_", cn.name);
+            return false;
+        }
+        InsnList il = new InsnList();
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 4));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+        il.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                "dev/sunlit/bettersunlit/perf/VoxelJoinPerf",
+                "join",
+                "(Lnet/minecraft/world/phys/shapes/DiscreteVoxelShape;"
+                        + "Lnet/minecraft/world/phys/shapes/DiscreteVoxelShape;"
+                        + "Ljava/lang/Object;"
+                        + "Ljava/lang/Object;"
+                        + "Ljava/lang/Object;"
+                        + "Lnet/minecraft/world/phys/shapes/BooleanOp;)"
+                        + "Lnet/minecraft/world/phys/shapes/BitSetDiscreteVoxelShape;",
+                false));
+        il.add(new InsnNode(Opcodes.ARETURN));
+        m.instructions = il;
+        if (m.tryCatchBlocks != null) {
+            m.tryCatchBlocks.clear();
+        }
+        if (m.localVariables != null) {
+            m.localVariables.clear();
+        }
+        m.maxStack = 6;
+        m.maxLocals = 6;
+
+        MethodNode clinit = findMethod(cn, "<clinit>", "()V");
+        if (clinit == null) {
+            clinit = new MethodNode(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+            clinit.instructions.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    "java/lang/invoke/MethodHandles",
+                    "lookup",
+                    "()Ljava/lang/invoke/MethodHandles$Lookup;",
+                    false));
+            clinit.instructions.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    "dev/sunlit/bettersunlit/perf/VoxelJoinPerf",
+                    "initLookup",
+                    "(Ljava/lang/invoke/MethodHandles$Lookup;)V",
+                    false));
+            clinit.instructions.add(new InsnNode(Opcodes.RETURN));
+            clinit.maxStack = 1;
+            clinit.maxLocals = 0;
+            cn.methods.add(clinit);
+        } else {
+            InsnList initHook = new InsnList();
+            initHook.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    "java/lang/invoke/MethodHandles",
+                    "lookup",
+                    "()Ljava/lang/invoke/MethodHandles$Lookup;",
+                    false));
+            initHook.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    "dev/sunlit/bettersunlit/perf/VoxelJoinPerf",
+                    "initLookup",
+                    "(Ljava/lang/invoke/MethodHandles$Lookup;)V",
+                    false));
+            clinit.instructions.insert(initHook);
+            clinit.maxStack = Math.max(clinit.maxStack, 1);
+        }
         return true;
     }
 }

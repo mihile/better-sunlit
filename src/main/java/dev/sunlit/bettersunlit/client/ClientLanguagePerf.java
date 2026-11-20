@@ -20,28 +20,67 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 
 /**
  * Pre-fetches and JSON-parses {@code ClientLanguage} entries across {@code ForkJoinPool} workers
- * while replaying the results in exact {@code (langCode, namespace, pack)} merge order.
+ * (starting early during {@code LanguageManager} prepare when possible) while replaying the
+ * results in exact {@code (langCode, namespace, pack)} merge order.
  */
 public final class ClientLanguagePerf {
     private static final Logger LOG = LoggerFactory.getLogger("net.minecraft.client.resources.language.ClientLanguage");
     private static final int BATCH_SIZE = 24;
     private static final ThreadLocal<Deque<Session>> ACTIVE_SESSIONS =
             ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ConcurrentHashMap<ResourceManager, PendingPrep> PREPARED_BY_RM =
+            new ConcurrentHashMap<>();
 
     private ClientLanguagePerf() {
+    }
+
+    public static HashMap<String, String> newPresizedLanguageMap() {
+        return new HashMap<>(131072, 0.75f);
+    }
+
+    public static CompletableFuture<Void> prepareSessionAsync(
+            ResourceManager resourceManager, List<String> filenames, Executor executor) {
+        if (resourceManager == null || filenames == null || filenames.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        List<String> langsCopy = List.copyOf(filenames);
+        CompletableFuture<Session> future = CompletableFuture.supplyAsync(
+                () -> buildSession(resourceManager, langsCopy, ForkJoinPool.commonPool()),
+                executor != null ? executor : ForkJoinPool.commonPool());
+        PREPARED_BY_RM.put(resourceManager, new PendingPrep(langsCopy, future));
+        return future.thenAccept(ignored -> {
+        });
     }
 
     public static void beginSession(ResourceManager resourceManager, List<String> filenames) {
         if (resourceManager == null || filenames == null || filenames.isEmpty()) {
             return;
         }
+        PendingPrep pending = PREPARED_BY_RM.remove(resourceManager);
+        if (pending != null && pending.langs.equals(filenames)) {
+            Session preloaded = pending.future.join();
+            if (preloaded != null) {
+                ACTIVE_SESSIONS.get().push(preloaded);
+                return;
+            }
+        }
+        Session session = buildSession(resourceManager, filenames, ForkJoinPool.commonPool());
+        if (session != null) {
+            ACTIVE_SESSIONS.get().push(session);
+        }
+    }
+
+    private static Session buildSession(
+            ResourceManager resourceManager, List<String> filenames, Executor pool) {
         Set<String> namespaceSet = resourceManager.m_7187_();
         if (namespaceSet == null || namespaceSet.size() < 4) {
-            return;
+            return null;
         }
         List<String> namespaces = new ArrayList<>(namespaceSet);
         List<TaskSpec> tasks = new ArrayList<>(filenames.size() * namespaces.size());
@@ -51,8 +90,7 @@ public final class ClientLanguagePerf {
                 tasks.add(new TaskSpec(langCode, new ResourceLocation(namespace, path)));
             }
         }
-        Session session = preload(resourceManager, tasks);
-        ACTIVE_SESSIONS.get().push(session);
+        return preload(resourceManager, tasks, pool);
     }
 
     public static List<Resource> interceptGetResourceStack(
@@ -113,9 +151,12 @@ public final class ClientLanguagePerf {
     }
 
     static Session preload(ResourceManager resourceManager, List<TaskSpec> tasks) {
+        return preload(resourceManager, tasks, ForkJoinPool.commonPool());
+    }
+
+    static Session preload(ResourceManager resourceManager, List<TaskSpec> tasks, Executor pool) {
         int total = tasks.size();
         EntryResult[] results = new EntryResult[total];
-        ForkJoinPool pool = ForkJoinPool.commonPool();
         int batchCount = (total + BATCH_SIZE - 1) / BATCH_SIZE;
         List<CompletableFuture<Void>> futures = new ArrayList<>(batchCount);
         for (int start = 0; start < total; start += BATCH_SIZE) {
@@ -152,6 +193,9 @@ public final class ClientLanguagePerf {
             }
             Map<String, String> entries = new Object2ObjectOpenHashMap<>();
             for (Resource resource : resources) {
+                if (KubeJsPackPerf.tryLoadDirectLang(resource, spec.location, entries)) {
+                    continue;
+                }
                 try (InputStream stream = resource.m_215507_()) {
                     Language.m_128108_(stream, entries::put);
                 } catch (IOException ex) {
@@ -163,6 +207,9 @@ public final class ClientLanguagePerf {
         } catch (Exception ex) {
             return new EntryResult(Collections.emptyMap(), ex);
         }
+    }
+
+    private record PendingPrep(List<String> langs, CompletableFuture<Session> future) {
     }
 
     static final class TaskSpec {

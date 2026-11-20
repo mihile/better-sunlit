@@ -43,6 +43,7 @@ public final class WaterMediaPerf {
             }
         }, "BetterSunlit-WaterMedia");
         thread.setDaemon(true);
+        thread.setPriority(Thread.MIN_PRIORITY);
         thread.start();
     }
 

@@ -141,17 +141,31 @@ PAYLOAD_CLASSES = OUT_BUILD / 'payload-classes'
 PAYLOAD_CLASSES.mkdir()
 resolver_payload_src = ROOT / 'boot-agent/src/dev/sunlit/bootagent/payload/BootResolverPayload.java'
 mixin_payload_src = ROOT / 'boot-agent/src/org/spongepowered/asm/mixin/transformer/BootMixinPayload.java'
-subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-g:none', '-proc:none', '-cp', str(open_mixin_jar), '-d', str(PAYLOAD_CLASSES), str(resolver_payload_src), str(mixin_payload_src)], check=True)
+jar_payload_src = ROOT / 'boot-agent/src/dev/sunlit/bootagent/payload/BootJarPayload.java'
+download_payload_src = ROOT / 'boot-agent/src/dev/sunlit/bootagent/payload/BootDownloadPayload.java'
+subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-g:none', '-proc:none', '-cp', str(open_mixin_jar), '-d', str(PAYLOAD_CLASSES), str(resolver_payload_src), str(mixin_payload_src), str(jar_payload_src), str(download_payload_src)], check=True)
 
-# Compile SunlitBootAgent directly against the relocated ASM packages so runtime uses zero external classpath ASM.
+# Compile SunlitBootAgent, SunlitBootTransformer & SunlitExtraTransformer against the relocated ASM packages so runtime uses zero external classpath ASM.
 agent_src = ROOT / 'boot-agent/src/dev/sunlit/bootagent/SunlitBootAgent.java'
-reloc_src = OUT_BUILD / 'src/dev/sunlit/bootagent/SunlitBootAgent.java'
-reloc_src.parent.mkdir(parents=True)
-reloc_src.write_text(
+transformer_src = ROOT / 'boot-agent/src/dev/sunlit/bootagent/SunlitBootTransformer.java'
+extra_src = ROOT / 'boot-agent/src/dev/sunlit/bootagent/SunlitExtraTransformer.java'
+reloc_agent = OUT_BUILD / 'src/dev/sunlit/bootagent/SunlitBootAgent.java'
+reloc_transformer = OUT_BUILD / 'src/dev/sunlit/bootagent/SunlitBootTransformer.java'
+reloc_extra = OUT_BUILD / 'src/dev/sunlit/bootagent/SunlitExtraTransformer.java'
+reloc_agent.parent.mkdir(parents=True)
+reloc_agent.write_text(
     agent_src.read_text(encoding='utf8').replace('import org.objectweb.asm.', 'import dev.sunlit.bootagent.asm.'),
     encoding='utf8'
 )
-subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-cp', str(SHADE_CLASSES), '-d', str(AGENT_CLASSES), str(reloc_src)], check=True)
+reloc_transformer.write_text(
+    transformer_src.read_text(encoding='utf8').replace('import org.objectweb.asm.', 'import dev.sunlit.bootagent.asm.'),
+    encoding='utf8'
+)
+reloc_extra.write_text(
+    extra_src.read_text(encoding='utf8').replace('import org.objectweb.asm.', 'import dev.sunlit.bootagent.asm.'),
+    encoding='utf8'
+)
+subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-cp', os.pathsep.join([str(SHADE_CLASSES), str(PAYLOAD_CLASSES)]), '-d', str(AGENT_CLASSES), str(reloc_agent), str(reloc_transformer), str(reloc_extra)], check=True)
 
 OUT_JAR = (cli.out.resolve() if cli.out else INSTANCE / 'minecraft/config/sunlit-boot.jar')
 OUT_JAR.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +175,10 @@ with zipfile.ZipFile(OUT_JAR, 'w', zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(root_dir.rglob('*.class')):
             zf.write(f, f.relative_to(root_dir).as_posix())
     zf.write(PAYLOAD_CLASSES / 'dev/sunlit/bootagent/payload/BootResolverPayload.class', 'dev/sunlit/bootagent/payload/BootResolverPayload.class')
+    zf.write(PAYLOAD_CLASSES / 'dev/sunlit/bootagent/payload/BootDownloadPayload.class', 'dev/sunlit/bootagent/payload/BootDownloadPayload.class')
     zf.write(PAYLOAD_CLASSES / 'org/spongepowered/asm/mixin/transformer/BootMixinPayload.class', 'dev/sunlit/bootagent/payload/BootMixinPayload.class')
+    for pf in sorted((PAYLOAD_CLASSES / 'dev/sunlit/bootagent/payload').glob('BootJarPayload*.class')):
+        zf.write(pf, pf.relative_to(PAYLOAD_CLASSES).as_posix())
 
 # Verify transformed bytecode passes JVM verifier and preserves exact semantics on Resolver + Mixin!
 VERIFY_SRC = OUT_BUILD / 'VerifyBootAgent.java'
@@ -193,6 +210,14 @@ public class VerifyBootAgent {
         byte[] resolverOut = SunlitBootAgent.transformResolver(ClassLoader.getPlatformClassLoader(), resolverBytes);
         if (resolverOut == null) throw new AssertionError("Resolver not transformed");
 
+        byte[] cfgBytes = Files.readAllBytes(jrt.getPath("/modules/java.base/java/lang/module/Configuration.class"));
+        byte[] cfgOut = dev.sunlit.bootagent.SunlitExtraTransformer.transformConfiguration(ClassLoader.getPlatformClassLoader(), cfgBytes);
+        if (cfgOut == null) throw new AssertionError("Configuration not transformed");
+
+        byte[] zipPathBytes = Files.readAllBytes(jrt.getPath("/modules/jdk.zipfs/jdk/nio/zipfs/ZipPath.class"));
+        byte[] zipPathOut = dev.sunlit.bootagent.SunlitExtraTransformer.transformZipPath(ClassLoader.getPlatformClassLoader(), zipPathBytes);
+        if (zipPathOut == null) throw new AssertionError("ZipPath not transformed");
+
         byte[] zipBytes = Files.readAllBytes(jrt.getPath("/modules/jdk.zipfs/jdk/nio/zipfs/ZipFileSystem.class"));
         byte[] zipOut = SunlitBootAgent.transformZipFileSystem(ClassLoader.getPlatformClassLoader(), zipBytes);
         if (zipOut == null) throw new AssertionError("ZipFileSystem not transformed");
@@ -203,6 +228,16 @@ public class VerifyBootAgent {
 
         byte[] unionOut = SunlitBootAgent.transformUnionFileSystem(null, readZip(sjh, "cpw/mods/niofs/union/UnionFileSystem.class"));
         if (unionOut == null) throw new AssertionError("UnionFileSystem not transformed");
+        byte[] ufspOut = SunlitBootAgent.transformUnionFileSystemProvider(readZip(sjh, "cpw/mods/niofs/union/UnionFileSystemProvider.class"));
+        if (ufspOut == null) throw new AssertionError("UnionFileSystemProvider not transformed");
+        byte[] jarOut = SunlitBootAgent.transformJar(null, readZip(sjh, "cpw/mods/jarhandling/impl/Jar.class"));
+        if (jarOut == null) throw new AssertionError("Jar not transformed");
+        byte[] mddOut = SunlitBootAgent.transformModDirDiscoverer(null, readZip(fml, "net/minecraftforge/fml/loading/ModDirTransformerDiscoverer.class"));
+        if (mddOut == null) throw new AssertionError("ModDirTransformerDiscoverer not transformed");
+        byte[] ajlOut = SunlitBootAgent.transformAbstractJarLocator(readZip(fml, "net/minecraftforge/fml/loading/moddiscovery/AbstractJarFileModLocator.class"));
+        if (ajlOut == null) throw new AssertionError("AbstractJarFileModLocator not transformed");
+        byte[] ampOut = SunlitBootAgent.transformAbstractModProvider(readZip(fml, "net/minecraftforge/fml/loading/moddiscovery/AbstractModProvider.class"));
+        if (ampOut == null) throw new AssertionError("AbstractModProvider not transformed");
 
         byte[] bgWaiterOut = SunlitBootAgent.transformBackgroundWaiter(readZip(fml, "net/minecraftforge/fml/loading/BackgroundWaiter.class"));
         if (bgWaiterOut == null) throw new AssertionError("BackgroundWaiter not transformed");
@@ -314,7 +349,8 @@ public class VerifyBootAgent {
             var sw = new StringWriter();
             var pw = new PrintWriter(sw);
             for (byte[] clsBytes : new byte[][]{
-                    resolverOut, zipOut, zipEntryOut, unionOut, bgWaiterOut, scanOut, bcOut, mlpOut, mthOut,
+                    resolverOut, cfgOut, zipPathOut, zipOut, zipEntryOut, unionOut, ufspOut, jarOut, mddOut, ajlOut, ampOut,
+                    bgWaiterOut, scanOut, bcOut, mlpOut, mthOut,
                     mtOut, mpOut, mcOut, mcpOut, mcaOut, mcnOut, mcsOut}) {
                 Object cr = crCls.getConstructor(byte[].class).newInstance((Object) clsBytes);
                 verifyM.invoke(null, cr, cl, false, pw);
@@ -356,10 +392,201 @@ public class VerifyBootAgent {
             if (res == null) throw new AssertionError("MTH must return AFTER_ONLY while transformer is null");
             Class<?> ufsCls = Class.forName("cpw.mods.niofs.union.UnionFileSystem", false, cl);
             if (ufsCls == null) throw new AssertionError("UnionFileSystem null");
+            ufsCls.getMethod("sunlitNewInputStream", Class.forName("cpw.mods.niofs.union.UnionPath", false, cl));
+            ufsCls.getMethod("sunlitOpenOptional", Path.class);
+            ufsCls.getMethod("sunlitExists", Class.forName("cpw.mods.niofs.union.UnionPath", false, cl));
+            Class<?> ufspCls = Class.forName("cpw.mods.niofs.union.UnionFileSystemProvider", false, cl);
+            ufspCls.getDeclaredMethod("newInputStream", Path.class, java.nio.file.OpenOption[].class);
+            if (!java.util.function.Predicate.class.isAssignableFrom(ufspCls)) {
+                throw new AssertionError("UnionFileSystemProvider must implement Predicate");
+            }
+            java.nio.file.spi.FileSystemProvider ufspInst = (java.nio.file.spi.FileSystemProvider) ufspCls.getConstructor().newInstance();
+            Path tmpDir = Files.createTempDirectory("sunlit-ufs-test");
+            try {
+                Path hitFile = tmpDir.resolve("hello.txt");
+                Files.writeString(hitFile, "ok");
+                Method newFsM = ufspCls.getMethod("newFileSystem", java.util.function.BiPredicate.class, Path[].class);
+                try (java.nio.file.FileSystem ufs = (java.nio.file.FileSystem) newFsM.invoke(ufspInst, null, new Path[]{tmpDir})) {
+                    Path uHit = ufs.getPath("hello.txt");
+                    Path uMiss = ufs.getPath("missing/nope.png");
+                    if (!Files.exists(uHit) || Files.notExists(uHit)) {
+                        throw new AssertionError("UnionFS Files.exists/notExists hit failed");
+                    }
+                    if (Files.exists(uMiss) || !Files.notExists(uMiss)) {
+                        throw new AssertionError("UnionFS Files.exists/notExists miss failed");
+                    }
+                    if (!Files.exists(uHit, java.nio.file.LinkOption.NOFOLLOW_LINKS) || Files.exists(uMiss, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                        throw new AssertionError("UnionFS Files.exists NOFOLLOW_LINKS fallback failed");
+                    }
+                }
+                Path testJar = tmpDir.resolve("embedded.jar");
+                byte[] storedBytes = "stored-ok-payload".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(Files.newOutputStream(testJar))) {
+                    zos.putNextEntry(new java.util.zip.ZipEntry("assets/sunlit/hello.txt"));
+                    zos.write("zip-ok".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    zos.closeEntry();
+                    java.util.zip.ZipEntry zeStored = new java.util.zip.ZipEntry("assets/sunlit/stored.bin");
+                    zeStored.setMethod(java.util.zip.ZipEntry.STORED);
+                    zeStored.setSize(storedBytes.length);
+                    zeStored.setCompressedSize(storedBytes.length);
+                    java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+                    crc.update(storedBytes);
+                    zeStored.setCrc(crc.getValue());
+                    zos.putNextEntry(zeStored);
+                    zos.write(storedBytes);
+                    zos.closeEntry();
+                }
+                try (java.nio.file.FileSystem jarUfs = (java.nio.file.FileSystem) newFsM.invoke(ufspInst, null, new Path[]{testJar})) {
+                    Path jHit = jarUfs.getPath("assets", "sunlit", "hello.txt");
+                    Path jStored = jarUfs.getPath("assets", "sunlit", "stored.bin");
+                    Path jMiss = jarUfs.getPath("assets", "sunlit", "missing.png");
+                    if (!Files.exists(jHit) || Files.notExists(jHit) || !Files.exists(jStored)) {
+                        throw new AssertionError("Embedded Jar UnionFS hit failed");
+                    }
+                    if (Files.exists(jMiss) || !Files.notExists(jMiss)) {
+                        throw new AssertionError("Embedded Jar UnionFS miss failed");
+                    }
+                    byte[] exact = dev.sunlit.bootagent.payload.BootJarPayload.readAllBytesExact(jHit);
+                    if (!"zip-ok".equals(new String(exact, java.nio.charset.StandardCharsets.UTF_8))) {
+                        throw new AssertionError("readAllBytesExact mismatch");
+                    }
+                    int[] scratchLen = new int[1];
+                    byte[] scratch = dev.sunlit.bootagent.payload.BootJarPayload.readScanClassBytes(jStored, scratchLen);
+                    if (scratchLen[0] != storedBytes.length || !Arrays.equals(Arrays.copyOf(scratch, scratchLen[0]), storedBytes)) {
+                        throw new AssertionError("readScanClassBytes stored mismatch");
+                    }
+                    byte[] scratchDefl = dev.sunlit.bootagent.payload.BootJarPayload.readScanClassBytes(jHit, scratchLen);
+                    if (scratchLen[0] != 6 || !"zip-ok".equals(new String(scratchDefl, 0, scratchLen[0], java.nio.charset.StandardCharsets.UTF_8))) {
+                        throw new AssertionError("readScanClassBytes deflated mismatch");
+                    }
+                    if (jHit.normalize() != jHit) {
+                        throw new AssertionError("UnionPath.normalize should return self on clean segments");
+                    }
+                    Object optObj = ufsCls.getMethod("sunlitOpenOptional", Path.class).invoke(jarUfs, jHit);
+                    @SuppressWarnings("unchecked")
+                    Optional<InputStream> optIn = (Optional<InputStream>) optObj;
+                    try (InputStream is = optIn.orElseThrow()) {
+                        byte[] read = is.readAllBytes();
+                        if (!"zip-ok".equals(new String(read, java.nio.charset.StandardCharsets.UTF_8))) {
+                            throw new AssertionError("sunlitOpenOptional ExactByteArrayInputStream mismatch");
+                        }
+                    }
+                } finally {
+                    Files.deleteIfExists(testJar);
+                }
+                if (dev.sunlit.bootagent.payload.BootJarPayload.fastCompilePattern("([^,]*(?=/))")
+                        != dev.sunlit.bootagent.payload.BootJarPayload.fastCompilePattern("([^,]*(?=/))")) {
+                    throw new AssertionError("fastCompilePattern cache mismatch");
+                }
+            } finally {
+                Files.deleteIfExists(tmpDir.resolve("hello.txt"));
+                Files.deleteIfExists(tmpDir);
+            }
+            Class<?> scanCls = Class.forName("net.minecraftforge.fml.loading.moddiscovery.Scanner", false, cl);
+            if (scanCls == null) throw new AssertionError("Scanner null");
+            Class<?> jarCls = Class.forName("cpw.mods.jarhandling.impl.Jar", false, cl);
+            if (jarCls.getMethod("verifyPath", Path.class) == null) throw new AssertionError("Jar.verifyPath null");
+            if (jarCls.getMethod("sunlitOpen", String.class) == null) throw new AssertionError("Jar.sunlitOpen null");
+            Class<?> jmdpCls = Class.forName("cpw.mods.jarhandling.impl.Jar$JarModuleDataProvider", false, cl);
+            if (jmdpCls.getMethod("open", String.class) == null) throw new AssertionError("JarModuleDataProvider.open null");
             Class<?> bgCls = Class.forName("net.minecraftforge.fml.loading.BackgroundWaiter", false, cl);
             if (bgCls == null) throw new AssertionError("BackgroundWaiter null");
             Class<?> bshCls = Class.forName("net.minecraftforge.fml.loading.moddiscovery.BackgroundScanHandler", false, cl);
             if (bshCls == null) throw new AssertionError("BackgroundScanHandler null");
+
+            // 5. Verify SunlitFlatStateMap equivalence via ImmutableMap.sunlitBuildStateMap on live Guava JAR
+            Class<?> imCls = Class.forName("com.google.common.collect.ImmutableMap", true, cl);
+            Method buildStateMapM = imCls.getMethod("sunlitBuildStateMap", Object[].class, Object[].class, int[].class);
+            Object[] ks = new Object[]{"k1", "k2", "k3"};
+            Object[] vs = new Object[]{"v1", "v2", "v3"};
+            @SuppressWarnings("unchecked")
+            Map<Object, Object> flat1 = (Map<Object, Object>) buildStateMapM.invoke(null, ks, vs, null);
+            vs[0] = "MUTATED";
+            if (!"v1".equals(flat1.get("k1")) || !"v2".equals(flat1.get("k2")) || !"v3".equals(flat1.get("k3"))) {
+                throw new AssertionError("SunlitFlatStateMap failed vals defensive copy or get()");
+            }
+            if (flat1.get(null) != null || flat1.get("missing") != null || flat1.size() != 3 || !flat1.containsKey("k2") || flat1.containsKey("x") || !flat1.containsValue("v3") || flat1.containsValue("MUTATED")) {
+                throw new AssertionError("SunlitFlatStateMap lookup mismatch");
+            }
+            Map<Object, Object> refMap = new LinkedHashMap<>();
+            refMap.put("k1", "v1");
+            refMap.put("k2", "v2");
+            refMap.put("k3", "v3");
+            if (!flat1.equals(refMap) || !refMap.equals(flat1) || flat1.hashCode() != refMap.hashCode()) {
+                throw new AssertionError("SunlitFlatStateMap Map equals/hashCode mismatch");
+            }
+            if (!flat1.keySet().equals(refMap.keySet()) || !flat1.entrySet().equals(refMap.entrySet())) {
+                throw new AssertionError("SunlitFlatStateMap keySet/entrySet mismatch");
+            }
+            Object[] vs2 = new Object[]{"v1", "v2", "v3"};
+            @SuppressWarnings("unchecked")
+            Map<Object, Object> flat2 = (Map<Object, Object>) buildStateMapM.invoke(null, ks, vs2, null);
+            if (!flat1.equals(flat2) || !flat1.keySet().equals(flat2.keySet())) {
+                throw new AssertionError("SunlitFlatStateMap equality or cached keySet mismatch");
+            }
+        }
+        // Verify DownloadUtils transforms cleanly inside PlatformClassLoader-parented URLClassLoader
+        Path forgeInst = Path.of(args[0], "net/minecraftforge/forge/1.20.1-47.4.0/forge-1.20.1-47.4.0-installer.jar");
+        if (Files.isRegularFile(forgeInst)) {
+            try (java.net.URLClassLoader instCl = new java.net.URLClassLoader(
+                    new java.net.URL[]{forgeInst.toUri().toURL()}, ClassLoader.getPlatformClassLoader())) {
+                Class<?> duCls = Class.forName("net.minecraftforge.installer.DownloadUtils", true, instCl);
+                Method getSha1 = duCls.getMethod("getSha1", File.class);
+                Path tmpSha = Files.createTempFile("sunlit-sha-test", ".bin");
+                try {
+                    Files.writeString(tmpSha, "hello sunlit");
+                    String h1 = (String) getSha1.invoke(null, tmpSha.toFile());
+                    String h2 = (String) getSha1.invoke(null, tmpSha.toFile());
+                    if (h1 == null || !h1.equals(h2)) throw new AssertionError("DownloadUtils cached SHA mismatch: " + h1 + " vs " + h2);
+                    Files.writeString(tmpSha, "hello sunlit updated");
+                    tmpSha.toFile().setLastModified(System.currentTimeMillis() + 5000L);
+                    String h3 = (String) getSha1.invoke(null, tmpSha.toFile());
+                    if (h3 == null || h3.equals(h1)) throw new AssertionError("DownloadUtils failed to recompute SHA on changed file");
+                } finally {
+                    Files.deleteIfExists(tmpSha);
+                }
+                Class<?> ppCls = Class.forName("net.minecraftforge.installer.actions.PostProcessors", false, instCl);
+                if (ppCls.getDeclaredField("sunlitShaProps") == null) throw new AssertionError("Missing PostProcessors.sunlitShaProps");
+                if (ppCls.getDeclaredMethod("sunlitRawProcess", File.class, File.class, File.class, File.class) == null) throw new AssertionError("Missing sunlitRawProcess");
+                if (ppCls.getMethod("process", File.class, File.class, File.class, File.class) == null) throw new AssertionError("Missing PostProcessors.process");
+            }
+        }
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("").length != 0) throw new AssertionError("empty zip norm");
+        if (!Arrays.equals(dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("/"), new byte[]{'/'})) throw new AssertionError("root zip norm");
+        if (!Arrays.equals(dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("META-INF/mods.toml/"), "META-INF/mods.toml".getBytes(java.nio.charset.StandardCharsets.UTF_8))) throw new AssertionError("trail slash zip norm");
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("a//b") != null) throw new AssertionError("double slash should fallback");
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("a//") != null) throw new AssertionError("double trailing slash should fallback");
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("a\\\\b") != null) throw new AssertionError("backslash should fallback");
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipNormalizeAscii("\\uD55C\\uAE00/a") != null) throw new AssertionError("non-ascii should fallback");
+        if (!Arrays.equals(dev.sunlit.bootagent.payload.BootJarPayload.fastZipAbsUtf8Path(""), new byte[]{'/'})) throw new AssertionError("empty abs zip");
+        if (!Arrays.equals(dev.sunlit.bootagent.payload.BootJarPayload.fastZipAbsUtf8Path("assets/a.png"), "/assets/a.png".getBytes(java.nio.charset.StandardCharsets.UTF_8))) throw new AssertionError("rel abs zip");
+        if (!Arrays.equals(dev.sunlit.bootagent.payload.BootJarPayload.fastZipAbsUtf8Path("/assets/a.png/"), "/assets/a.png".getBytes(java.nio.charset.StandardCharsets.UTF_8))) throw new AssertionError("slash abs zip");
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipAbsUtf8Path("a/../b") != null) throw new AssertionError("dotdot should fallback");
+        if (dev.sunlit.bootagent.payload.BootJarPayload.fastZipAbsUtf8Path("./a") != null) throw new AssertionError("dot should fallback");
+        // Verify Resolver makeGraph + closeGraph + fastCheckExportSuppliers with >= 2 automatic modules + parent layer
+        java.lang.module.ModuleDescriptor dAuto1 = java.lang.module.ModuleDescriptor.newAutomaticModule("sunlit.auto.one").packages(Set.of("sunlit.auto.p1")).build();
+        java.lang.module.ModuleDescriptor dAuto2 = java.lang.module.ModuleDescriptor.newAutomaticModule("sunlit.auto.two").packages(Set.of("sunlit.auto.p2")).build();
+        java.lang.module.ModuleDescriptor dAuto3 = java.lang.module.ModuleDescriptor.newAutomaticModule("sunlit.auto.three").packages(Set.of("sunlit.auto.p3")).build();
+        java.lang.module.ModuleDescriptor dNamed = java.lang.module.ModuleDescriptor.newModule("sunlit.named.one")
+                .requires("java.base").requires("sunlit.auto.one").packages(Set.of("sunlit.named.p1")).build();
+        Map<String, java.lang.module.ModuleReference> synthMods = new LinkedHashMap<>();
+        for (java.lang.module.ModuleDescriptor md : new java.lang.module.ModuleDescriptor[]{dAuto1, dAuto2, dAuto3, dNamed}) {
+            synthMods.put(md.name(), new java.lang.module.ModuleReference(md, null) {
+                @Override public java.lang.module.ModuleReader open() { return null; }
+            });
+        }
+        java.lang.module.ModuleFinder synthFinder = new java.lang.module.ModuleFinder() {
+            @Override public Optional<java.lang.module.ModuleReference> find(String name) { return Optional.ofNullable(synthMods.get(name)); }
+            @Override public Set<java.lang.module.ModuleReference> findAll() { return new LinkedHashSet<>(synthMods.values()); }
+        };
+        java.lang.module.Configuration resolvedCfg = ModuleLayer.boot().configuration()
+                .resolve(synthFinder, java.lang.module.ModuleFinder.of(), Set.of("sunlit.auto.one", "sunlit.auto.two", "sunlit.auto.three", "sunlit.named.one"));
+        java.lang.module.ResolvedModule rmAuto1 = resolvedCfg.findModule("sunlit.auto.one").orElseThrow();
+        java.lang.module.ResolvedModule rmAuto2 = resolvedCfg.findModule("sunlit.auto.two").orElseThrow();
+        java.lang.module.ResolvedModule rmNamed = resolvedCfg.findModule("sunlit.named.one").orElseThrow();
+        java.lang.module.ResolvedModule rmBase = resolvedCfg.findModule("java.base").orElseThrow();
+        if (!rmAuto1.reads().contains(rmAuto2) || !rmAuto1.reads().contains(rmNamed) || !rmAuto1.reads().contains(rmBase) || !rmNamed.reads().contains(rmAuto2)) {
+            throw new AssertionError("Resolver shared auto reads mismatch");
         }
         System.out.println("VerifyBootAgent: ALL PASSED");
     }
@@ -387,5 +614,5 @@ extra_jars = [
 
 verify_cp = os.pathsep.join([str(TEST_CLASSES), str(PAYLOAD_CLASSES), str(OUT_JAR)])
 subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-cp', os.pathsep.join([str(PAYLOAD_CLASSES), str(OUT_JAR)]), '-d', str(TEST_CLASSES), str(VERIFY_SRC)], check=True)
-subprocess.run([str(JDK / 'java.exe'), f'-javaagent:{OUT_JAR}', '--add-opens', 'java.base/java.lang.module=ALL-UNNAMED', '-cp', verify_cp, 'VerifyBootAgent', str(LIBRARIES), sjh_jar, fml_jar, mixin_jar, str(ASM_JAR), str(ASM_TREE_JAR), str(ASM_UTIL_JAR), str(ASM_ANALYSIS_JAR), modlauncher_jar, *extra_jars], check=True)
+subprocess.run([str(JDK / 'java.exe'), f'-javaagent:{OUT_JAR}', '--add-opens', 'java.base/java.lang.module=ALL-UNNAMED', '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED', '-cp', verify_cp, 'VerifyBootAgent', str(LIBRARIES), sjh_jar, fml_jar, mixin_jar, str(ASM_JAR), str(ASM_TREE_JAR), str(ASM_UTIL_JAR), str(ASM_ANALYSIS_JAR), modlauncher_jar, *extra_jars], check=True)
 print('Built & verified', OUT_JAR, OUT_JAR.stat().st_size, 'bytes')

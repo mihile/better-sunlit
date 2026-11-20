@@ -2,6 +2,8 @@ package dev.sunlit.fishvisuals.mixin;
 
 import com.hrznstudio.emojiful.ClientEmojiHandler;
 import com.hrznstudio.emojiful.Constants;
+import dev.sunlit.bettersunlit.client.EmojiCandidatePerf;
+import dev.sunlit.bettersunlit.client.EmojiRenderPerf;
 import dev.sunlit.bettersunlit.client.EmojifulAsyncPerf;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,6 +36,8 @@ public abstract class PerfEmojifulClientHandlerMixin {
         EmojifulAsyncPerf.startAsync(() -> {
             preInitEmojis();
             indexEmojis();
+            EmojiRenderPerf.prewarmIndex();
+            EmojiCandidatePerf.prewarm();
             Constants.LOG.info("Loaded {} emojis", Constants.EMOJI_LIST.size());
         }, () -> {
             Minecraft mc = Minecraft.m_91087_();

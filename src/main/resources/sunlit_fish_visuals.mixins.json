@@ -4,6 +4,6 @@
   "package": "dev.sunlit.fishvisuals.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": ["StardewRewardMixin", "DirectFishingRewardMixin", "ItemEntityMixin"],
-  "client": ["ItemEntityRendererMixin", "CaughtFishModelPartMixin", "CaughtFishEmfMixin", "CaughtFishGeoModelMixin", "CaughtFishGeoTransformMixin", "ItemPickupParticleMixin", "XpToastMixin", "DisplayInfoMixin", "FontSetMixin", "StandardFontSetMixin"],
+  "client": ["ItemEntityRendererMixin", "CaughtFishModelPartMixin", "CaughtFishEmfMixin", "CaughtFishGeoModelMixin", "CaughtFishGeoTransformMixin", "ItemPickupParticleMixin", "XpToastMixin", "DisplayInfoMixin", "FontSetMixin", "StandardFontSetMixin", "PerfTextureUtilMixin"],
   "injectors": {"defaultRequire": 1}
 }

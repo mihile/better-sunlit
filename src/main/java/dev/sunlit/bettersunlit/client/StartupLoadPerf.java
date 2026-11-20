@@ -25,6 +25,8 @@ public final class StartupLoadPerf {
     private static volatile boolean vsyncBypassed;
     private static long lastVisualRenderNs;
     private static long lastGlfwPollNs;
+    private static int postStartupReadyTicks;
+    private static boolean postStartupIrisTriggered;
 
     private StartupLoadPerf() {
     }
@@ -56,6 +58,13 @@ public final class StartupLoadPerf {
             lastVisualRenderNs = 0L;
             lastGlfwPollNs = 0L;
             syncVsync(mc);
+            if (!postStartupIrisTriggered && mc.m_91265_() == null) {
+                if (postStartupReadyTicks++ >= 2) {
+                    postStartupIrisTriggered = true;
+                    IrisShaderLoadPerf.triggerPostStartupIfPending();
+                    YaclImagePerf.triggerPostStartupIfPending();
+                }
+            }
         }
     }
 
