@@ -29,3 +29,14 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 THE POSSIBILITY OF SUCH DAMAGE.
+
+Create Train Navigator / Create Railways Navigator Korean localization
+Contributors: MisterJulsen and the project's localization contributors.
+Original source (revision c5a1df150fb9bafc9289f6da3ea4d85737da35be):
+https://github.com/MisterJulsen/Create-Train-Navigator/blob/c5a1df150fb9bafc9289f6da3ea4d85737da35be/common/src/main/resources/assets/createrailwaysnavigator/lang/ko_kr.json
+Changes: selected entries from the upstream translation are combined with Better
+Sunlit's supplemental Korean entries. The resulting JSON resource is distributed
+under the GNU Lesser General Public License version 3. It is available in its
+editable form at src/main/resources/assets/createrailwaysnavigator/lang/ko_kr.json
+in the Better Sunlit source for each release. This notice's license scope is that
+resource. See THIRD_PARTY_TRAIN_NAVIGATOR_LICENSES.txt for the LGPL and GPL texts.

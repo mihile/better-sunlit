@@ -28,7 +28,7 @@ python tools/test.py
 
 코드에 직접 적힌 문구는 `assets/better_sunlit/inline/rules.json`의 검토된 호출 위치에서만 번역 컴포넌트로 바꿉니다. 메서드 명령어 지문이 달라지면 원문을 유지합니다. 다른 모드가 주입한 문구는 원본 Mixin 클래스 해시와 병합된 메서드의 텍스트 지문도 검사합니다. 별도 선택적 Mixin 설정을 사용하며 기존 낚시·글꼴 Mixin의 필수 적용 규칙은 유지합니다. 영어 fallback을 포함하여 서버의 `getString()` 결과를 보존합니다. 임의 채팅·사용자 입력에는 전역 치환을 하지 않습니다.
 
-KubeJS의 네 안내문은 `inline/scripts.json`의 전체 소스 해시와 문자열 범위가 맞을 때만 메모리에서 `Text.translatable`로 바꿉니다. 디스크의 스크립트 로직은 수정하지 않습니다. 외부 Patchouli 도감 보완 원본은 `localization/pack-files/`에 보관합니다. `python tools/apply_localization.py --instance <경로>`는 한국어 자산과 해당 도감 파일을 독립 백업한 뒤 로컬에 병합합니다. 게임이 종료된 상태에서 실행하세요.
+KubeJS의 네 안내문은 `inline/scripts.json`의 전체 소스 해시와 문자열 범위가 맞을 때만 메모리에서 `Text.translatable`로 바꿉니다. 디스크의 스크립트 로직은 수정하지 않습니다. `python tools/apply_localization.py --instance <경로>`는 한국어 자산을 독립 백업 후 로컬에 병합하고, 이미 설치된 Patchouli 도감의 해당 엔티티 표시 이름만 교정합니다. 게임이 종료된 상태에서 실행하세요.
 
 `tools/test_inline_localization.py`는 실제 설치된 클라이언트·서버 클래스에 대한 변환, 스택 검증, 변경된 버전의 적용 차단, 사용자 인자·서버 영어 fallback 보존, 언어 전환 및 스크립트 지문을 검사합니다. Forge·게임·서버·그래픽 컨텍스트를 실행하지 않으므로 실제 화면 검증과 구분합니다.
 

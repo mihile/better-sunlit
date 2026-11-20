@@ -42,6 +42,6 @@ Minecraft와 선릿밸리의 비공식 애드온입니다. 이 저장소에는 �
 
 ## 라이선스
 
-Better Sunlit의 자체 코드는 [MIT 라이선스](LICENSE)를 따릅니다. 클라이언트 부팅 에이전트에 포함된 ASM은 [외부 라이브러리 고지](THIRD_PARTY_NOTICES.txt)를 참고하세요. 기존 모드와 모드팩에서 가져온 한국어 문구에는 각 원본의 배포 조건이 적용됩니다. 관련 출처는 [번역 출처 목록](localization-sources.json)에 있습니다.
+Better Sunlit의 자체 코드는 [MIT 라이선스](LICENSE)를 따릅니다. 클라이언트 부팅 에이전트에 포함된 ASM은 [외부 라이브러리 고지](THIRD_PARTY_NOTICES.txt)를 참고하세요. Create Train Navigator 번역 파일은 LGPL v3이며 출처와 라이선스 전문을 JAR에 포함합니다. 커뮤니티 공유에는 번역 출처를 정리한 2026.11.20.4 이상을 사용하세요. 검토 범위는 [번역 출처 목록](localization-sources.json)에 있습니다.
 
 개발·배포 방법과 복원 절차는 [MAINTAINER.md](MAINTAINER.md)를 참고하세요.

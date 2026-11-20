@@ -1,5 +1,5 @@
 {
-  "description": "Supplemental Korean translations for installed Sunlit Valley mods. Existing pack translations are preserved.",
+  "description": "Provenance of supplemental Korean resources after the 2026.11.20.4 redistribution review.",
   "date": "2026-11-12",
   "upstream": [
     {
@@ -23,16 +23,22 @@
       "url": "https://github.com/VazkiiMods/Botania/tree/0c06dcf7ae9555d52885f913ecd769ceb94fa823"
     }
   ],
-  "other_sources": [
-    "Installed mod language assets",
-    "Existing local Korean translation assets with identical English source text",
-    "Exact phrase matches from the current pack"
-  ],
   "new_text": "Translation drafts were reviewed for gaming terminology, format arguments, control codes, technical examples and duplicate namespace keys. In-game visual review is separate.",
-  "coverage": {
-    "supplemented": 5167,
-    "recovered_central_kitchen": 14,
-    "excluded": "Names, credits, units, key combinations, Roman numerals, identifiers and translator metadata"
+  "license_note": "Better Sunlit source code is MIT. The bundled Create Train Navigator locale is separately licensed. See the notices.",
+  "publicBundledUpstream": {
+    "path": "src/main/resources/assets/createrailwaysnavigator/lang/ko_kr.json",
+    "source": "MisterJulsen/Create-Train-Navigator",
+    "license": "LGPL-3.0-only",
+    "notice": "THIRD_PARTY_NOTICES.txt",
+    "licenseText": "THIRD_PARTY_TRAIN_NAVIGATOR_LICENSES.txt",
+    "matchedEntries": 120
   },
-  "license_note": "Upstream translations remain subject to their respective projects' licenses."
+  "reviewExclusions": [
+    "Pinned Create and Botania Korean translations.",
+    "Korean phrases from installed packs and the local Prominence Korean overlay without independently verified redistribution provenance.",
+    "Recovered Central Kitchen locale entries without verified redistribution permission.",
+    "Copied Patchouli book entry; installer retains only a title correction for an already installed book.",
+    "Copied funding text in the Sodium-derived options screen; the installed copy is used at runtime."
+  ],
+  "reviewNotes": "The pinned Quark Korean locale had no exact matches in the Better Sunlit Quark supplement. Common terms and independently authored functional supplements were retained."
 }
