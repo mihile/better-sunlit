@@ -189,7 +189,8 @@ def choose_release(sides, remote_builds):
             f'미게시 소스 변경은 있지만, 가장 최근 설명 releases/{path.name}의 build={data["build"]}은 '
             f'원격에 이미 등록된 번호 이하입니다 ({existing}).\n'
             f'예: releases/{day}.{sequence}.json에 build={day}{sequence:02d}, label="{label}", '
-            '이번 변경 사항을 담은 changes를 작성한 뒤 같은 BAT를 다시 실행하세요.')
+            '이번 변경 사항을 담은 changes가 필요합니다.\n'
+            'tools/add_release_change.py에 이번 작업의 제목과 설명을 전달해 기록한 뒤 같은 BAT를 다시 실행하세요.')
     entries = data.get('changes')
     if not entries:
         raise RuntimeError(f'{path.name}의 changes에 이번 버전의 변경 내역을 작성하세요.')
