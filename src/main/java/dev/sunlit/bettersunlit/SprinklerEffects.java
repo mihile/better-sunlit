@@ -3,6 +3,7 @@ package dev.sunlit.bettersunlit;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
@@ -40,11 +41,11 @@ public final class SprinklerEffects {
     private static final int MAX_VISIBLE_SPRINKLERS = 24;
     private static final int VISIBLE_DISTANCE_SQUARED = 26 * 26;
     private static final int AUDIBLE_DISTANCE_SQUARED = 14 * 14;
-    private static final ResourceLocation SPRAY_SOUND = new ResourceLocation("doapi", "water_sprinkler");
-    private static final ResourceLocation FALLBACK_SOUND = new ResourceLocation("minecraft", "item.bottle.empty");
+    private static final ResourceLocation SPRAY_SOUND = new ResourceLocation("doapi:water_sprinkler");
+    private static final ResourceLocation FALLBACK_SOUND = new ResourceLocation("minecraft:item.bottle.empty");
     private static final List<TagKey<Block>> TIERS = IntStream.rangeClosed(1, 4)
             .mapToObj(tier -> TagKey.m_203882_(Registries.f_256747_,
-                    new ResourceLocation("dew_drop_farmland_growth", "sprinkler_tier_" + tier)))
+                    new ResourceLocation("dew_drop_farmland_growth:sprinkler_tier_" + tier)))
             .toList();
     private static final Map<ServerLevel, Morning> MORNINGS = new IdentityHashMap<>();
 
@@ -66,8 +67,12 @@ public final class SprinklerEffects {
         for (int index = TIERS.size() - 1; index >= 0; index--) {
             if (state.m_204336_(TIERS.get(index))) {
                 if (morning.pending.isEmpty()) morning.collectUntil = level.m_46467_() + COLLECT_TICKS;
-                morning.pending.add(new Spray(sprinkler.m_123341_() + 0.5, sprinkler.m_123342_() + 0.51,
-                        sprinkler.m_123343_() + 0.5, index + 1, sprinkler.m_123342_() > farmland.m_123342_(),
+                boolean raised = sprinkler.m_123342_() > farmland.m_123342_();
+                double shapeTop = state.m_60812_(level, sprinkler).m_83297_(Direction.Axis.Y);
+                // Keep the first droplets clear of the head, the stick and same-level farmland.
+                double height = Math.max(raised ? 0.59 : 0.98, shapeTop + 0.025);
+                morning.pending.add(new Spray(sprinkler.m_123341_() + 0.5, sprinkler.m_123342_() + height,
+                        sprinkler.m_123343_() + 0.5, index + 1, raised,
                         Long.hashCode(position)));
                 return;
             }
