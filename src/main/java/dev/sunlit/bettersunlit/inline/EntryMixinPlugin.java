@@ -306,6 +306,9 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "DewDropSprinklerMixin" ->
+                matchesLegacy(target,"5bc6aebeaef89513ddbe04c028c12af43d3c95d6b64a6ab42f611f08f011ed67")
+                && matchesLegacy("cool.bot.dewdropfarmland.block.CustomFarmland","747375052dbae2fdf406a07d59cdd9a8161ee703d875ddb9cdb78747181ea028");
             case "EntityDataOrderMixin" -> switch (target) {
               case EntityDataOrder.WOLF ->
                 (matchesLegacy(target,"81da161e6f89c84e142fd5a8a93a51b4fadc186aa0248efa891550338b61b895")
