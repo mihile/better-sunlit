@@ -45,6 +45,8 @@
     "PerfKubeJsScriptFileMixin"
   ],
   "client": [
+    "CarryOnRenderEntityMixin",
+    "CarryOnRenderPlayerMixin",
     "MinecartDataCompatibilityMixin",
     "PerfCreateBlockCuttingMixin",
     "PerfIrisBlockMappingMixin",

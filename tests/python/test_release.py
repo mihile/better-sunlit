@@ -282,7 +282,7 @@ class ReleaseGitTests(unittest.TestCase):
                     self.fail('second lock should not be acquired')
 
     def test_release_requires_new_metadata_instead_of_copying_old_notes(self):
-        with self.assertRaisesRegex(RuntimeError, '높은 번호'):
+        with self.assertRaisesRegex(RuntimeError, r'releases/20261114\.2\.json에 build=2026111402'):
             release.choose_release(['client', 'server'], {'client': 2026110804, 'server': 2026111401})
         self.assertEqual(len(list((self.root/'releases').glob('*.json'))), 1)
 

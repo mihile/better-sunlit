@@ -181,9 +181,15 @@ def choose_release(sides, remote_builds):
     path, data = latest_release_meta()
     published = max(remote_builds[side] for side in sides)
     if int(data['build']) <= published:
+        existing = ', '.join(f'{side}={remote_builds[side]}' for side in sides)
+        stamp = str(published)
+        day, sequence = stamp[:8], int(stamp[8:]) + 1
+        label = f'{day[:4]}.{day[4:6]}.{day[6:8]}.{sequence}'
         raise RuntimeError(
-            f'releases/에 게시할 채널의 기존 빌드({published})보다 높은 번호와 '
-            '이번 버전의 변경 내역을 담은 JSON을 추가하세요.')
+            f'미게시 소스 변경은 있지만, 가장 최근 설명 releases/{path.name}의 build={data["build"]}은 '
+            f'원격에 이미 등록된 번호 이하입니다 ({existing}).\n'
+            f'예: releases/{day}.{sequence}.json에 build={day}{sequence:02d}, label="{label}", '
+            '이번 변경 사항을 담은 changes를 작성한 뒤 같은 BAT를 다시 실행하세요.')
     entries = data.get('changes')
     if not entries:
         raise RuntimeError(f'{path.name}의 changes에 이번 버전의 변경 내역을 작성하세요.')
@@ -295,6 +301,11 @@ def release(requested, prepare_only=False):
     changes, data = choose_release(sides, remote_builds)
     print(f"릴리스: {data['label']} (build {data['build']}) / {', '.join(sides)}", flush=True)
     save_work()
+    if len(sides) == 2:
+        run(['git', 'checkout', sides[1]])
+        step('두 번째 브랜치 동기화', sync_from, sides[0])
+        assert_shared_equal(sides[0], sides[1])
+        run(['git', 'checkout', sides[0]])
 
     # Both JARs and the full cross-channel tests run exactly once per invocation.
     build_both(data)
@@ -309,12 +320,8 @@ def release(requested, prepare_only=False):
 
     completed = []
     try:
-        for index, side in enumerate(sides):
-            if index:
-                run(['git', 'checkout', side])
-                step('두 번째 브랜치 동기화', sync_from, sides[0])
-                assert_shared_equal(sides[0], side)
-                verify_artifacts(data)
+        for side in sides:
+            verify_artifacts(data)
             publish_side(side, changes)
             completed.append(side)
     except Exception:
