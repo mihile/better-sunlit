@@ -1,6 +1,7 @@
 package dev.sunlit.fishvisuals.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import dev.sunlit.fishvisuals.FishTiming;
 import dev.sunlit.fishvisuals.FishingSettings;
@@ -18,7 +19,6 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Quaternionf;
 
 import java.util.HashMap;
@@ -45,8 +45,14 @@ public final class ClientFishVisuals {
     public static void receive(SunlitFishVisuals.CatchPacket packet) {
         syncLevel();
         if (currentLevel == null || !currentLevel.m_46472_().m_135782_().equals(packet.dimension())) return;
+        ResourceLocation model = CatchModelIds.resolve(packet.model());
+        if (model == null) {
+            VISUALS.remove(packet.itemUuid());
+            return;
+        }
         // UUID keys allow the notification to arrive before the vanilla entity spawn packet.
-        Visual visual = VISUALS.computeIfAbsent(packet.itemUuid(), uuid -> new Visual(packet.model()));
+        Visual visual = VISUALS.compute(packet.itemUuid(), (uuid, previous) ->
+                previous == null || !model.equals(previous.model) ? new Visual(model) : previous);
         double now=currentLevel.m_46467_();
         if (packet.kickAt() >= 0 && packet.kickAt() != visual.kickAt) {
             if (visual.kickAt >= 0) visual.flopSide = -visual.flopSide;
@@ -103,8 +109,8 @@ public final class ClientFishVisuals {
         double now = currentLevel.m_46467_() + partialTick;
         pose.m_85836_();
         try {
-            if (visual.proxy == null) {
-                EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(visual.model);
+            if (visual.custom == null && visual.proxy == null) {
+                EntityType<?> type = CatchModelIds.entityType(visual.model);
                 Entity proxy = type == null ? null : type.m_20615_(currentLevel);
                 if (!(proxy instanceof LivingEntity)) {
                     VISUALS.remove(item.m_20148_());
@@ -136,9 +142,17 @@ public final class ClientFishVisuals {
                             .rotateX((float)Math.toRadians(-4 * settle)).rotateY(heading));
                 }
             } else {
-                float size = Math.max(proxy.m_20205_(), proxy.m_20206_());
+                float size = visual.custom == null ? Math.max(proxy.m_20205_(), proxy.m_20206_()) : visual.custom.size();
                 flop = FishFlopMotion.sample(landed, landed ? elapsed : item.f_19797_ + partialTick, now - visual.kickAt,
                         visual.kickAt < 0 ? 0 : visual.kickStrength, remaining, size, landed ? side * visual.flopSide : side);
+            }
+            if (visual.custom != null) {
+                FishMeshBend mesh = flop == FishFlopMotion.STILL ? null
+                        : new FishMeshBend(buffers, pose.m_85850_().m_252922_(), yaw);
+                visual.custom.draw(pose, mesh == null ? buffers : mesh, light, yaw,
+                        landed ? (float)Math.min(1, elapsed / 3) : 0);
+                if (mesh != null) mesh.draw(flop);
+                return true;
             }
             proxy.m_20219_(item.m_20182_());
             // The real item still moves. Its render proxy must not advance the normal swim cycle.
@@ -175,6 +189,7 @@ public final class ClientFishVisuals {
 
     private static final class Visual {
         final ResourceLocation model;
+        final CustomCatchModel custom;
         final float geoGroundRoll;
         int entityId;
         long receivedAt;
@@ -204,6 +219,7 @@ public final class ClientFishVisuals {
         }
         Visual(ResourceLocation model) {
             this.model = model;
+            this.custom = CustomCatchModel.get(model);
             this.geoGroundRoll = CaughtFishPose.groundRoll(model);
         }
     }
