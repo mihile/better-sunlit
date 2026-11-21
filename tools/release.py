@@ -321,6 +321,8 @@ def release(requested, prepare_only=False):
     completed = []
     try:
         for side in sides:
+            if side != sides[0]:
+                run(['git', 'checkout', side])
             verify_artifacts(data)
             publish_side(side, changes)
             completed.append(side)
