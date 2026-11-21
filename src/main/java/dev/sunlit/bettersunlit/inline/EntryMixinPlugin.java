@@ -306,10 +306,14 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
-            case "BackpackEmiLookupMixin" ->
-                matchesLegacy(target,"5055a0d9c6b97bfdf46ed04f6175ab152b28ac19dfdb0be5e7b69e3bf77e2e04")
-                && matchesLegacy("net.p3pp3rf1y.sophisticatedbackpacks.compat.recipeviewers.emi.BackpackEmiPlugin","407d30c73661cd952d087c528dfedacc95e9a7f7e3e473e80b3d1af86a1ac747")
-                && matchesLegacy("net.p3pp3rf1y.sophisticatedbackpacks.compat.recipeviewers.common.subtypes.BackpackSubtypeInterpreter","6d60c81ccbafe53c5ac15073bc9ed2f58951700f91b98f8dad87bd644a0b957d");
+            case "EmiItemLookupMixin" ->
+                matchesLegacy(target,"5055a0d9c6b97bfdf46ed04f6175ab152b28ac19dfdb0be5e7b69e3bf77e2e04");
+            case "EmiCraftingSpecAccessor" ->
+                matchesLegacy(target,"d72324961bc8c1c0822d01b473978f3b2e82f5babab8284c4f6501dc3844233a")
+                && matchesLegacy("dev.emi.emi.registry.EmiRecipeFiller","b4d19841db882a09503705526a434fc83e31330989c4423eab88322137335f92");
+            case "EmiSpecRecipeFillerMixin" ->
+                matchesLegacy(target,"b4d19841db882a09503705526a434fc83e31330989c4423eab88322137335f92")
+                && matchesLegacy("net.p3pp3rf1y.sophisticatedcore.compat.recipeviewers.emi.CraftingSpecEmiRecipe","d72324961bc8c1c0822d01b473978f3b2e82f5babab8284c4f6501dc3844233a");
             case "DewDropSprinklerMixin" ->
                 matchesLegacy(target,"5bc6aebeaef89513ddbe04c028c12af43d3c95d6b64a6ab42f611f08f011ed67")
                 && matchesLegacy("cool.bot.dewdropfarmland.block.CustomFarmland","747375052dbae2fdf406a07d59cdd9a8161ee703d875ddb9cdb78747181ea028");
