@@ -321,6 +321,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                 && matchesLegacy("com.copycatsplus.copycats.mixin.entity.CatMixin","9755109e939eb98f95e4e709301e94e04c4a1c1bf297cddba1f37d0f7122a9b2");
               default -> false;
             };
+            case "CarryOnRenderPoseMixin" ->
+                matchesLegacy(target,"15ef0e901ecba0246537008589a5af4cfa956481f0606066f16955b25bdb2bcf");
             case "CarryOnRenderEntityMixin", "CarryOnRenderPlayerMixin" ->
                 matchesLegacy("tschipp.carryon.client.render.CarryRenderHelper","e361492b45497e6b4c150c4680936f6ae27ad79b5e340c7364571fad573dce28")
                 && matchesLegacy("tschipp.carryon.common.carry.CarryOnData","d377db99e1bb8aec1093432e7d5e80f84b9745c3e0c03469d55fdeb296a23495")
