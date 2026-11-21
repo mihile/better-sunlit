@@ -46,7 +46,9 @@
     "PerfKubeJsScriptFileMixin"
   ],
   "client": [
-    "BackpackEmiLookupMixin",
+    "EmiItemLookupMixin",
+    "EmiCraftingSpecAccessor",
+    "EmiSpecRecipeFillerMixin",
     "CarryOnRenderEntityMixin",
     "CarryOnRenderPlayerMixin",
     "CarryOnRenderPoseMixin",
