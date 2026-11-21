@@ -326,12 +326,34 @@ public final class PerfOptTests {
         testStartupPerfOpts();
         testFancyMenuPanoramaPendingFaces();
         testCaramelCompositionBridge();
+        testCarryOnPoseTargets();
         testIter7StartupPerfOpts();
         testIter8StartupPerfOpts();
         testSpriteTransparencyOptimization();
         testMipmapCandidateAgainstIris();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
+    }
+
+    private static void testCarryOnPoseTargets() throws IOException {
+        String target = "tschipp.carryon.client.render.CarriedObjectRender";
+        if (!new EntryMixinPlugin().canApplyGate(target, "CarryOnRenderPoseMixin")) return;
+        ClassNode carryRender = readClassNode(target);
+        String owner = "net/minecraft/client/renderer/entity/EntityRenderDispatcher";
+        String descriptor = "(Lnet/minecraft/world/entity/Entity;DDDFFLcom/mojang/blaze3d/vertex/PoseStack;"
+                + "Lnet/minecraft/client/renderer/MultiBufferSource;I)V";
+        for (String perspective : List.of("drawFirstPersonEntity", "drawThirdPerson")) {
+            int matches = 0;
+            for (var method : carryRender.methods) {
+                if (!perspective.equals(method.name)) continue;
+                for (var instruction : method.instructions) {
+                    if (instruction instanceof MethodInsnNode call && owner.equals(call.owner)
+                            && "m_114384_".equals(call.name) && descriptor.equals(call.desc)) matches++;
+                }
+            }
+            assertEquals(1, matches, perspective + " uses one verified carried entity draw call");
+        }
+        System.out.println("PASS: Carry On pose hook targets both installed render paths");
     }
 
     private static void testCaramelCompositionBridge() throws Exception {

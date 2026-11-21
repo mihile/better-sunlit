@@ -47,6 +47,7 @@
   "client": [
     "CarryOnRenderEntityMixin",
     "CarryOnRenderPlayerMixin",
+    "CarryOnRenderPoseMixin",
     "MinecartDataCompatibilityMixin",
     "PerfCreateBlockCuttingMixin",
     "PerfIrisBlockMappingMixin",
