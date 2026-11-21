@@ -207,6 +207,13 @@ public class VerifyBootAgent {
         String fml = args[2];
         String mixin = args[3];
 
+        Path fmlCore = Path.of(libs, "net/minecraftforge/fmlcore/1.20.1-47.4.0/fmlcore-1.20.1-47.4.0.jar");
+        byte[] modList = readZip(fmlCore.toString(), "net/minecraftforge/fml/ModList.class");
+        if (new dev.sunlit.bootagent.SunlitBootTransformer().transform(
+                null, null, "net/minecraftforge/fml/ModList", null, null, modList) != null) {
+            throw new AssertionError("ModList must retain Forge dependency order");
+        }
+
         FileSystem jrt = FileSystems.getFileSystem(URI.create("jrt:/"));
         byte[] resolverBytes = Files.readAllBytes(jrt.getPath("/modules/java.base/java/lang/module/Resolver.class"));
         byte[] resolverOut = SunlitBootAgent.transformResolver(ClassLoader.getPlatformClassLoader(), resolverBytes);

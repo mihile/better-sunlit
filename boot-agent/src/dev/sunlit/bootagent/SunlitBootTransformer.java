@@ -62,7 +62,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
     private static final String UNION_PROVIDER_CLS = "cpw/mods/niofs/union/UnionFileSystemProvider";
     private static final String JAR_CLS = "cpw/mods/jarhandling/impl/Jar";
     private static final String JAR_PROVIDER_CLS = "cpw/mods/jarhandling/impl/Jar$JarModuleDataProvider";
-    private static final String MOD_LIST_CLS = "net/minecraftforge/fml/ModList";
     private static final String ATTR_TEMPLATES_1_CLS = "org/embeddedt/modernfix/entity/AttributeInstanceTemplates$1";
     private static final String OUTLINE_FONT_CLS = "icyllis/modernui/graphics/text/OutlineFont";
     private static final String IMMUTABLE_MAP_CLS = "com/google/common/collect/ImmutableMap";
@@ -205,10 +204,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 case JAR_PROVIDER_CLS -> transformJarModuleDataProvider(loader, classfileBuffer);
                 case "cpw/mods/cl/JarModuleFinder$JarModuleReader" ->
                         transformJarModuleReader(loader, classfileBuffer);
-                case MOD_LIST_CLS -> {
-                    ensureReadsBootPayload(module);
-                    yield transformModList(loader, classfileBuffer);
-                }
                 case ATTR_TEMPLATES_1_CLS -> transformAttributeInstanceTemplates1(classfileBuffer);
                 case OUTLINE_FONT_CLS -> transformModernUiOutlineFont(classfileBuffer);
                 case MOD_DISCOVERER_CLS -> {
@@ -4451,53 +4446,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         applyM.instructions.add(new InsnNode(Opcodes.ARETURN));
         cn.methods.add(applyM);
         return writeNodeWithFrames(cn, loader);
-    }
-
-    public static byte[] transformModList(ClassLoader loader, byte[] bytes) {
-        ClassNode cn = readNode(bytes);
-        boolean patched = false;
-        for (MethodNode mn : cn.methods) {
-            if (!"setLoadedMods".equals(mn.name) || !"(Ljava/util/List;)V".equals(mn.desc)) {
-                continue;
-            }
-            for (AbstractInsnNode insn : mn.instructions) {
-                if (insn instanceof FieldInsnNode fin
-                        && fin.getOpcode() == Opcodes.PUTFIELD
-                        && MOD_LIST_CLS.equals(fin.owner)
-                        && "indexedMods".equals(fin.name)
-                        && "Ljava/util/Map;".equals(fin.desc)) {
-                    // The dedicated server needs Forge's dependency order, e.g. Zeta before Quark.
-                    LabelNode originalOrder = new LabelNode();
-                    LabelNode done = new LabelNode();
-                    InsnList setMods = new InsnList();
-                    String dist = "net/minecraftforge/api/distmarker/Dist";
-                    setMods.add(new FieldInsnNode(Opcodes.GETSTATIC,
-                            "net/minecraftforge/fml/loading/FMLEnvironment", "dist", "L" + dist + ";"));
-                    setMods.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, dist, "isClient", "()Z", false));
-                    setMods.add(new JumpInsnNode(Opcodes.IFEQ, originalOrder));
-                    setMods.add(new MethodInsnNode(Opcodes.INVOKESTATIC, JAR_PAYLOAD_CLS,
-                            "buildLptIndexedMods", "(Ljava/util/Map;)Ljava/util/Map;", false));
-                    setMods.add(new FieldInsnNode(Opcodes.PUTFIELD, MOD_LIST_CLS, "indexedMods", "Ljava/util/Map;"));
-                    setMods.add(new VarInsnNode(Opcodes.ALOAD, 0));
-                    setMods.add(new TypeInsnNode(Opcodes.NEW, "java/util/ArrayList"));
-                    setMods.add(new InsnNode(Opcodes.DUP));
-                    setMods.add(new VarInsnNode(Opcodes.ALOAD, 0));
-                    setMods.add(new FieldInsnNode(Opcodes.GETFIELD, MOD_LIST_CLS, "indexedMods", "Ljava/util/Map;"));
-                    setMods.add(new MethodInsnNode(
-                            Opcodes.INVOKEINTERFACE, "java/util/Map", "values", "()Ljava/util/Collection;", true));
-                    setMods.add(new MethodInsnNode(
-                            Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "(Ljava/util/Collection;)V", false));
-                    setMods.add(new FieldInsnNode(Opcodes.PUTFIELD, MOD_LIST_CLS, "mods", "Ljava/util/List;"));
-                    setMods.add(new JumpInsnNode(Opcodes.GOTO, done));
-                    setMods.add(originalOrder);
-                    mn.instructions.insertBefore(fin, setMods);
-                    mn.instructions.insert(fin, done);
-                    patched = true;
-                    break;
-                }
-            }
-        }
-        return patched ? writeNodeWithFrames(cn, loader) : null;
     }
 
     public static byte[] transformModernUiOutlineFont(byte[] bytes) {

@@ -8,7 +8,11 @@ import net.minecraftforge.api.distmarker.Dist;import net.minecraftforge.fml.comm
 public final class UpdateClient {
  static final ExecutorService IO=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"Better Sunlit updater");t.setDaemon(true);return t;});
  static final AtomicBoolean BUSY=new AtomicBoolean();static volatile SignedRelease release;static volatile String status="업데이트 확인 중…";static volatile boolean queued,failed;static volatile long downloaded;
- static boolean first,auto=true;static long lastCheck;static Screen renderedTitle;
+ private static boolean startupChecked, preferencesLoaded;
+ private static boolean autoPopup = true;
+ private static long viewedBuild = -1;
+ private static Screen renderedTitle;
+ static boolean auto = true;
  static Path game(){return FMLPaths.GAMEDIR.get().toAbsolutePath().normalize();}
  static Path root()throws Exception{return UpdateFiles.directory(game().resolve(".better-sunlit-update"));}
  @SubscribeEvent public static void init(ScreenEvent.Init.Post event) {
@@ -43,11 +47,52 @@ public final class UpdateClient {
   }
  }
  @SubscribeEvent public static void rendered(ScreenEvent.Render.Post event){if(event.getScreen() instanceof TitleScreen)renderedTitle=event.getScreen();}
- @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event){if(event.phase!=TickEvent.Phase.END)return;Minecraft mc=Minecraft.m_91087_();if(!(mc.f_91080_ instanceof TitleScreen)||mc.f_91080_!=renderedTitle||mc.m_91265_()!=null)return;
-  if(!first){first=true;try{Path p=game().resolve("config/better-sunlit-updater.properties");if(Files.isRegularFile(p))auto=Boolean.parseBoolean(SignedRelease.properties(Files.readAllBytes(p)).getProperty("enabled","true"));FancyIsolation.register();}catch(Exception e){SunlitFishVisuals.LOG.warn("Better Sunlit updater preference/isolation unavailable",e);}if(auto)check();}
+ @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event) {
+  if (event.phase != TickEvent.Phase.END) return;
+  Minecraft client = Minecraft.m_91087_();
+  if (!(client.f_91080_ instanceof TitleScreen title) || title != renderedTitle || client.m_91265_() != null) return;
+
+  if (!startupChecked) {
+   startupChecked = true;
+   loadPreferences();
+   registerFancyIsolation();
+   if (auto) check();
+  }
+  if (!autoPopup || queued || BUSY.get() || failed) return;
+  SignedRelease available = release;
+  if (available != null && available.build() > Build.NUMBER && available.build() > viewedBuild) {
+   markViewed(available);
+   open(title);
+  }
  }
- static void open(Screen parent){try{FancyIsolation.register();}catch(Exception ignored){}Minecraft.m_91087_().m_91152_(new UpdateScreen(parent));if(release==null&&!queued)check();}
- static void check(){if(!BUSY.compareAndSet(false,true))return;status="업데이트 확인 중…";failed=false;IO.execute(()->{try{release=SignedRelease.verify(new SafeHttp().manifest(),SignedRelease.publicKey());status=release.build()>Build.NUMBER?"새 업데이트가 있어요":"최신 버전입니다";lastCheck=System.currentTimeMillis();}catch(Exception e){failed=true;status="업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.";SunlitFishVisuals.LOG.warn("Better Sunlit update check failed; installed mod retained",e);}finally{BUSY.set(false);}});}
+
+ static void open(Screen parent) {
+  loadPreferences();
+  registerFancyIsolation();
+  Minecraft client = Minecraft.m_91087_();
+  UpdateScreen screen = new UpdateScreen(parent);
+  client.m_91152_(screen);
+  if (client.f_91080_ == screen) {
+   markViewed(release);
+   if (release == null && !queued) check();
+  } else if (screen.backdrop != null) {
+   screen.backdrop.release();
+  }
+ }
+
+ static void markViewed(SignedRelease available) {
+  if (available != null) viewedBuild = Math.max(viewedBuild, available.build());
+ }
+
+ private static void registerFancyIsolation() {
+  try {
+   FancyIsolation.register();
+  } catch (ReflectiveOperationException e) {
+   SunlitFishVisuals.LOG.debug("FancyMenu isolation unavailable for the updater", e);
+  }
+ }
+
+ static void check(){if(!BUSY.compareAndSet(false,true))return;status="업데이트 확인 중…";failed=false;IO.execute(()->{try{release=SignedRelease.verify(new SafeHttp().manifest(),SignedRelease.publicKey());status=release.build()>Build.NUMBER?"새 업데이트가 있어요":"최신 버전입니다";}catch(Exception e){failed=true;status="업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.";SunlitFishVisuals.LOG.warn("Better Sunlit update check failed; installed mod retained",e);}finally{BUSY.set(false);}});}
  static void prepare(){SignedRelease next=release;if(next==null||next.build()<=Build.NUMBER||!BUSY.compareAndSet(false,true))return;status="다운로드 중…";failed=false;IO.execute(()->{try{
   Path target=UpdateFiles.target(game()),state=root();String oldHash=UpdateFiles.sha(target);if(UpdateFiles.installedBuild(target)!=Build.NUMBER)throw new java.io.IOException("Installed build changed");
   Path plan=state.resolve("pending.properties"),worker=state.resolve("worker.properties");if(Files.isRegularFile(worker)){Properties p=SignedRelease.properties(Files.readAllBytes(worker));var h=ProcessHandle.of(Long.parseLong(p.getProperty("pid","-1")));if(h.isPresent()&&h.get().isAlive()&&h.get().info().startInstant().map(i->i.toString().equals(p.getProperty("started"))).orElse(false)){queued=true;status="게임을 종료하면 적용됩니다";return;}}
@@ -58,5 +103,47 @@ public final class UpdateClient {
   Path java=Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name","").startsWith("Windows")?"javaw.exe":"java");Path log=state.resolve("apply.log");if(Files.isSymbolicLink(log))throw new java.io.IOException("Linked updater log");
   Process child=new ProcessBuilder(java.toString(),"-Xms8m","-Xmx64m","-Djava.awt.headless=true","-cp",helper.toString(),ApplyUpdate.class.getName(),plan.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile())).start();Properties w=new Properties();w.setProperty("pid",Long.toString(child.pid()));w.setProperty("started",child.toHandle().info().startInstant().orElseThrow().toString());UpdateFiles.writeProperties(worker,w);Thread.sleep(300);if(!child.isAlive())throw new java.io.IOException("Helper stopped early");queued=true;status="게임을 종료하면 적용됩니다";
  }catch(Exception e){failed=true;status="업데이트 준비에 실패했어요. 현재 버전은 유지됩니다.";SunlitFishVisuals.LOG.warn("Better Sunlit update preparation failed",e);}finally{BUSY.set(false);}});}
- static void toggleAuto(){auto=!auto;try{Properties p=new Properties();p.setProperty("enabled",Boolean.toString(auto));UpdateFiles.writeProperties(game().resolve("config/better-sunlit-updater.properties"),p);}catch(Exception e){SunlitFishVisuals.LOG.warn("Cannot save updater preference",e);}}
+ private static Path preferencesFile() {
+  return game().resolve("config/better-sunlit-updater.properties");
+ }
+
+ private static void loadPreferences() {
+  if (preferencesLoaded) return;
+  preferencesLoaded = true;
+  try {
+   Path file = preferencesFile();
+   if (Files.isRegularFile(file)) {
+    Properties preferences = SignedRelease.properties(Files.readAllBytes(file));
+    auto = Boolean.parseBoolean(preferences.getProperty("enabled", "true"));
+    autoPopup = Boolean.parseBoolean(preferences.getProperty("autoPopup", "true"));
+   }
+  } catch (Exception e) {
+   SunlitFishVisuals.LOG.warn("Cannot read updater preferences", e);
+  }
+ }
+
+ static boolean autoPopup() {
+  return autoPopup;
+ }
+
+ static void toggleAuto() {
+  auto = !auto;
+  savePreferences();
+ }
+
+ static void setAutoPopup(boolean selected) {
+  autoPopup = selected;
+  savePreferences();
+ }
+
+ private static void savePreferences() {
+  try {
+   Properties preferences = new Properties();
+   preferences.setProperty("enabled", Boolean.toString(auto));
+   preferences.setProperty("autoPopup", Boolean.toString(autoPopup));
+   UpdateFiles.writeProperties(preferencesFile(), preferences);
+  } catch (Exception e) {
+   SunlitFishVisuals.LOG.warn("Cannot save updater preferences", e);
+  }
+ }
 }

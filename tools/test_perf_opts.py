@@ -18,9 +18,9 @@ assert SERVER_JAR.is_file(), f'Missing {SERVER_JAR}; build the server first'
 mixins_cfg = json.loads((ROOT / 'src/main/resources/better_sunlit_entry.mixins.json').read_text(encoding='utf8'))
 common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
-assert len(common_mixins) == 37, common_mixins
+assert len(common_mixins) == 38, common_mixins
 assert {"PerfQuarkSharedChatMixin", "PerfJourneyMapResetMixin", "PerfQuickPackMixin", "PerfObjTokenizerMixin", "PerfCodepointMapMixin"}.issubset(client_mixins)
-assert len(client_mixins) == 126, client_mixins
+assert len(client_mixins) == 136, client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
     client_names = set(zf.namelist())
@@ -99,6 +99,10 @@ print(res.stdout or '', end='')
 if res.returncode != 0:
     print(res.stderr or '', end='')
     sys.exit(res.returncode)
+
+subprocess.run([str(JDK / 'java.exe'), '-cp', run_cp,
+                'dev.sunlit.bettersunlit.tests.perf.EntityDataOrderTest'],
+               cwd=str(INSTANCE), check=True)
 
 # Run native-image equivalence in a separate JVM. The fixture inserts the same
 # accessor the mixin supplies and merges the actual installed Iris blend into
