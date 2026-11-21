@@ -17,11 +17,12 @@ public final class SafeHttp {
     public static void trusted(URI uri)throws IOException {
         if(!"https".equals(uri.getScheme()) || !HOSTS.contains(uri.getHost()) || uri.getUserInfo()!=null || uri.getFragment()!=null || (uri.getPort()!=-1 && uri.getPort()!=443))throw new IOException("Untrusted download redirect");
     }
-    private InputStream open(URI uri)throws IOException,InterruptedException {
+    private InputStream open(URI uri, boolean revalidate)throws IOException,InterruptedException {
         for(int i=0;i<6;i++){
             trusted(uri);
-            var request=HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).header("User-Agent","Better Sunlit-Korean-Compat-Updater/1").header("Accept","application/octet-stream").GET().build();
-            var response=client.send(request,HttpResponse.BodyHandlers.ofInputStream());
+            var request=HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).header("User-Agent","Better Sunlit-Korean-Compat-Updater/1").header("Accept","application/octet-stream");
+            if (revalidate) request.header("Cache-Control", "no-cache");
+            var response=client.send(request.GET().build(),HttpResponse.BodyHandlers.ofInputStream());
             if(response.statusCode()==200)return new DeadlineStream(response.body());
             response.body().close();
             if(Set.of(301,302,303,307,308).contains(response.statusCode())){
@@ -43,7 +44,7 @@ public final class SafeHttp {
     public byte[] manifest(String track)throws IOException,InterruptedException {
         if(!"main".equals(track))throw new IOException("Invalid track");
         URI feed=SignedRelease.FEED;
-        try(var in=open(feed)){
+        try(var in=open(feed,true)){
             byte[] bytes=in.readNBytes(128*1024+1);if(bytes.length>128*1024)throw new IOException("Manifest too large");return bytes;
         }
     }
@@ -52,7 +53,7 @@ public final class SafeHttp {
         if(Files.exists(target)){UpdateFiles.verify(target,release);return target;}
         Path part=incoming.resolve(release.sha256()+".part-"+UUID.randomUUID());
         try{
-            try(var in=open(release.asset())){UpdateFiles.copyVerified(in,part,release,progress);}
+            try(var in=open(release.asset(),false)){UpdateFiles.copyVerified(in,part,release,progress);}
             UpdateFiles.replace(part,target);return target;
         }finally{Files.deleteIfExists(part);}
     }

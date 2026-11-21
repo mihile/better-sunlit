@@ -8,7 +8,9 @@ import net.minecraftforge.api.distmarker.Dist;import net.minecraftforge.fml.comm
 public final class UpdateClient {
  static final ExecutorService IO=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"Better Sunlit updater");t.setDaemon(true);return t;});
  static final AtomicBoolean BUSY=new AtomicBoolean();static volatile SignedRelease release;static volatile String status="업데이트 확인 중…";static volatile boolean queued,failed;static volatile long downloaded;
- private static boolean startupChecked, preferencesLoaded;
+ private static final long CHECK_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+ private static boolean started, preferencesLoaded;
+ private static long lastCheckStarted = System.nanoTime() - CHECK_INTERVAL_NANOS;
  private static boolean autoPopup = true;
  private static long viewedBuild = -1;
  private static Screen renderedTitle;
@@ -50,19 +52,22 @@ public final class UpdateClient {
  @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event) {
   if (event.phase != TickEvent.Phase.END) return;
   Minecraft client = Minecraft.m_91087_();
-  if (!(client.f_91080_ instanceof TitleScreen title) || title != renderedTitle || client.m_91265_() != null) return;
+  boolean titleReady = client.f_91080_ instanceof TitleScreen
+          && client.f_91080_ == renderedTitle && client.m_91265_() == null;
 
-  if (!startupChecked) {
-   startupChecked = true;
+  if (!started) {
+   if (!titleReady) return;
+   started = true;
    loadPreferences();
    registerFancyIsolation();
-   if (auto) check();
   }
+  if (auto && !queued && System.nanoTime() - lastCheckStarted >= CHECK_INTERVAL_NANOS) check();
+  if (!titleReady) return;
   if (!autoPopup || queued || BUSY.get() || failed) return;
   SignedRelease available = release;
   if (available != null && available.build() > Build.NUMBER && available.build() > viewedBuild) {
    markViewed(available);
-   open(title);
+   open(client.f_91080_);
   }
  }
 
@@ -92,7 +97,27 @@ public final class UpdateClient {
   }
  }
 
- static void check(){if(!BUSY.compareAndSet(false,true))return;status="업데이트 확인 중…";failed=false;IO.execute(()->{try{release=SignedRelease.verify(new SafeHttp().manifest(),SignedRelease.publicKey());status=release.build()>Build.NUMBER?"새 업데이트가 있어요":"최신 버전입니다";}catch(Exception e){failed=true;status="업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.";SunlitFishVisuals.LOG.warn("Better Sunlit update check failed; installed mod retained",e);}finally{BUSY.set(false);}});}
+ static void check() {
+  if (queued || !BUSY.compareAndSet(false, true)) return;
+  lastCheckStarted = System.nanoTime();
+  status = "업데이트 확인 중…";
+  failed = false;
+  downloaded = 0;
+  IO.execute(() -> {
+   try {
+    SignedRelease fetched = SignedRelease.verify(new SafeHttp().manifest(), SignedRelease.publicKey());
+    SignedRelease previous = release;
+    if (previous == null || fetched.build() >= previous.build()) release = fetched;
+    status = release.build() > Build.NUMBER ? "새 업데이트가 있어요" : "최신 버전입니다";
+   } catch (Exception e) {
+    failed = true;
+    status = "업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.";
+    SunlitFishVisuals.LOG.warn("Better Sunlit update check failed; installed mod retained", e);
+   } finally {
+    BUSY.set(false);
+   }
+  });
+ }
  static void prepare(){SignedRelease next=release;if(next==null||next.build()<=Build.NUMBER||!BUSY.compareAndSet(false,true))return;status="다운로드 중…";failed=false;IO.execute(()->{try{
   Path target=UpdateFiles.target(game()),state=root();String oldHash=UpdateFiles.sha(target);if(UpdateFiles.installedBuild(target)!=Build.NUMBER)throw new java.io.IOException("Installed build changed");
   Path plan=state.resolve("pending.properties"),worker=state.resolve("worker.properties");if(Files.isRegularFile(worker)){Properties p=SignedRelease.properties(Files.readAllBytes(worker));var h=ProcessHandle.of(Long.parseLong(p.getProperty("pid","-1")));if(h.isPresent()&&h.get().isAlive()&&h.get().info().startInstant().map(i->i.toString().equals(p.getProperty("started"))).orElse(false)){queued=true;status="게임을 종료하면 적용됩니다";return;}}
@@ -129,6 +154,7 @@ public final class UpdateClient {
  static void toggleAuto() {
   auto = !auto;
   savePreferences();
+  if (auto) check();
  }
 
  static void setAutoPopup(boolean selected) {
