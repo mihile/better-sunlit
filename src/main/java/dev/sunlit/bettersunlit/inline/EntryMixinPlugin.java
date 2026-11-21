@@ -306,6 +306,45 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "EntityDataOrderMixin" -> switch (target) {
+              case EntityDataOrder.WOLF ->
+                (matchesLegacy(target,"81da161e6f89c84e142fd5a8a93a51b4fadc186aa0248efa891550338b61b895")
+                || matchesLegacy(target,"14f702d4b3be8a2b7e5fa250ae524b558638638fefce00c90073dfe497f6e0b3"))
+                && matchesLegacy("com.blackgear.vanillabackport.core.mixin.common.entities.WolfMixin","8fab4d812f5ab3f071efac7d08e08078758a676b3d4c4b0f79cd8b793a78439c")
+                && matchesLegacy("com.github.alexthe668.domesticationinnovation.mixin.WolfMixin","20e28be2c81011393e6838e240d615b2045b12c2e8bda52ea5013181274c9c31")
+                && matchesLegacy("com.ninni.species.mixin.WolfMixin","d1644902bcdfd1bc5c35d89d19d208fdeb0fa8517d76b8e07ba167065ed7dec2");
+              case EntityDataOrder.CAT ->
+                (matchesLegacy(target,"bc11fc6949c6d6bd502f19bc9be8976cce9b33033f3bbcc9646414fba75269e7")
+                || matchesLegacy(target,"82de89b2aaa0d710cc2fd41416803d1182d52f765cec7f21c05805e79bb47c8e"))
+                && matchesLegacy("com.blackgear.vanillabackport.core.mixin.common.entities.CatMixin","4b3d382cb10af9a0b4210e8fd1846a59b28f05c32f56c63512cdbce3659983e0")
+                && matchesLegacy("com.github.alexthe668.domesticationinnovation.mixin.CatMixin","c0a492555b94e61bfe2baeb25d73d8635cd52595ef0a1e7dfe9722ea11df9a01")
+                && matchesLegacy("com.copycatsplus.copycats.mixin.entity.CatMixin","9755109e939eb98f95e4e709301e94e04c4a1c1bf297cddba1f37d0f7122a9b2");
+              default -> false;
+            };
+            case "MinecartDataCompatibilityMixin" ->
+                (matchesLegacy(target,"ddf62a8a011467b5679b8495f74ea5c9a1faa8a95eb416a0ad4728287118139a")
+                || matchesLegacy(target,"b1302e5734c1e91c2380c71bfb159f54556950c7164bf476c16c8564414c4b37"))
+                && matchesLegacy("com.alc.moreminecarts.entities.FlagCartEntity","e87dab371bbc7646b3144e626a8f66d86c5f698cc3b70ddd9a398b3adc574e84")
+                && matchesLegacy("com.alc.moreminecarts.entities.TankCartEntity","6ae491efcb34af563f0b5afb8d08499275e4303c3df64ff57e24f2b3a4589ddc");
+            case "SupplementariesTextHolderCaramelMixin" ->
+                 matchesLegacy(target,"fa3f3b6ae4d86601c0c6ad76c144b06731a3dca0de7bc7870f497dfec9024e59")
+                 && matchesLegacy("moe.caramel.chat.wrapper.AbstractIMEWrapper","c1b7a2fc25b99a8d2dc6a49348d0c955641598d3e6b2b5f61dab6626c23e5186");
+            case "ExposureTextBoxCaramelMixin" ->
+                 matchesLegacy(target,"83da78df0f09dbce74ad419218dd5fc1ab8ac91d00157b1567009d3d8e0f3316")
+                 && matchesLegacy("moe.caramel.chat.wrapper.AbstractIMEWrapper","c1b7a2fc25b99a8d2dc6a49348d0c955641598d3e6b2b5f61dab6626c23e5186");
+            case "SupplementariesTextBoxCaramelMixin" ->
+                 matchesLegacy(target,"756c59f58e3fe5c0380676c1cf4b6adfae12250e195032b3e58ff2955da747ba")
+                 && matchesLegacy("moe.caramel.chat.wrapper.AbstractIMEWrapper","c1b7a2fc25b99a8d2dc6a49348d0c955641598d3e6b2b5f61dab6626c23e5186");
+            case "ZetterPaintingCaramelMixin" ->
+                 matchesLegacy(target,"f4c6c4c0d53d11b92f912963fa93e49fbc008c3d24147db21dcaff5f8c58b5aa")
+                 && matchesLegacy("moe.caramel.chat.wrapper.AbstractIMEWrapper","c1b7a2fc25b99a8d2dc6a49348d0c955641598d3e6b2b5f61dab6626c23e5186");
+            case "CreateClipboardCaramelMixin" ->
+                 matchesLegacy(target,"5e8a7b4053f338d8afea2e15a0cbdf8ce06b8d7473761e43a6741fde9f69d9d6")
+                 && matchesLegacy("moe.caramel.chat.wrapper.AbstractIMEWrapper","c1b7a2fc25b99a8d2dc6a49348d0c955641598d3e6b2b5f61dab6626c23e5186");
+            case "EmbeddiumSearchCaramelMixin", "EmbeddiumSearchModelAccessor" ->
+                 matchesLegacy("org.embeddedt.embeddium.gui.frame.components.SearchTextFieldComponent","ad74129da09e81a480a1fb245d164b4047d863b80ed74c083443aca73d1aad23")
+                 && matchesLegacy("org.embeddedt.embeddium.gui.frame.components.SearchTextFieldModel","9c8d03c1f3dcdb8b5349296e3ff50a03c446f2a8694661382528485880c552c0")
+                 && matchesLegacy("moe.caramel.chat.wrapper.AbstractIMEWrapper","c1b7a2fc25b99a8d2dc6a49348d0c955641598d3e6b2b5f61dab6626c23e5186");
             case "EntryJeiPlainItemMixin", "EntryJeiItemHelperMixin", "EntryJeiSubtypeManagerMixin",
                  "EntryJeiSubtypeInterpretersMixin", "EntryJeiRecipeUidMixin" ->
                  target.equals(JEI_UID_TARGETS.get(shortName)) && plainUidReviewed();
@@ -529,6 +568,12 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         if(targetClass==null||mixinClassName==null)return;
         String shortName=mixinClassName.substring(mixinClassName.lastIndexOf('.')+1);
         switch(shortName){
+            case "EntityDataOrderMixin" -> {
+                if (EntityDataOrder.matchServerOrder(targetClass)) {
+                    org.slf4j.LoggerFactory.getLogger("sunlit_fish_visuals")
+                            .info("Aligned {} entity data registration with the Sunlit server", targetClassName);
+                }
+            }
             case "PerfBlockOcclusionMixin"->EntryPostApplyPatches.patchBlockOcclusion(targetClass);
             case "PerfStateDefinitionMixin"->EntryPostApplyPatches.patchStateDefinition(targetClass);
             case "PerfBitSetDiscreteVoxelShapeMixin"->EntryPostApplyPatches.patchBitSetDiscreteVoxelShape(targetClass);

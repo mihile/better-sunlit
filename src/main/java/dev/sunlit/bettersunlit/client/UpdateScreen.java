@@ -4,6 +4,7 @@ import dev.sunlit.bettersunlit.update.*;
 import java.util.*;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -13,7 +14,7 @@ public final class UpdateScreen extends Screen {
 
     final Screen parent;
     final UpdateBackdrop backdrop;
-    int x, y, boxW, boxH, notesTop, notesBottom, buttonsY, btnW, scroll;
+    int x, y, boxW, boxH, notesTop, notesBottom, notesHeadingWidth, buttonsY, btnW, scroll;
     Button apply, retry, close, automatic;
     List<String> displayed = List.of();
     List<Row> cachedRows;
@@ -62,7 +63,7 @@ public final class UpdateScreen extends Screen {
         boxH = Math.min(216, f_96544_ - 24);
         x = (f_96543_ - boxW) / 2;
         y = (f_96544_ - boxH) / 2;
-        notesTop = y + 69;
+        notesTop = y + 71;
         notesBottom = y + boxH - 58;
         buttonsY = y + boxH - 28;
         btnW = (boxW - 36) / 3;
@@ -70,6 +71,18 @@ public final class UpdateScreen extends Screen {
 
         automatic = m_142416_(Button.m_253074_(Component.m_237113_("자동 확인"), b -> UpdateClient.toggleAuto())
             .m_252987_(x + boxW - 106, y + 7, 94, 20).m_253136_());
+        String popupLabel = "업데이트 팝업 자동 열기";
+        int checkboxWidth = 24 + f_96547_.m_92895_(popupLabel);
+        int checkboxX = x + boxW - 12 - checkboxWidth;
+        notesHeadingWidth = checkboxX - (x + 14) - 8;
+        m_142416_(new Checkbox(checkboxX, y + 50, checkboxWidth, 20,
+                Component.m_237113_(popupLabel), UpdateClient.autoPopup()) {
+            @Override
+            public void m_5691_() {
+                super.m_5691_();
+                UpdateClient.setAutoPopup(m_93840_());
+            }
+        });
         apply = m_142416_(Button.m_253074_(Component.m_237113_("업데이트"), b -> {
             if (UpdateClient.queued) f_96541_.m_91395_();
             else UpdateClient.prepare();
@@ -94,10 +107,12 @@ public final class UpdateScreen extends Screen {
         g.m_280430_(f_96547_, f_96539_, x + 14, y + 13, 0xFFF1E7FF);
         SignedRelease rel = UpdateClient.release;
         boolean hasUpdate = rel != null && rel.build() > Build.NUMBER;
+        if (hasUpdate) UpdateClient.markViewed(rel);
         String verLine = hasUpdate ? (Build.LABEL + "  →  " + rel.label()) : ("현재 버전 " + Build.LABEL);
         g.m_280488_(f_96547_, verLine, x + 14, y + 31, 0xFFACA6B8);
         g.m_280509_(x + 12, y + 49, x + boxW - 12, y + 50, 0xFF494153);
         String notesLabel = (hasUpdate ? rel.label() : Build.LABEL) + " 변경 내역";
+        if (f_96547_.m_92895_(notesLabel) > notesHeadingWidth) notesLabel = "변경 내역";
         g.m_280488_(f_96547_, notesLabel, x + 14, y + 55, 0xFFB8A6D2);
 
         List<Row> list = rows();

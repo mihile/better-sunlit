@@ -24,6 +24,7 @@ import de.odysseus.ithaka.digraph.util.fas.FeedbackArcSetPolicy;
 import de.odysseus.ithaka.digraph.util.fas.SimpleFeedbackArcSetProvider;
 import dev.sunlit.bettersunlit.client.AmbientSoundsClientPerf;
 import dev.sunlit.bettersunlit.client.ClientPostApplyPatches;
+import dev.sunlit.bettersunlit.client.CaramelInputBridge;
 import dev.sunlit.bettersunlit.client.EmfRenderPerf;
 import dev.sunlit.bettersunlit.client.EmojiRenderPerf;
 import dev.sunlit.bettersunlit.client.FtbChunksClientPerf;
@@ -324,12 +325,87 @@ public final class PerfOptTests {
         testJoinPerfOpts();
         testStartupPerfOpts();
         testFancyMenuPanoramaPendingFaces();
+        testCaramelCompositionBridge();
         testIter7StartupPerfOpts();
         testIter8StartupPerfOpts();
         testSpriteTransparencyOptimization();
         testMipmapCandidateAgainstIris();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
+    }
+
+    private static void testCaramelCompositionBridge() throws Exception {
+        class Input implements CaramelInputBridge.Field {
+            String value = "abcd";
+            int start = 1, end = 3;
+            public boolean editable() { return true; }
+            public boolean full() { return false; }
+            public String text() { return value; }
+            public void preview(String text) { value = text; }
+            public void insert(String text) {
+                int from = Math.min(start, end), to = Math.max(start, end);
+                value = value.substring(0, from) + text + value.substring(to);
+                start = end = from + text.length();
+            }
+            public int cursor() { return start; }
+            public int selection() { return end; }
+            public moe.caramel.chat.util.Rect rect() { return moe.caramel.chat.util.Rect.EMPTY; }
+        }
+        Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        unsafeField.setAccessible(true);
+        var unsafe = (sun.misc.Unsafe) unsafeField.get(null);
+        // Avoid initializing Caramel's native controller in the CPU-only test.
+        var bridge = (CaramelInputBridge) unsafe.allocateInstance(CaramelInputBridge.class);
+        Input input = new Input();
+        Field field = CaramelInputBridge.class.getDeclaredField("field");
+        field.setAccessible(true);
+        field.set(bridge, input);
+        bridge.setOrigin(input.text());
+        assertEquals("aAd", bridge.probeReplacement(), "Length check uses the selected range");
+        bridge.appendPreviewText("ㅎ");
+        assertEquals("aㅎd", input.text(), "Preview replaces the selection");
+        assertEquals("aAd", bridge.probeReplacement(), "Length check ignores uncommitted preview text");
+        bridge.appendPreviewText("하");
+        assertEquals("a하d", input.text(), "Preview updates without duplication");
+        bridge.insertText("한");
+        assertEquals("a한d", input.text(), "Commit preserves surrounding text");
+        assertEquals("a한d", bridge.getOrigin(), "Committed text becomes the new origin");
+        bridge.appendPreviewText("글");
+        bridge.setToNoneStatus();
+        assertEquals("a한d", input.text(), "Cancelling a preview restores committed text");
+
+        EntryMixinPlugin plugin = new EntryMixinPlugin();
+        assertTrue(plugin.canApplyGate("com.simibubi.create.content.equipment.clipboard.ClipboardScreen",
+                "dev.sunlit.fishvisuals.mixin.CreateClipboardCaramelMixin"), "Clipboard IME gate");
+        assertTrue(plugin.canApplyGate("org.embeddedt.embeddium.gui.frame.components.SearchTextFieldComponent",
+                "dev.sunlit.fishvisuals.mixin.EmbeddiumSearchCaramelMixin"), "Video search IME gate");
+        assertTrue(plugin.canApplyGate("org.embeddedt.embeddium.gui.frame.components.SearchTextFieldModel",
+                "dev.sunlit.fishvisuals.mixin.EmbeddiumSearchModelAccessor"), "Video search model gate");
+        Map<String, List<String>> screens = Map.of(
+                "com.simibubi.create.content.equipment.clipboard.ClipboardScreen",
+                List.of("m_7856_", "m_86600_", "m_7933_", "m_5534_", "m_6375_", "m_7979_", "m_6050_"),
+                "org.embeddedt.embeddium.gui.frame.components.SearchTextFieldComponent",
+                List.of("m_93692_", "m_7933_", "m_5534_", "m_6375_"),
+                "me.dantaeusb.zetter.client.gui.PaintingScreen",
+                List.of("m_7856_", "m_7933_", "m_5534_"),
+                "io.github.mortuusars.exposure.gui.screen.element.textbox.TextBox",
+                List.of("tick", "m_7933_", "m_5534_", "m_6375_"),
+                "net.mehvahdjukaar.supplementaries.client.screens.widgets.MultiLineEditBoxWidget",
+                List.of("tick", "m_7933_", "m_5534_", "m_93680_"),
+                "net.mehvahdjukaar.supplementaries.client.screens.TextHolderEditScreen",
+                List.of("m_7856_", "m_7933_", "m_5534_", "m_6050_"));
+        for (var entry : screens.entrySet()) {
+            try (var stream = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                    entry.getKey().replace('.', '/') + ".class")) {
+                assertTrue(stream != null, "IME target is installed: " + entry.getKey());
+                ClassNode node = new ClassNode();
+                new ClassReader(stream).accept(node, 0);
+                for (String method : entry.getValue()) {
+                    assertTrue(node.methods.stream().anyMatch(m -> m.name.equals(method)),
+                            "IME injection method exists: " + entry.getKey() + "." + method);
+                }
+            }
+        }
     }
 
     private static void testFancyMenuPanoramaPendingFaces() throws Exception {

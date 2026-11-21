@@ -5,6 +5,7 @@
   "plugin": "dev.sunlit.bettersunlit.inline.EntryMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "EntityDataOrderMixin",
     "PerfButterflyVariantMixin",
     "PerfButterflyEntityMixin",
     "PerfSeasonsConfigMixin",
@@ -44,6 +45,7 @@
     "PerfKubeJsScriptFileMixin"
   ],
   "client": [
+    "MinecartDataCompatibilityMixin",
     "PerfCreateBlockCuttingMixin",
     "PerfIrisBlockMappingMixin",
     "EntryJeiIngredientScopeMixin",
@@ -132,6 +134,13 @@
     "PerfClientModLoaderMixin",
     "PerfMcefUtilMixin",
     "FancyMenuPanoramaMixin",
+    "CreateClipboardCaramelMixin",
+    "EmbeddiumSearchCaramelMixin",
+    "EmbeddiumSearchModelAccessor",
+    "ZetterPaintingCaramelMixin",
+    "ExposureTextBoxCaramelMixin",
+    "SupplementariesTextBoxCaramelMixin",
+    "SupplementariesTextHolderCaramelMixin",
     "PerfBlueprintRewardMixin",
     "PerfGameDataMixin",
     "PerfAllTheLeaksIssue10684Mixin",
