@@ -90,24 +90,18 @@ final class CustomCatchModel {
     private static CustomCatchModel leech() {
         var mesh = new Mesh();
         mesh.body(
-                new Section(7.35f, -.50f, 1.33f, 1.14f, 42),
-                new Section(6.88f, -.30f, 1.47f, 1.26f, 38),
-                new Section(6.15f, .36f, 1.27f, 1.18f, 26),
-                section(5.35f, .96f, 1.12f, 1.35f),
-                section(4.45f, 1.90f, 1.18f, 1.46f),
-                section(3.25f, 2.83f, 1.32f, 1.49f),
-                section(1.84f, 3.37f, 1.39f, 1.43f),
-                section(.32f, 3.59f, 1.43f, 1.36f),
-                section(-1.03f, 3.38f, 1.32f, 1.39f),
-                section(-2.36f, 2.85f, 1.25f, 1.47f),
-                section(-3.50f, 1.80f, 1.16f, 1.32f),
-                section(-4.40f, .74f, 1.03f, 1.12f),
-                section(-5.15f, -.09f, 1.16f, .92f),
-                section(-5.87f, -.52f, 1.39f, .75f),
-                section(-6.74f, -.57f, 1.28f, .60f),
-                section(-7.63f, -.46f, .91f, .40f),
-                section(-8.55f, -.32f, .54f, .24f),
-                section(-9.04f, -.29f, .26f, .15f));
+                new Section(7.35f, -.35f, 1.23f, .82f, 38),
+                new Section(6.72f, -.11f, 1.35f, .94f, 25),
+                section(5.72f, .64f, 1.08f, .84f),
+                section(4.20f, 1.86f, 1.13f, .99f),
+                section(2.15f, 2.89f, 1.24f, 1.04f),
+                section(.20f, 3.05f, 1.30f, 1.03f),
+                section(-1.65f, 2.65f, 1.26f, 1.00f),
+                section(-3.35f, 1.44f, 1.18f, .91f),
+                section(-4.97f, .09f, 1.09f, .71f),
+                section(-6.50f, -.36f, 1.27f, .53f),
+                section(-7.70f, -.40f, .89f, .34f),
+                section(-9.04f, -.26f, .31f, .15f));
         return new CustomCatchModel("leech", mesh.faces, -13);
     }
 
