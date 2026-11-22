@@ -245,14 +245,14 @@ public final class SunlitFishVisuals {
                 long remaining=state.timing.totalTicks()-(now-state.landedAt);
                 if (strength>0 && remaining>=7 && item.m_20096_() && now>=state.nextKickAt && !item.m_20069_()) {
                     if (state.animationVersion == 2 && CatchModelIds.LEECH.equals(state.model)) {
-                        // A leech contracts against the ground. Keep the reward at its contact point.
-                        item.m_20256_(Vec3.f_82478_);
+                        crawl(level, state, strength);
                         item.f_19812_ = true;
                         recordKick(level, state, strength, now);
                     } else {
                         hop(level,state,strength,now);
                     }
-                } else if (item.m_20096_()) {
+                } else if (item.m_20096_() && !(state.animationVersion == 2 && CatchModelIds.LEECH.equals(state.model)
+                        && state.kickAt >= 0 && now - state.kickAt < 8 && strength > 0)) {
                     // No item sliding/bobbing between kicks; a spent fish remains a fish until pickup.
                     // Tell clients when a hop's remaining sideways velocity is cancelled, so they
                     // do not keep extrapolating the old motion and snap back between flops.
@@ -263,6 +263,31 @@ public final class SunlitFishVisuals {
                 }
             }
         }
+    }
+
+    private static void crawl(ServerLevel level, CatchState state, float strength) {
+        ItemEntity item = state.item;
+        // Advance along the rendered head direction and let ground friction slow
+        // the short stroke. Probe the whole possible runout before moving.
+        double heading = Math.toRadians(state.yaw);
+        double dx = -Math.sin(heading), dz = Math.cos(heading);
+        double speed = .045 * strength;
+        double distance = 8 * speed;
+        for (int i = 1; i <= 3; i++) {
+            double x = item.m_20185_() + dx * distance * i / 3;
+            double z = item.m_20189_() + dz * distance * i / 3;
+            double y = item.m_20186_();
+            var floor = level.m_45547_(new ClipContext(new Vec3(x, y + .06, z), new Vec3(x, y - .06, z),
+                    ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, item));
+            if (floor.m_6662_() != HitResult.Type.BLOCK || floor.m_82434_() != Direction.UP
+                    || Math.abs(floor.m_82450_().f_82480_ - y) > .025
+                    || !level.m_6425_(BlockPos.m_274561_(x, y + .01, z)).m_76178_()
+                    || Math.hypot(x - state.anchor.f_82479_, z - state.anchor.f_82481_) > 1.4) {
+                item.m_20256_(Vec3.f_82478_);
+                return;
+            }
+        }
+        item.m_20256_(new Vec3(dx * speed, 0, dz * speed));
     }
 
     private static void hop(ServerLevel level, CatchState state, float strength, long now) {
