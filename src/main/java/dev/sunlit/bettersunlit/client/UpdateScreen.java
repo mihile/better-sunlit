@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -44,7 +45,10 @@ public final class UpdateScreen extends Screen {
         int wrapWidth = Math.max(80, boxW - 38);
         for (String note : current) {
             String[] parts = note.split(" :: ", 2);
-            for (var line : f_96547_.m_92923_(Component.m_237113_("• " + parts[0]), wrapWidth)) {
+            String titlePart = note.equals(ReleaseNotes.EMPTY_NOTE)
+                    ? tr("better_sunlit.update.notes.empty", ReleaseNotes.EMPTY_NOTE)
+                    : parts[0];
+            for (var line : f_96547_.m_92923_(Component.m_237113_("• " + titlePart), wrapWidth)) {
                 out.add(new Row(line, 0xFFF1E7FF, 0));
             }
             if (parts.length > 1 && !parts[1].isBlank()) {
@@ -69,9 +73,9 @@ public final class UpdateScreen extends Screen {
         btnW = (boxW - 36) / 3;
         cachedRows = null;
 
-        automatic = m_142416_(Button.m_253074_(Component.m_237113_("자동 확인"), b -> UpdateClient.toggleAuto())
+        automatic = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.auto_check", "Auto Check"), b -> UpdateClient.toggleAuto())
             .m_252987_(x + boxW - 106, y + 7, 94, 20).m_253136_());
-        String popupLabel = "업데이트 팝업 자동 열기";
+        String popupLabel = tr("better_sunlit.update.auto_popup", "Auto-open update popup");
         int checkboxWidth = 24 + f_96547_.m_92895_(popupLabel);
         int checkboxX = x + boxW - 12 - checkboxWidth;
         notesHeadingWidth = checkboxX - (x + 14) - 8;
@@ -83,13 +87,13 @@ public final class UpdateScreen extends Screen {
                 UpdateClient.setAutoPopup(m_93840_());
             }
         });
-        apply = m_142416_(Button.m_253074_(Component.m_237113_("업데이트"), b -> {
+        apply = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.update", "Update"), b -> {
             if (UpdateClient.queued) f_96541_.m_91395_();
             else UpdateClient.prepare();
         }).m_252987_(x + 12, buttonsY, btnW, 20).m_253136_());
-        retry = m_142416_(Button.m_253074_(Component.m_237113_("다시 확인"), b -> UpdateClient.check())
+        retry = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.retry", "Check Again"), b -> UpdateClient.check())
             .m_252987_(x + 18 + btnW, buttonsY, btnW, 20).m_253136_());
-        close = m_142416_(Button.m_253074_(Component.m_237113_("닫기"), b -> m_7379_())
+        close = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.close", "Close"), b -> m_7379_())
             .m_252987_(x + 24 + btnW * 2, buttonsY, btnW, 20).m_253136_());
     }
 
@@ -108,11 +112,11 @@ public final class UpdateScreen extends Screen {
         SignedRelease rel = UpdateClient.release;
         boolean hasUpdate = rel != null && rel.build() > Build.NUMBER;
         if (hasUpdate) UpdateClient.markViewed(rel);
-        String verLine = hasUpdate ? (Build.LABEL + "  →  " + rel.label()) : ("현재 버전 " + Build.LABEL);
+        String verLine = hasUpdate ? (Build.LABEL + "  →  " + rel.label()) : tr("better_sunlit.update.current_version", "Current version %s", Build.LABEL);
         g.m_280488_(f_96547_, verLine, x + 14, y + 31, 0xFFACA6B8);
         g.m_280509_(x + 12, y + 49, x + boxW - 12, y + 50, 0xFF494153);
-        String notesLabel = (hasUpdate ? rel.label() : Build.LABEL) + " 변경 내역";
-        if (f_96547_.m_92895_(notesLabel) > notesHeadingWidth) notesLabel = "변경 내역";
+        String notesLabel = tr("better_sunlit.update.changelog_for", "%s Changelog", hasUpdate ? rel.label() : Build.LABEL);
+        if (f_96547_.m_92895_(notesLabel) > notesHeadingWidth) notesLabel = tr("better_sunlit.update.changelog", "Changelog");
         g.m_280488_(f_96547_, notesLabel, x + 14, y + 55, 0xFFB8A6D2);
 
         List<Row> list = rows();
@@ -136,7 +140,7 @@ public final class UpdateScreen extends Screen {
             g.m_280509_(x + boxW - 12, notesTop + offset, x + boxW - 10, notesTop + offset + thumb, 0xFFB39AD8);
         }
 
-        g.m_280488_(f_96547_, UpdateClient.status, x + 14, buttonsY - 18, UpdateClient.failed ? 0xFFE8A0A0 : 0xFFB8A6D2);
+        g.m_280488_(f_96547_, tr(UpdateClient.statusKey, UpdateClient.statusFallback), x + 14, buttonsY - 18, UpdateClient.failed ? 0xFFE8A0A0 : 0xFFB8A6D2);
         if (UpdateClient.BUSY.get() && hasUpdate && rel.size() > 0 && UpdateClient.downloaded > 0) {
             int bar = boxW - 28;
             int filled = (int) Math.min(bar, bar * UpdateClient.downloaded / Math.max(1L, rel.size()));
@@ -144,11 +148,20 @@ public final class UpdateScreen extends Screen {
             g.m_280509_(x + 14, buttonsY - 6, x + 14 + filled, buttonsY - 4, 0xFFB59BE0);
         }
 
-        automatic.m_93666_(Component.m_237113_("자동 확인: " + (UpdateClient.auto ? "켜짐" : "꺼짐")));
+        automatic.m_93666_(Component.m_264642_("better_sunlit.update.auto_check_state", "Auto Check: %s",
+                UpdateClient.auto
+                        ? Component.m_264642_("better_sunlit.update.state.on", "ON")
+                        : Component.m_264642_("better_sunlit.update.state.off", "OFF")));
         apply.f_93623_ = UpdateClient.queued || (!UpdateClient.BUSY.get() && hasUpdate);
-        apply.m_93666_(Component.m_237113_(UpdateClient.queued ? "게임 종료" : hasUpdate ? "업데이트" : "최신 상태"));
+        apply.m_93666_(UpdateClient.queued
+                ? Component.m_264642_("better_sunlit.update.button.quit", "Quit Game")
+                : hasUpdate
+                ? Component.m_264642_("better_sunlit.update.button.update", "Update")
+                : Component.m_264642_("better_sunlit.update.button.up_to_date", "Up to Date"));
         retry.f_93623_ = !UpdateClient.BUSY.get() && !UpdateClient.queued;
-        close.m_93666_(Component.m_237113_(hasUpdate && !UpdateClient.queued ? "나중에" : "닫기"));
+        close.m_93666_(hasUpdate && !UpdateClient.queued
+                ? Component.m_264642_("better_sunlit.update.button.later", "Later")
+                : Component.m_264642_("better_sunlit.update.button.close", "Close"));
 
         super.m_88315_(g, mx, my, dt);
         g.m_280262_();
@@ -180,5 +193,10 @@ public final class UpdateScreen extends Screen {
     @Override
     public void m_7379_() {
         f_96541_.m_91152_(parent);
+    }
+
+    private static String tr(String key, String fallback, Object... args) {
+        String fmt = Language.m_128107_().m_118919_(key, fallback);
+        return args.length == 0 ? fmt : String.format(Locale.ROOT, fmt, args);
     }
 }

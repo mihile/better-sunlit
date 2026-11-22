@@ -571,6 +571,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  && matches("org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel");
             case "PerfJourneyMapResetMixin" -> matchesLegacy(target,"398c5a6472f51046212291ca49563e563c17160c27313c980ec2aa4e2a161a58");
             case "PerfQuarkSharedChatMixin" -> matchesLegacy(target,"ee4d96ae723ded94fee5b9b2cedebedd91945a137ed7a9c71d897a55c29ce8af");
+            case "PerfMysticalOakTreeLoreMixin" -> matchesLegacy(target,"cdfda0747c979cd447f1db38f02315cdfeeb3cd92422c3a7b46f4a01e6103c3a");
             case "PerfMinecraftStartupTickMixin" ->
                  matches(target)&&matches("net.minecraft.client.gui.screens.LoadingOverlay");
             default -> false;

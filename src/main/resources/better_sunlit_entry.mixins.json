@@ -185,7 +185,8 @@
     "EntryJeiItemHelperMixin",
     "EntryJeiSubtypeManagerMixin",
     "EntryJeiSubtypeInterpretersMixin",
-    "EntryJeiRecipeUidMixin"
+    "EntryJeiRecipeUidMixin",
+    "PerfMysticalOakTreeLoreMixin"
   ],
   "injectors": {
     "defaultRequire": 1

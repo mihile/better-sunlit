@@ -1,0 +1,17 @@
+{
+  "effect.vinery.armor_effect.description": "방어력과 방어 강도를 증가시킵니다.",
+  "effect.vinery.climbing_effect.description": "벽을 오를 수 있게 됩니다.",
+  "effect.vinery.creeper_effect.description": "몇 초 후에 플레이어가 폭발합니다. 콰광!",
+  "effect.vinery.double_jump.description": "이단 점프를 할 수 있게 됩니다.",
+  "effect.vinery.experience_effect.description": "획득하는 경험치가 증가합니다.",
+  "effect.vinery.frosty_armor.description": "방어력과 공격 피해가 증가하지만 이동 속도가 감소합니다.",
+  "effect.vinery.jellie.description": "황금 사과와 같지만 더 뛰어난 효과를 제공합니다.",
+  "effect.vinery.lava_walker.description": "용암 위를 걸을 수 있게 됩니다.",
+  "effect.vinery.luck_effect.description": "행운을 증가시킵니다.",
+  "effect.vinery.magnet.description": "작은 반경 내의 아이템을 플레이어에게 끌어당깁니다.",
+  "effect.vinery.party_effect.description": "개체를 공격할 때 피해를 주는 폭죽을 터뜨립니다.",
+  "effect.vinery.resistance_effect.description": "방어 강도와 저항을 증가시킵니다.",
+  "effect.vinery.teleport.description": "플레이어를 전방으로 순간이동시킵니다.",
+  "effect.vinery.water_walker.description": "물 위를 걸을 수 있게 됩니다.",
+  "effect.vinery.health_effect.description": "지속 시간 동안 최대 생명력을 증가시킵니다."
+}

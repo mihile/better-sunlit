@@ -1,5 +1,7 @@
 package dev.sunlit.fishvisuals;
 
+import net.minecraft.network.chat.Component;
+
 /** Immutable per-catch settings, measured in server ticks. */
 public record FishTiming(int freshTicks, int fadingTicks, int stepTicks) {
     public static final FishTiming DEFAULT = new FishTiming(60,60,20);
@@ -16,6 +18,10 @@ public record FishTiming(int freshTicks, int fadingTicks, int stepTicks) {
         return (float)(1.0-(stage+1.0)/(stages+1.0));
     }
     public String description() {
-        return "싱싱함 "+freshTicks/20+"초 / 약해짐 "+fadingTicks/20+"초 / 단계 간격 "+stepTicks/20+"초";
+        return "Fresh "+freshTicks/20+"s / Fading "+fadingTicks/20+"s / Step "+stepTicks/20+"s";
+    }
+    public Component descriptionComponent() {
+        return Component.m_264642_("better_sunlit.realfishing.timing",
+                "Fresh %ss / Fading %ss / Step %ss", freshTicks/20, fadingTicks/20, stepTicks/20);
     }
 }

@@ -22,8 +22,12 @@ public final class FishingSettings {
 
     public record Settings(FishTiming timing, int animationVersion, boolean enabled) {
         String description() {
-            return "펄떡임 " + (enabled ? "ON" : "OFF") + " | 버전 " + animationVersion + " | "
+            return "Flopping " + (enabled ? "ON" : "OFF") + " | Version " + animationVersion + " | "
                     + timing.description();
+        }
+        Component descriptionComponent() {
+            return Component.m_264642_("better_sunlit.realfishing.summary",
+                    "Flopping %s | Version %s | %s", enabled ? "ON" : "OFF", animationVersion, timing.descriptionComponent());
         }
     }
 
@@ -68,11 +72,12 @@ public final class FishingSettings {
             save(settings);
             current = settings;
         } catch (IOException ex) {
-            source.m_81352_(Component.m_237113_("설정을 저장하지 못했습니다. 이전 설정을 유지합니다."));
+            source.m_81352_(Component.m_264642_("better_sunlit.realfishing.save_failed",
+                    "Failed to save settings. Keeping previous settings."));
             return 0;
         }
-        source.m_288197_(() -> Component.m_237113_("설정 저장: " + settings.description()
-                + ". 다음에 낚는 물고기부터 적용됩니다."), true);
+        source.m_288197_(() -> Component.m_264642_("better_sunlit.realfishing.saved",
+                "Settings saved: %s. Applies from the next caught fish.", settings.descriptionComponent()), true);
         return 1;
     }
 
@@ -84,8 +89,10 @@ public final class FishingSettings {
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.m_82127_("realfishing")
             .requires(source->source.m_6761_(2) || source.m_81377_().m_129792_())
-            .executes(context->{context.getSource().m_288197_(() -> Component.m_237113_(
-                    current.description()+" | /realfishing <on|off> | /realfishing version <1|2> | /realfishing <싱싱한 초> <약해지는 초> <단계 간격 초>"),false);return 1;})
+            .executes(context->{context.getSource().m_288197_(() -> Component.m_264642_(
+                    "better_sunlit.realfishing.usage",
+                    "%s | /realfishing <on|off> | /realfishing version <1|2> | /realfishing <freshSec> <fadingSec> <stepSec>",
+                    current.descriptionComponent()),false);return 1;})
             .then(Commands.m_82127_("on").executes(context -> setEnabled(context.getSource(), true)))
             .then(Commands.m_82127_("off").executes(context -> setEnabled(context.getSource(), false)))
             .then(Commands.m_82127_("version")
