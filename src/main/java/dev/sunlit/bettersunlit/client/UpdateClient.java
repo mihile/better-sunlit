@@ -7,7 +7,8 @@ import net.minecraftforge.api.distmarker.Dist;import net.minecraftforge.fml.comm
 @Mod.EventBusSubscriber(modid=SunlitFishVisuals.ID,value=Dist.CLIENT)
 public final class UpdateClient {
  static final ExecutorService IO=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"Better Sunlit updater");t.setDaemon(true);return t;});
- static final AtomicBoolean BUSY=new AtomicBoolean();static volatile SignedRelease release;static volatile String status="업데이트 확인 중…";static volatile boolean queued,failed;static volatile long downloaded;
+ static final AtomicBoolean BUSY=new AtomicBoolean();static volatile SignedRelease release;static volatile String statusKey="better_sunlit.update.status.checking",statusFallback="Checking for updates…";static volatile boolean queued,failed;static volatile long downloaded;
+ private static void setStatus(String key,String fallback){statusKey=key;statusFallback=fallback;}
  private static final long CHECK_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
  private static boolean started, preferencesLoaded;
  private static long lastCheckStarted = System.nanoTime() - CHECK_INTERVAL_NANOS;
@@ -100,7 +101,7 @@ public final class UpdateClient {
  static void check() {
   if (queued || !BUSY.compareAndSet(false, true)) return;
   lastCheckStarted = System.nanoTime();
-  status = "업데이트 확인 중…";
+  setStatus("better_sunlit.update.status.checking", "Checking for updates…");
   failed = false;
   downloaded = 0;
   IO.execute(() -> {
@@ -108,26 +109,30 @@ public final class UpdateClient {
     SignedRelease fetched = SignedRelease.verify(new SafeHttp().manifest(), SignedRelease.publicKey());
     SignedRelease previous = release;
     if (previous == null || fetched.build() >= previous.build()) release = fetched;
-    status = release.build() > Build.NUMBER ? "새 업데이트가 있어요" : "최신 버전입니다";
+    if (release.build() > Build.NUMBER) {
+     setStatus("better_sunlit.update.status.available", "A new update is available");
+    } else {
+     setStatus("better_sunlit.update.status.latest", "Up to date");
+    }
    } catch (Exception e) {
     failed = true;
-    status = "업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.";
+    setStatus("better_sunlit.update.status.check_failed", "Could not check for updates. Please try again later.");
     SunlitFishVisuals.LOG.warn("Better Sunlit update check failed; installed mod retained", e);
    } finally {
     BUSY.set(false);
    }
   });
  }
- static void prepare(){SignedRelease next=release;if(next==null||next.build()<=Build.NUMBER||!BUSY.compareAndSet(false,true))return;status="다운로드 중…";failed=false;IO.execute(()->{try{
+ static void prepare(){SignedRelease next=release;if(next==null||next.build()<=Build.NUMBER||!BUSY.compareAndSet(false,true))return;setStatus("better_sunlit.update.status.downloading","Downloading…");failed=false;IO.execute(()->{try{
   Path target=UpdateFiles.target(game()),state=root();String oldHash=UpdateFiles.sha(target);if(UpdateFiles.installedBuild(target)!=Build.NUMBER)throw new java.io.IOException("Installed build changed");
-  Path plan=state.resolve("pending.properties"),worker=state.resolve("worker.properties");if(Files.isRegularFile(worker)){Properties p=SignedRelease.properties(Files.readAllBytes(worker));var h=ProcessHandle.of(Long.parseLong(p.getProperty("pid","-1")));if(h.isPresent()&&h.get().isAlive()&&h.get().info().startInstant().map(i->i.toString().equals(p.getProperty("started"))).orElse(false)){queued=true;status="게임을 종료하면 적용됩니다";return;}}
+  Path plan=state.resolve("pending.properties"),worker=state.resolve("worker.properties");if(Files.isRegularFile(worker)){Properties p=SignedRelease.properties(Files.readAllBytes(worker));var h=ProcessHandle.of(Long.parseLong(p.getProperty("pid","-1")));if(h.isPresent()&&h.get().isAlive()&&h.get().info().startInstant().map(i->i.toString().equals(p.getProperty("started"))).orElse(false)){queued=true;setStatus("better_sunlit.update.status.queued","Will be applied when you exit the game");return;}}
   new SafeHttp().download(next,state.resolve("incoming"),n->downloaded=n);String helperHash=Build.META.getProperty("helperSha256");Path helper=UpdateFiles.directory(state.resolve("helpers")).resolve("apply-"+helperHash+".jar");
   if(!Files.exists(helper))try(var in=UpdateClient.class.getResourceAsStream("/assets/better_sunlit/update-helper.jar")){if(in==null)throw new java.io.IOException("Missing helper");Files.copy(in,helper);}
   if(Files.isSymbolicLink(helper)||!UpdateFiles.sha(helper).equals(helperHash))throw new java.io.IOException("Helper checksum mismatch");UpdateFiles.writeBytes(state.resolve("manifest.properties"),next.envelope());
   var self=ProcessHandle.current();Properties p=new Properties();p.setProperty("game",game().toRealPath().toString());p.setProperty("build",Long.toString(next.build()));p.setProperty("oldSha256",oldHash);p.setProperty("parentPid",Long.toString(self.pid()));p.setProperty("parentStarted",self.info().startInstant().orElseThrow().toString());UpdateFiles.writeProperties(plan,p);
   Path java=Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name","").startsWith("Windows")?"javaw.exe":"java");Path log=state.resolve("apply.log");if(Files.isSymbolicLink(log))throw new java.io.IOException("Linked updater log");
-  Process child=new ProcessBuilder(java.toString(),"-Xms8m","-Xmx64m","-Djava.awt.headless=true","-cp",helper.toString(),ApplyUpdate.class.getName(),plan.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile())).start();Properties w=new Properties();w.setProperty("pid",Long.toString(child.pid()));w.setProperty("started",child.toHandle().info().startInstant().orElseThrow().toString());UpdateFiles.writeProperties(worker,w);Thread.sleep(300);if(!child.isAlive())throw new java.io.IOException("Helper stopped early");queued=true;status="게임을 종료하면 적용됩니다";
- }catch(Exception e){failed=true;status="업데이트 준비에 실패했어요. 현재 버전은 유지됩니다.";SunlitFishVisuals.LOG.warn("Better Sunlit update preparation failed",e);}finally{BUSY.set(false);}});}
+  Process child=new ProcessBuilder(java.toString(),"-Xms8m","-Xmx64m","-Djava.awt.headless=true","-cp",helper.toString(),ApplyUpdate.class.getName(),plan.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile())).start();Properties w=new Properties();w.setProperty("pid",Long.toString(child.pid()));w.setProperty("started",child.toHandle().info().startInstant().orElseThrow().toString());UpdateFiles.writeProperties(worker,w);Thread.sleep(300);if(!child.isAlive())throw new java.io.IOException("Helper stopped early");queued=true;setStatus("better_sunlit.update.status.queued","Will be applied when you exit the game");
+ }catch(Exception e){failed=true;setStatus("better_sunlit.update.status.prepare_failed","Failed to prepare update. Current version is kept.");SunlitFishVisuals.LOG.warn("Better Sunlit update preparation failed",e);}finally{BUSY.set(false);}});}
  private static Path preferencesFile() {
   return game().resolve("config/better-sunlit-updater.properties");
  }

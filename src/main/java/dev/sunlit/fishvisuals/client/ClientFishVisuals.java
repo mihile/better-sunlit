@@ -1,6 +1,7 @@
 package dev.sunlit.fishvisuals.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import dev.sunlit.fishvisuals.FishTiming;
 import dev.sunlit.fishvisuals.FishingSettings;
@@ -18,7 +19,6 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Quaternionf;
 
 import java.util.HashMap;
@@ -45,8 +45,14 @@ public final class ClientFishVisuals {
     public static void receive(SunlitFishVisuals.CatchPacket packet) {
         syncLevel();
         if (currentLevel == null || !currentLevel.m_46472_().m_135782_().equals(packet.dimension())) return;
+        ResourceLocation model = CatchModelIds.resolve(packet.model());
+        if (model == null) {
+            VISUALS.remove(packet.itemUuid());
+            return;
+        }
         // UUID keys allow the notification to arrive before the vanilla entity spawn packet.
-        Visual visual = VISUALS.computeIfAbsent(packet.itemUuid(), uuid -> new Visual(packet.model()));
+        Visual visual = VISUALS.compute(packet.itemUuid(), (uuid, previous) ->
+                previous == null || !model.equals(previous.model) ? new Visual(model) : previous);
         double now=currentLevel.m_46467_();
         if (packet.kickAt() >= 0 && packet.kickAt() != visual.kickAt) {
             if (visual.kickAt >= 0) visual.flopSide = -visual.flopSide;
@@ -104,7 +110,7 @@ public final class ClientFishVisuals {
         pose.m_85836_();
         try {
             if (visual.proxy == null) {
-                EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(visual.model);
+                EntityType<?> type = CatchModelIds.entityType(visual.model);
                 Entity proxy = type == null ? null : type.m_20615_(currentLevel);
                 if (!(proxy instanceof LivingEntity)) {
                     VISUALS.remove(item.m_20148_());

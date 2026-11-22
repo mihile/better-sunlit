@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -57,16 +56,6 @@ public final class SunlitFishVisuals {
             .serverAcceptedVersions(SunlitFishVisuals::acceptsVersion)
             .simpleChannel();
 
-    // These item/entity names differ in Unusual Fish. Other fish use matching IDs.
-    private static final Map<String, String> ALIASES = Map.of(
-            "unusualfishmod:blind_sailfin", "unusualfishmod:blindsailfin",
-            "unusualfishmod:blizzard_tuna", "unusualfishmod:blizzardfin",
-            "unusualfishmod:copperflame_anthias", "unusualfishmod:copperflame",
-            "unusualfishmod:hatchetfish", "unusualfishmod:hatchet_fish",
-            "unusualfishmod:circus_fish", "unusualfishmod:circus",
-            "unusualfishmod:snowflake", "unusualfishmod:snowflaketail"
-    );
-
     private static boolean acceptsVersion(String version) {
         return "3".equals(version) || NetworkRegistry.ABSENT.equals(version) || NetworkRegistry.ACCEPTVANILLA.equals(version);
     }
@@ -91,11 +80,7 @@ public final class SunlitFishVisuals {
     public static ResourceLocation modelFor(ItemStack stack) {
         if (stack.m_41619_() || !stack.m_204117_(ItemTags.f_13156_)) return null;
         ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(stack.m_41720_());
-        if (itemId == null) return null;
-        String normalizedId = itemId.toString().replace(":raw_", ":");
-        ResourceLocation entityId = new ResourceLocation(ALIASES.getOrDefault(normalizedId, normalizedId));
-        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(entityId);
-        return type != null ? entityId : null;
+        return itemId == null ? null : CatchModelIds.resolve(itemId);
     }
 
     /** Called at the final entity-spawn instruction, AFTER loot, quality and all item-fished handlers. */
@@ -182,7 +167,13 @@ public final class SunlitFishVisuals {
         if (item.m_9236_().f_46443_ || !item.getPersistentData().m_128441_(CATCH_DATA)) return null;
         try {
             CompoundTag tag=item.getPersistentData().m_128469_(CATCH_DATA);
-            CatchState state=new CatchState(item,new ResourceLocation(tag.m_128461_("model")),tag.m_128454_("startedAt"),
+            ResourceLocation model = CatchModelIds.resolve(new ResourceLocation(tag.m_128461_("model")));
+            if (model == null) {
+                item.getPersistentData().m_128473_(CATCH_DATA);
+                item.m_32010_(0);
+                return null;
+            }
+            CatchState state=new CatchState(item,model,tag.m_128454_("startedAt"),
                     new FishTiming(tag.m_128451_("freshTicks"),tag.m_128451_("fadingTicks"),tag.m_128451_("stepTicks")),
                     FishingSettings.animationVersionOrDefault(tag.m_128451_("animationVersion")));
             state.landedAt=tag.m_128454_("landedAt");state.kickAt=tag.m_128454_("kickAt");state.nextKickAt=tag.m_128454_("nextKickAt");

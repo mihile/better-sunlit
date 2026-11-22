@@ -1,0 +1,23 @@
+{
+  "euphoria_patcher.button.support": "EP 후원",
+  "euphoria_patcher.button.update": "EP 업데이트!",
+  "euphoria_patcher.tooltip.support": "Euphoria Patches를 후원하세요!",
+  "euphoria_patcher.tooltip.update": "Euphoria Patches 업데이트!",
+  "euphoria_patcher.tooltip.remove": "후원 버튼을 제거할까요?",
+  "euphoria_patcher.tooltip.remove.hint": "(SHIFT 클릭으로 제거)",
+  "euphoria_patcher.donation.line1": "안녕하세요!",
+  "euphoria_patcher.donation.line2": "%s를 재미있게 즐겨주셔서 기쁩니다!",
+  "euphoria_patcher.donation.line2.highlight": "Euphoria Patches",
+  "euphoria_patcher.donation.line3": "새로운 설정, 효과, 기능을 추가하는 데에는 %s이 들어갑니다.",
+  "euphoria_patcher.donation.line3.highlight": "수많은 시간",
+  "euphoria_patcher.donation.line4": "월드의 한층 더 깊어진 분위기가 마음에 드신다면, %s을 고려해 주세요.",
+  "euphoria_patcher.donation.line4.highlight": "프로젝트 후원",
+  "euphoria_patcher.donation.line5": "Euphoria Patches를 이용해 주셔서 감사합니다 <3",
+  "euphoria_patcher.donation.button": "프로젝트 후원",
+  "euphoria_patcher.shader_error.failed": "셰이더 팩 컴파일에 실패했습니다! 셰이더 개발자에게 오류를 제보해 주세요. %s",
+  "euphoria_patcher.shader_error.copy": "정보 복사",
+  "euphoria_patcher.shader_error.report": "여기를 통해 셰이더 개발자에게 제보하세요: %s",
+  "euphoria_patcher.shader_error.report.link": "Discord에서 제보",
+  "fml.menu.mods.info.description.euphoria_patcher": "Complementary Shaders에 Euphoria Patches 애드온을 적용하는 모드입니다.\n셰이더 팩 설정 메뉴에서 Euphoria Patches 설정을 활성화하고 변경할 수 있습니다.\n문제는 Discord로 제보해 주세요!",
+  "modmenu.descriptionTranslation.euphoria_patcher": "Complementary Shaders에 Euphoria Patches 애드온을 적용하는 모드입니다.\n셰이더 팩 설정 메뉴에서 Euphoria Patches 설정을 활성화하고 변경할 수 있습니다.\n문제는 Discord로 제보해 주세요!"
+}

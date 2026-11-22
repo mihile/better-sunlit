@@ -6,6 +6,8 @@ import java.util.Properties;
 
 /** Release-specific changelog, available offline from the installed JAR. */
 public final class ReleaseNotes {
+    public static final String EMPTY_NOTE = "No changelog has been registered for this version.";
+
     private ReleaseNotes() {}
 
     public static List<String> read(Properties metadata) {
@@ -15,7 +17,7 @@ public final class ReleaseNotes {
             if (note == null) break;
             if (!note.isBlank()) notes.add(note);
         }
-        return notes.isEmpty() ? List.of("이 버전의 변경 내역이 등록되지 않았습니다.") : List.copyOf(notes);
+        return notes.isEmpty() ? List.of(EMPTY_NOTE) : List.copyOf(notes);
     }
 
     public static List<String> latest(long installedBuild, List<String> installed,
