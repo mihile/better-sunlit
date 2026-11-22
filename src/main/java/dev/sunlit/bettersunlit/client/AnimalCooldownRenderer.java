@@ -75,6 +75,8 @@ public final class AnimalCooldownRenderer {
     private static final Map<ResourceLocation, IconStrip> STRIP_CACHE = new HashMap<>();
     private static ClientLevel currentLevel;
     private static int cleanupCounter;
+    private static long lastServerDayTime = -1L;
+    private static long lastPacketGameTime = 0L;
 
     private AnimalCooldownRenderer() {}
 
@@ -118,6 +120,8 @@ public final class AnimalCooldownRenderer {
         ClientLevel level = Minecraft.m_91087_().f_91073_;
         if (level == null || !level.m_46472_().m_135782_().equals(packet.dimension())) return;
         syncLevel(level);
+        lastServerDayTime = packet.serverDayTime();
+        lastPacketGameTime = level.m_46467_();
         for (AnimalStatusSync.AnimalSnapshot entry : packet.entries()) {
             STATES.put(entry.entityId(), entry);
         }
@@ -127,6 +131,8 @@ public final class AnimalCooldownRenderer {
         if (level != currentLevel) {
             STATES.clear();
             currentLevel = level;
+            lastServerDayTime = -1L;
+            lastPacketGameTime = 0L;
         }
     }
 
@@ -165,7 +171,15 @@ public final class AnimalCooldownRenderer {
         var entities = level.m_45976_(LivingEntity.class, box);
         if (entities.isEmpty()) return;
 
-        long dayTime = level.m_46468_();
+        long rawDayTime = level.m_46468_();
+        long clientDayTime = rawDayTime < 0L ? -rawDayTime : rawDayTime;
+        long dayTime = clientDayTime;
+        if (lastServerDayTime >= 0L) {
+            long estimatedServerTime = lastServerDayTime + Math.max(0L, level.m_46467_() - lastPacketGameTime);
+            if (Math.abs(clientDayTime - estimatedServerTime) > 100L) {
+                dayTime = estimatedServerTime;
+            }
+        }
         long currentDay = Math.floorDiv(dayTime, AnimalStatusSync.TICKS_PER_DAY) + 1L;
         float partialTick = event.getPartialTick();
         PoseStack poseStack = event.getPoseStack();
@@ -266,8 +280,8 @@ public final class AnimalCooldownRenderer {
         return info != null ? info : new MilkProduceInfo(ICON_MILK, 1);
     }
 
-    private static int computeMilkStage(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays,
-                                        long dayTime, long currentDay) {
+    public static int computeMilkStage(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays,
+                                       long dayTime, long currentDay) {
         long effectiveLastFed = snap.hasFedTag() ? snap.ageLastFed() : (currentDay - 1L);
         boolean hungry = (currentDay < effectiveLastFed) || (currentDay - effectiveLastFed > 1L);
         if (hungry) return STAGE_BLOCKED;
@@ -284,7 +298,7 @@ public final class AnimalCooldownRenderer {
         return stageFromTicks(dayTime, startTick, readyTick);
     }
 
-    private static int computeMagicStage(AnimalStatusSync.AnimalSnapshot snap, long dayTime, long currentDay) {
+    public static int computeMagicStage(AnimalStatusSync.AnimalSnapshot snap, long dayTime, long currentDay) {
         if (snap.hearts() < 5) return STAGE_BLOCKED;
         long effectiveLastMagic = snap.hasMagicTag() ? snap.ageLastMagic() : (currentDay - 1L);
         if (currentDay < effectiveLastMagic || currentDay > effectiveLastMagic) {

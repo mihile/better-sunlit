@@ -1,9 +1,10 @@
 package dev.sunlit.bettersunlit.husbandry;
 
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
-import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -25,6 +26,9 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,10 +54,14 @@ public final class AnimalStatusSync {
     public static final ResourceLocation WOOLY_COW_ID = new ResourceLocation("meadow", "wooly_cow");
     public static final ResourceLocation MAMMUTILATION_ID = new ResourceLocation("species", "mammutilation");
 
-    public static final TagKey<EntityType<?>> HUSBANDRY_TAG =
-            TagKey.m_203882_(Registries.f_256939_, new ResourceLocation("society", "husbandry_animal"));
-    public static final TagKey<EntityType<?>> MILKABLE_TAG =
-            TagKey.m_203882_(Registries.f_256939_, new ResourceLocation("society", "milkable_animal"));
+    private static final class EntityTags {
+        private static final ResourceKey<Registry<EntityType<?>>> ENTITY_TYPE_REGISTRY =
+                ResourceKey.m_135788_(new ResourceLocation("entity_type"));
+        private static final TagKey<EntityType<?>> HUSBANDRY =
+                TagKey.m_203882_(ENTITY_TYPE_REGISTRY, new ResourceLocation("society", "husbandry_animal"));
+        private static final TagKey<EntityType<?>> MILKABLE =
+                TagKey.m_203882_(ENTITY_TYPE_REGISTRY, new ResourceLocation("society", "milkable_animal"));
+    }
 
     public static final int FLAG_MILKABLE = 1 << 0;
     public static final int FLAG_HUSBANDRY = 1 << 1;
@@ -62,18 +70,24 @@ public final class AnimalStatusSync {
     public static final int FLAG_HAS_MILKED = 1 << 4;
     public static final int FLAG_HAS_MAGIC = 1 << 5;
 
-    private static final String PROTOCOL = "1";
-    public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
-            .named(new ResourceLocation(SunlitFishVisuals.ID, "animal_status"))
-            .networkProtocolVersion(() -> PROTOCOL)
-            .clientAcceptedVersions(AnimalStatusSync::acceptsVersion)
-            .serverAcceptedVersions(AnimalStatusSync::acceptsVersion)
-            .simpleChannel();
+    private static final int NBT_ANY_NUMERIC = 99;
+    private static final String PROTOCOL = "2";
+    private static final class NetChannel {
+        private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
+                .named(new ResourceLocation(SunlitFishVisuals.ID, "animal_status"))
+                .networkProtocolVersion(() -> PROTOCOL)
+                .clientAcceptedVersions(AnimalStatusSync::acceptsVersion)
+                .serverAcceptedVersions(AnimalStatusSync::acceptsVersion)
+                .simpleChannel();
+    }
 
     private static volatile Consumer<StatusPacket> clientReceiver;
     private static final Map<UUID, Map<Integer, AnimalSnapshot>> SENT_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, Integer> IMMEDIATE_UNTIL_TICK = new HashMap<>();
     private static final Map<UUID, Boolean> LAST_HELD_TOOL = new HashMap<>();
+    private static final Map<UUID, Long> LAST_SENT_DAY_TIME = new HashMap<>();
+    private static volatile boolean kjsLookupAttempted;
+    private static volatile MethodHandle kjsRawPersistentDataHandle;
     private static boolean registered;
 
     private AnimalStatusSync() {}
@@ -91,7 +105,7 @@ public final class AnimalStatusSync {
     public static void register() {
         if (registered) return;
         registered = true;
-        CHANNEL.registerMessage(0, StatusPacket.class, StatusPacket::encode, StatusPacket::decode,
+        NetChannel.CHANNEL.registerMessage(0, StatusPacket.class, StatusPacket::encode, StatusPacket::decode,
                 StatusPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerTick);
         MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onEntityInteract);
@@ -114,8 +128,9 @@ public final class AnimalStatusSync {
         Entity target = event.getTarget();
         if (!(target instanceof LivingEntity living)) return;
         EntityType<?> type = living.m_6095_();
-        if (type.m_204039_(HUSBANDRY_TAG) || type.m_204039_(MILKABLE_TAG)) {
-            IMMEDIATE_UNTIL_TICK.put(player.m_20148_(), player.f_19797_ + 4);
+        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(type);
+        if (type.m_204039_(EntityTags.HUSBANDRY) || type.m_204039_(EntityTags.MILKABLE) || MAMMUTILATION_ID.equals(typeId)) {
+            IMMEDIATE_UNTIL_TICK.put(player.m_20148_(), player.f_19797_ + 6);
         }
     }
 
@@ -124,18 +139,20 @@ public final class AnimalStatusSync {
         SENT_BY_PLAYER.remove(id);
         IMMEDIATE_UNTIL_TICK.remove(id);
         LAST_HELD_TOOL.remove(id);
+        LAST_SENT_DAY_TIME.remove(id);
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
         SENT_BY_PLAYER.clear();
         IMMEDIATE_UNTIL_TICK.clear();
         LAST_HELD_TOOL.clear();
+        LAST_SENT_DAY_TIME.clear();
     }
 
     private static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.side != LogicalSide.SERVER) return;
         if (!(event.player instanceof ServerPlayer player)) return;
-        if (!CHANNEL.isRemotePresent(player.f_8906_.f_9742_)) return;
+        if (!NetChannel.CHANNEL.isRemotePresent(player.f_8906_.f_9742_)) return;
 
         UUID uuid = player.m_20148_();
         boolean holding = isHoldingWatchedTool(player);
@@ -143,6 +160,7 @@ public final class AnimalStatusSync {
         if (!holding) {
             if (wasHolding) {
                 SENT_BY_PLAYER.remove(uuid);
+                LAST_SENT_DAY_TIME.remove(uuid);
             }
             return;
         }
@@ -155,13 +173,16 @@ public final class AnimalStatusSync {
         if (!immediate && player.f_19797_ % SCAN_INTERVAL_TICKS != 0) return;
 
         if (!(player.m_9236_() instanceof ServerLevel level)) return;
-        long dayTime = level.m_46468_();
+        long rawDayTime = level.m_46468_();
+        long dayTime = rawDayTime < 0L ? -rawDayTime : rawDayTime;
         long currentDay = Math.floorDiv(dayTime, TICKS_PER_DAY) + 1L;
         AABB box = player.m_20191_().m_82400_(SCAN_RADIUS);
         List<LivingEntity> animals = level.m_6443_(LivingEntity.class, box, e -> {
             if (!e.m_6084_()) return false;
             EntityType<?> t = e.m_6095_();
-            return t.m_204039_(HUSBANDRY_TAG) || t.m_204039_(MILKABLE_TAG);
+            return t.m_204039_(EntityTags.HUSBANDRY)
+                    || t.m_204039_(EntityTags.MILKABLE)
+                    || MAMMUTILATION_ID.equals(ForgeRegistries.ENTITY_TYPES.getKey(t));
         });
 
         Map<Integer, AnimalSnapshot> cache = SENT_BY_PLAYER.computeIfAbsent(uuid, k -> new HashMap<>());
@@ -174,8 +195,11 @@ public final class AnimalStatusSync {
                 changed.add(snap);
             }
         }
-        if (!changed.isEmpty()) {
-            CHANNEL.sendTo(new StatusPacket(level.m_46472_().m_135782_(), changed),
+        Long lastSent = LAST_SENT_DAY_TIME.get(uuid);
+        boolean timeJumped = lastSent == null || Math.abs(dayTime - lastSent) > 100L;
+        if (!changed.isEmpty() || timeJumped) {
+            LAST_SENT_DAY_TIME.put(uuid, dayTime);
+            NetChannel.CHANNEL.sendTo(new StatusPacket(level.m_46472_().m_135782_(), dayTime, changed),
                     player.f_8906_.f_9742_, NetworkDirection.PLAY_TO_CLIENT);
         }
         if (cache.size() > 512) {
@@ -183,37 +207,97 @@ public final class AnimalStatusSync {
         }
     }
 
+    private static CompoundTag readKubePersistentData(LivingEntity animal) {
+        if (!kjsLookupAttempted) {
+            kjsLookupAttempted = true;
+            try {
+                kjsRawPersistentDataHandle = MethodHandles.publicLookup().findVirtual(
+                        Entity.class, "kjs$getRawPersistentData", MethodType.methodType(CompoundTag.class));
+            } catch (Throwable ignored) {
+                kjsRawPersistentDataHandle = null;
+            }
+        }
+        MethodHandle handle = kjsRawPersistentDataHandle;
+        if (handle == null) return null;
+        try {
+            return (CompoundTag) handle.invoke((Entity) animal);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static boolean hasNumericTag(CompoundTag primary, CompoundTag secondary, String key) {
+        return (primary != null && primary.m_128425_(key, NBT_ANY_NUMERIC))
+                || (secondary != null && secondary.m_128425_(key, NBT_ANY_NUMERIC));
+    }
+
+    private static int readNumericInt(CompoundTag primary, CompoundTag secondary, String key) {
+        if (primary != null && primary.m_128425_(key, NBT_ANY_NUMERIC)) {
+            return (int) Math.floor(primary.m_128459_(key));
+        }
+        if (secondary != null && secondary.m_128425_(key, NBT_ANY_NUMERIC)) {
+            return (int) Math.floor(secondary.m_128459_(key));
+        }
+        return 0;
+    }
+
     private static AnimalSnapshot captureSnapshot(LivingEntity animal, long dayTime, long currentDay) {
         EntityType<?> type = animal.m_6095_();
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(type);
-        CompoundTag data = animal.getPersistentData();
+        boolean isBaby = animal.m_6162_();
+        CompoundTag saved = (WOOLY_COW_ID.equals(typeId) || (MAMMUTILATION_ID.equals(typeId) && !isBaby))
+                ? animal.m_20240_(new CompoundTag())
+                : null;
+        return captureFromTags(
+                animal.m_19879_(),
+                type.m_204039_(EntityTags.MILKABLE),
+                type.m_204039_(EntityTags.HUSBANDRY),
+                typeId,
+                isBaby,
+                readKubePersistentData(animal),
+                animal.getPersistentData(),
+                saved,
+                dayTime,
+                currentDay
+        );
+    }
 
-        boolean milkable = type.m_204039_(MILKABLE_TAG);
-        boolean husbandry = type.m_204039_(HUSBANDRY_TAG);
-        boolean hasFed = data.m_128441_("ageLastFed");
-        boolean hasMilked = data.m_128441_("ageLastMilked");
-        boolean hasMagic = data.m_128441_("ageLastMagicHarvested");
+    /** Builds an animal status snapshot from KubeJS persistentData with ForgeData fallback. */
+    public static AnimalSnapshot captureFromTags(
+            int entityId,
+            boolean milkable,
+            boolean husbandry,
+            ResourceLocation typeId,
+            boolean isBaby,
+            CompoundTag kjsData,
+            CompoundTag forgeData,
+            CompoundTag savedNbt,
+            long dayTime,
+            long currentDay
+    ) {
+        // KubeJS stores animal.persistentData in KubeJSPersistentData via EntityMixin rather than ForgeData.
+        boolean hasFed = hasNumericTag(kjsData, forgeData, "ageLastFed");
+        boolean hasMilked = hasNumericTag(kjsData, forgeData, "ageLastMilked");
+        boolean hasMagic = hasNumericTag(kjsData, forgeData, "ageLastMagicHarvested");
 
-        int ageLastFed = hasFed ? data.m_128451_("ageLastFed") : 0;
-        int ageLastMilked = hasMilked ? data.m_128451_("ageLastMilked") : 0;
-        int ageLastMagic = hasMagic ? data.m_128451_("ageLastMagicHarvested") : 0;
+        int ageLastFed = hasFed ? readNumericInt(kjsData, forgeData, "ageLastFed") : 0;
+        int ageLastMilked = hasMilked ? readNumericInt(kjsData, forgeData, "ageLastMilked") : 0;
+        int ageLastMagic = hasMagic ? readNumericInt(kjsData, forgeData, "ageLastMagicHarvested") : 0;
 
-        // Record the exact dayTime tick when cooldown starts for today's action so 1/3 progress stages stay accurate.
-        long timeLastMilked = resolveActionTick(data, "sunlitMilkDay", "sunlitMilkTick", hasMilked, ageLastMilked, currentDay, dayTime);
-        long timeLastMagic = resolveActionTick(data, "sunlitMagicDay", "sunlitMagicTick", hasMagic, ageLastMagic, currentDay, dayTime);
+        CompoundTag stampTarget = forgeData != null ? forgeData : kjsData;
+        long timeLastMilked = resolveActionTick(stampTarget, "sunlitMilkDay", "sunlitMilkTick", hasMilked, ageLastMilked, currentDay, dayTime);
+        long timeLastMagic = resolveActionTick(stampTarget, "sunlitMagicDay", "sunlitMagicTick", hasMagic, ageLastMagic, currentDay, dayTime);
 
-        int affection = data.m_128451_("affection");
+        int affection = readNumericInt(kjsData, forgeData, "affection");
         int hearts = Math.max(0, Math.min(10, affection / 100));
 
         boolean warped = false;
         byte ichorState = -1;
-        if (WOOLY_COW_ID.equals(typeId)) {
-            CompoundTag saved = animal.m_20240_(new CompoundTag());
-            warped = saved.m_128451_("Variant") == 2;
-        } else if (MAMMUTILATION_ID.equals(typeId) && !animal.m_6162_()) {
-            CompoundTag saved = animal.m_20240_(new CompoundTag());
-            int count = saved.m_128451_("IchorCount");
-            int cd = saved.m_128451_("IchorCooldown");
+        if (WOOLY_COW_ID.equals(typeId) && savedNbt != null) {
+            warped = savedNbt.m_128451_("Variant") == 2;
+        } else if (MAMMUTILATION_ID.equals(typeId) && !isBaby && savedNbt != null) {
+            int count = savedNbt.m_128451_("IchorCount");
+            int cd = savedNbt.m_128451_("IchorCooldown");
             ichorState = (byte) ((count > 0 && cd <= 0) ? 3 : 0);
         }
 
@@ -226,7 +310,7 @@ public final class AnimalStatusSync {
         if (hasMagic) flags |= FLAG_HAS_MAGIC;
 
         return new AnimalSnapshot(
-                animal.m_19879_(), (byte) flags,
+                entityId, (byte) flags,
                 ageLastMilked, timeLastMilked,
                 ageLastMagic, timeLastMagic,
                 ageLastFed, (byte) hearts, ichorState
@@ -236,6 +320,9 @@ public final class AnimalStatusSync {
     private static long resolveActionTick(CompoundTag data, String dayKey, String tickKey,
                                         boolean hasDay, int actionDay, long currentDay, long dayTime) {
         if (!hasDay || actionDay <= 0) return 0L;
+        if (data == null) {
+            return (actionDay == currentDay) ? dayTime : (actionDay - 1L) * TICKS_PER_DAY;
+        }
         if (data.m_128441_(dayKey) && data.m_128451_(dayKey) == actionDay) {
             return data.m_128454_(tickKey);
         }
@@ -264,9 +351,10 @@ public final class AnimalStatusSync {
         public boolean hasMagicTag() { return (flags & FLAG_HAS_MAGIC) != 0; }
     }
 
-    public record StatusPacket(ResourceLocation dimension, List<AnimalSnapshot> entries) {
+    public record StatusPacket(ResourceLocation dimension, long serverDayTime, List<AnimalSnapshot> entries) {
         public static void encode(StatusPacket packet, FriendlyByteBuf out) {
             out.m_130085_(packet.dimension);
+            out.writeLong(packet.serverDayTime);
             out.writeInt(packet.entries.size());
             for (AnimalSnapshot e : packet.entries) {
                 out.writeInt(e.entityId);
@@ -283,6 +371,7 @@ public final class AnimalStatusSync {
 
         public static StatusPacket decode(FriendlyByteBuf in) {
             ResourceLocation dim = in.m_130281_();
+            long serverDayTime = in.readLong();
             int count = Math.max(0, Math.min(1024, in.readInt()));
             List<AnimalSnapshot> entries = new ArrayList<>(count);
             for (int i = 0; i < count; i++) {
@@ -298,7 +387,7 @@ public final class AnimalStatusSync {
                         in.readByte()
                 ));
             }
-            return new StatusPacket(dim, entries);
+            return new StatusPacket(dim, serverDayTime, entries);
         }
 
         public static void handle(StatusPacket packet, Supplier<NetworkEvent.Context> supplier) {
