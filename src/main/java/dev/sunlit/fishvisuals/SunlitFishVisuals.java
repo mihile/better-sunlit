@@ -244,15 +244,8 @@ public final class SunlitFishVisuals {
                 float strength=state.timing.strength(now-state.landedAt);
                 long remaining=state.timing.totalTicks()-(now-state.landedAt);
                 if (strength>0 && remaining>=7 && item.m_20096_() && now>=state.nextKickAt && !item.m_20069_()) {
-                    if (state.animationVersion == 2 && CatchModelIds.LEECH.equals(state.model)) {
-                        crawl(level, state, strength);
-                        item.f_19812_ = true;
-                        recordKick(level, state, strength, now);
-                    } else {
-                        hop(level,state,strength,now);
-                    }
-                } else if (item.m_20096_() && !(state.animationVersion == 2 && CatchModelIds.LEECH.equals(state.model)
-                        && state.kickAt >= 0 && now - state.kickAt < 8 && strength > 0)) {
+                    hop(level,state,strength,now);
+                } else if (item.m_20096_()) {
                     // No item sliding/bobbing between kicks; a spent fish remains a fish until pickup.
                     // Tell clients when a hop's remaining sideways velocity is cancelled, so they
                     // do not keep extrapolating the old motion and snap back between flops.
@@ -263,31 +256,6 @@ public final class SunlitFishVisuals {
                 }
             }
         }
-    }
-
-    private static void crawl(ServerLevel level, CatchState state, float strength) {
-        ItemEntity item = state.item;
-        // Advance along the rendered head direction and let ground friction slow
-        // the short stroke. Probe the whole possible runout before moving.
-        double heading = Math.toRadians(state.yaw);
-        double dx = -Math.sin(heading), dz = Math.cos(heading);
-        double speed = .045 * strength;
-        double distance = 8 * speed;
-        for (int i = 1; i <= 3; i++) {
-            double x = item.m_20185_() + dx * distance * i / 3;
-            double z = item.m_20189_() + dz * distance * i / 3;
-            double y = item.m_20186_();
-            var floor = level.m_45547_(new ClipContext(new Vec3(x, y + .06, z), new Vec3(x, y - .06, z),
-                    ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, item));
-            if (floor.m_6662_() != HitResult.Type.BLOCK || floor.m_82434_() != Direction.UP
-                    || Math.abs(floor.m_82450_().f_82480_ - y) > .025
-                    || !level.m_6425_(BlockPos.m_274561_(x, y + .01, z)).m_76178_()
-                    || Math.hypot(x - state.anchor.f_82479_, z - state.anchor.f_82481_) > 1.4) {
-                item.m_20256_(Vec3.f_82478_);
-                return;
-            }
-        }
-        item.m_20256_(new Vec3(dx * speed, 0, dz * speed));
     }
 
     private static void hop(ServerLevel level, CatchState state, float strength, long now) {
@@ -311,22 +279,18 @@ public final class SunlitFishVisuals {
         }
         item.m_20256_(new Vec3(vx,height,vz));
         item.f_19812_=true;
+        state.kickAt=now;state.kickStrength=strength;
+        int interval = state.animationVersion == 2 ? 16 + random.m_188503_(8) : 11 + random.m_188503_(3);
+        state.nextKickAt = now + interval + Math.round(32 * (1 - strength));
         if (vx*vx+vz*vz>0.00001) {
             float desired=(float)Math.toDegrees(Math.atan2(-vx,vz));
             float delta=(((desired-state.yaw)%360+540)%360)-180;
             state.yaw+=Math.max(-28,Math.min(28,delta));
         }
-        recordKick(level, state, strength, now);
-        var sound=ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation("minecraft:entity.cod.flop"));
-        if(sound!=null) level.m_6263_(null,item.m_20185_(),item.m_20186_(),item.m_20189_(),sound,SoundSource.NEUTRAL,0.35F*strength,0.85F+0.2F*strength);
-    }
-
-    private static void recordKick(ServerLevel level, CatchState state, float strength, long now) {
-        state.kickAt=now;state.kickStrength=strength;
-        int interval = state.animationVersion == 2 ? 16 + level.f_46441_.m_188503_(8) : 11 + level.f_46441_.m_188503_(3);
-        state.nextKickAt = now + interval + Math.round(32 * (1 - strength));
         save(state);
         broadcast(level,state);
+        var sound=ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation("minecraft:entity.cod.flop"));
+        if(sound!=null) level.m_6263_(null,item.m_20185_(),item.m_20186_(),item.m_20189_(),sound,SoundSource.NEUTRAL,0.35F*strength,0.85F+0.2F*strength);
     }
 
     private static void send(ServerPlayer player,CatchState state) {

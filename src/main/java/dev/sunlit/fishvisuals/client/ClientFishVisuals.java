@@ -109,7 +109,7 @@ public final class ClientFishVisuals {
         double now = currentLevel.m_46467_() + partialTick;
         pose.m_85836_();
         try {
-            if (visual.custom == null && visual.proxy == null) {
+            if (visual.proxy == null) {
                 EntityType<?> type = CatchModelIds.entityType(visual.model);
                 Entity proxy = type == null ? null : type.m_20615_(currentLevel);
                 if (!(proxy instanceof LivingEntity)) {
@@ -123,11 +123,6 @@ public final class ClientFishVisuals {
             boolean landed = visual.landedAt >= 0;
             double elapsed = landed ? Math.max(0, now - visual.landedAt) : 0;
             double remaining = visual.timing.totalTicks() - elapsed;
-            if (visual.animationVersion == 2 && CatchModelIds.LEECH.equals(visual.model)) {
-                visual.custom.drawLeech(pose, buffers, light, yaw, item.f_19797_ + partialTick,
-                        landed ? elapsed : -1, now - visual.kickAt, remaining, visual.kickStrength);
-                return true;
-            }
             int side = (item.m_20148_().getLeastSignificantBits() & 1) == 0 ? 1 : -1;
             // Version 1 flops the whole fish, so its individual model parts use their rest pose.
             FishFlopMotion flop = FishFlopMotion.STILL;
@@ -147,17 +142,9 @@ public final class ClientFishVisuals {
                             .rotateX((float)Math.toRadians(-4 * settle)).rotateY(heading));
                 }
             } else {
-                float size = visual.custom == null ? Math.max(proxy.m_20205_(), proxy.m_20206_()) : visual.custom.size();
+                float size = Math.max(proxy.m_20205_(), proxy.m_20206_());
                 flop = FishFlopMotion.sample(landed, landed ? elapsed : item.f_19797_ + partialTick, now - visual.kickAt,
                         visual.kickAt < 0 ? 0 : visual.kickStrength, remaining, size, landed ? side * visual.flopSide : side);
-            }
-            if (visual.custom != null) {
-                FishMeshBend mesh = flop == FishFlopMotion.STILL ? null
-                        : new FishMeshBend(buffers, pose.m_85850_().m_252922_(), yaw);
-                visual.custom.draw(pose, mesh == null ? buffers : mesh, light, yaw,
-                        landed ? (float)Math.min(1, elapsed / 3) : 0);
-                if (mesh != null) mesh.draw(flop);
-                return true;
             }
             proxy.m_20219_(item.m_20182_());
             // The real item still moves. Its render proxy must not advance the normal swim cycle.
@@ -194,7 +181,6 @@ public final class ClientFishVisuals {
 
     private static final class Visual {
         final ResourceLocation model;
-        final CustomCatchModel custom;
         final float geoGroundRoll;
         int entityId;
         long receivedAt;
@@ -224,7 +210,6 @@ public final class ClientFishVisuals {
         }
         Visual(ResourceLocation model) {
             this.model = model;
-            this.custom = CustomCatchModel.get(model);
             this.geoGroundRoll = CaughtFishPose.groundRoll(model);
         }
     }
