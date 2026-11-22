@@ -18,7 +18,8 @@ argfile.write_text('\n'.join('"'+str(a).replace('\\','/')+'"' for a in options),
 subprocess.run([jdk/'javac.exe','-J-Dfile.encoding=UTF-8','@'+str(argfile)], check=True)
 base = [p for p in cp if not Path(p).name.startswith(('entity_model_features','entity_texture_features'))]
 (out/'classpath.txt').write_text('\n'.join(base), encoding='utf8')
-runtime = [str(out),*cp]
+io_jar = instance.parents[1] / 'libraries/commons-io/commons-io/2.11.0/commons-io-2.11.0.jar'
+runtime = [str(out),*cp,str(io_jar)]
 line = 'Class-Path: '+' '.join(Path(p).resolve().as_uri()+('/' if Path(p).is_dir() else '') for p in runtime)
 wrapped=[line[:70]];line=line[70:]
 while line:wrapped.append(' '+line[:69]);line=line[69:]
@@ -30,3 +31,6 @@ new_emf=next((instance/'minecraft/mods').glob('entity_model_features-3.3.12-*.ja
 new_etf=next((instance/'minecraft/mods').glob('entity_texture_features-7.2.7-*.jar'))
 subprocess.run([jdk/'java.exe','-Xmx512m','-Djava.awt.headless=true','-cp',bridge,'EmfCompatibilityTests',
                 old_emf,old_etf,new_emf,new_etf,out/'classpath.txt',out/'changed'],check=True)
+subprocess.run([jdk/'java.exe','-Xmx512m','-Djava.awt.headless=true','-cp',bridge,
+                'RottenCreaturesModelCompatTests',
+                instance/'minecraft/resourcepacks/Fresh Patch - Rotten Creatures.zip'],check=True)

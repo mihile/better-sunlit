@@ -22,7 +22,7 @@ assert len(common_mixins) == 39 and "DewDropSprinklerMixin" in common_mixins, co
 assert {"PerfQuarkSharedChatMixin", "PerfJourneyMapResetMixin", "PerfQuickPackMixin", "PerfObjTokenizerMixin", "PerfCodepointMapMixin"}.issubset(client_mixins)
 assert len(client_mixins) == 142 and {
     "EmiItemLookupMixin", "EmiCraftingSpecAccessor", "EmiSpecRecipeFillerMixin",
-    "PerfMysticalOakTreeLoreMixin", "BurnedModelCompatMixin",
+    "PerfMysticalOakTreeLoreMixin", "RottenCreaturesModelCompatMixin",
 }.issubset(client_mixins), client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
