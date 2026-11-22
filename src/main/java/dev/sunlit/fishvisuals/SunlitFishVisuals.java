@@ -244,7 +244,14 @@ public final class SunlitFishVisuals {
                 float strength=state.timing.strength(now-state.landedAt);
                 long remaining=state.timing.totalTicks()-(now-state.landedAt);
                 if (strength>0 && remaining>=7 && item.m_20096_() && now>=state.nextKickAt && !item.m_20069_()) {
-                    hop(level,state,strength,now);
+                    if (state.animationVersion == 2 && CatchModelIds.LEECH.equals(state.model)) {
+                        // A leech contracts against the ground. Keep the reward at its contact point.
+                        item.m_20256_(Vec3.f_82478_);
+                        item.f_19812_ = true;
+                        recordKick(level, state, strength, now);
+                    } else {
+                        hop(level,state,strength,now);
+                    }
                 } else if (item.m_20096_()) {
                     // No item sliding/bobbing between kicks; a spent fish remains a fish until pickup.
                     // Tell clients when a hop's remaining sideways velocity is cancelled, so they
@@ -279,18 +286,22 @@ public final class SunlitFishVisuals {
         }
         item.m_20256_(new Vec3(vx,height,vz));
         item.f_19812_=true;
-        state.kickAt=now;state.kickStrength=strength;
-        int interval = state.animationVersion == 2 ? 16 + random.m_188503_(8) : 11 + random.m_188503_(3);
-        state.nextKickAt = now + interval + Math.round(32 * (1 - strength));
         if (vx*vx+vz*vz>0.00001) {
             float desired=(float)Math.toDegrees(Math.atan2(-vx,vz));
             float delta=(((desired-state.yaw)%360+540)%360)-180;
             state.yaw+=Math.max(-28,Math.min(28,delta));
         }
-        save(state);
-        broadcast(level,state);
+        recordKick(level, state, strength, now);
         var sound=ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation("minecraft:entity.cod.flop"));
         if(sound!=null) level.m_6263_(null,item.m_20185_(),item.m_20186_(),item.m_20189_(),sound,SoundSource.NEUTRAL,0.35F*strength,0.85F+0.2F*strength);
+    }
+
+    private static void recordKick(ServerLevel level, CatchState state, float strength, long now) {
+        state.kickAt=now;state.kickStrength=strength;
+        int interval = state.animationVersion == 2 ? 16 + level.f_46441_.m_188503_(8) : 11 + level.f_46441_.m_188503_(3);
+        state.nextKickAt = now + interval + Math.round(32 * (1 - strength));
+        save(state);
+        broadcast(level,state);
     }
 
     private static void send(ServerPlayer player,CatchState state) {

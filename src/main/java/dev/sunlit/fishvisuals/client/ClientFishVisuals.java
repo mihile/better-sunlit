@@ -123,6 +123,11 @@ public final class ClientFishVisuals {
             boolean landed = visual.landedAt >= 0;
             double elapsed = landed ? Math.max(0, now - visual.landedAt) : 0;
             double remaining = visual.timing.totalTicks() - elapsed;
+            if (visual.animationVersion == 2 && CatchModelIds.LEECH.equals(visual.model)) {
+                visual.custom.drawLeech(pose, buffers, light, yaw, item.f_19797_ + partialTick,
+                        landed ? elapsed : -1, now - visual.kickAt, remaining, visual.kickStrength);
+                return true;
+            }
             int side = (item.m_20148_().getLeastSignificantBits() & 1) == 0 ? 1 : -1;
             // Version 1 flops the whole fish, so its individual model parts use their rest pose.
             FishFlopMotion flop = FishFlopMotion.STILL;
