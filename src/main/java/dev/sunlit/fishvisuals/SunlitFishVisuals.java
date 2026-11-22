@@ -74,6 +74,7 @@ public final class SunlitFishVisuals {
         net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus()
                 .addListener(dev.sunlit.bettersunlit.perf.LogBegonePerf::onConfigEvent);
         FishingSettings.load();
+        dev.sunlit.bettersunlit.husbandry.AnimalStatusSync.register();
         LOG.info("Sunlit Fishing Visuals 1.2.4: pickup allowed when fading begins; {}",FishingSettings.current().description());
     }
 
