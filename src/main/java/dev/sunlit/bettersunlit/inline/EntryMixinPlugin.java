@@ -376,6 +376,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  && matchesLegacy("net.irisshaders.iris.gl.sampler.SamplerBinding","657b4df206fd2cbbfc5d0ea2a83cbb0014114ebe3e0507d994bdbcb62d79c643")
                  && matchesLegacy("net.irisshaders.iris.gl.state.ValueUpdateNotifier","5e91d814140e4db643f9af65a7f7b6af9a62fce26666395db9f0e1558a442e93");
             case "PerfOculusSamplerUnbindMixin" -> matchesLegacy(target,"7c33c255ee78762039be84cdef06724a7b8674bc1848ea20c02b7fec06ede83e");
+            case "BurnedModelCompatMixin" -> matches(target);
             case "LegacyEmfModelPartMixin" -> matchesLegacy(target,"8b0f4741818980e7d8704bb86f42e46c98efda1c7d103fd4ebbae41d8994ed90") && matches("com.mojang.blaze3d.vertex.PoseStack") && matches("org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack");
             case "LegacyParticleSpawnerMixin" -> hasWrapMethodApi() && matchesLegacy(target,"1f5457b859c9996f8941980a077fd068971b8c07c47b60f34dc328ec2d4f0750");
             case "LegacyCustomParticleMixin" -> matchesLegacy(target,"2f3f8e3d43f975a9d9177f4f2d18609beccfb1b00c54161e4e087a3b8ffc868a");

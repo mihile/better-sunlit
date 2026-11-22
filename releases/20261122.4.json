@@ -6,6 +6,10 @@
     {
       "title": "가축 도구 쿨타임·상태 동기화 오류 수정",
       "detail": "KubeJS 동물 데이터가 ForgeData가 아닌 KubeJSPersistentData에 저장되는 문제를 해결해 우유 짜기·마법 가위·배고픔·호감도·시간 동기화 상태가 머리 위 아이콘에 즉시 반영되도록 수정했습니다."
+    },
+    {
+      "title": "불탄 좀비 모델 분리 수정",
+      "detail": "기존 Rotten Creatures용 Fresh Animations 팩에서 불탄 좀비의 머리와 팔다리가 떨어져 보이던 문제를 클라이언트에서 보정합니다."
     }
   ]
 }
