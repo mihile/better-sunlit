@@ -207,6 +207,14 @@ public class VerifyBootAgent {
         String fml = args[2];
         String mixin = args[3];
 
+        // ModLauncher marks a class as loaded in its AFTER phase. Doing this during handlesClass
+        // makes the first class to trigger Mixin preparation look as if it was already defined.
+        String tracker = "org/spongepowered/asm/service/modlauncher/ModLauncherClassTracker";
+        if (new dev.sunlit.bootagent.SunlitBootTransformer().transform(null, null, tracker, null, null,
+                readZip(mixin, tracker + ".class")) != null) {
+            throw new AssertionError("Mixin class tracking must retain ModLauncher's AFTER phase");
+        }
+
         Path fmlCore = Path.of(libs, "net/minecraftforge/fmlcore/1.20.1-47.4.0/fmlcore-1.20.1-47.4.0.jar");
         byte[] modList = readZip(fmlCore.toString(), "net/minecraftforge/fml/ModList.class");
         if (new dev.sunlit.bootagent.SunlitBootTransformer().transform(
