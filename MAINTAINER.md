@@ -91,7 +91,7 @@ python tools/publish.py --side client --changes releases/20261108.2.json
 
 ## EMF 모델 사전 베이크 호환
 
-EMF 3.2.4 / ETF 7.1 및 EMF 3.3.12 / ETF 7.2.7을 검증합니다. `EmfLoadingContext`는 모델 로딩 상태의 실제 필드 형식(String 또는 ThreadLocal)을 시작 시 한 번 해석합니다. 일반 모델 형상 베이크는 두 버전 모두 병렬로 유지합니다. EMF 모델 생성까지 병렬로 처리하려면 ThreadLocal 형식과 실제 적용된 EMF·ETF 동시성 보완 Mixin의 표식이 모두 필요합니다. 공유 문자열을 사용하는 3.2.4에서는 원래 렌더 스레드의 EMF/Fusion 후처리를 한 번 수행하며, 원본 모델을 EMF 처리 완료 모델로 잘못 전달하지 않습니다. 미검토 EMF·ETF 바이너리에는 EntityModelSet 최적화를 적용하지 않습니다.
+EMF 3.2.4 / ETF 7.1 및 EMF 3.3.12 / ETF 7.2.7을 검증합니다. `EmfLoadingContext`는 모델 로딩 상태의 실제 필드 형식(String 또는 ThreadLocal)을 시작 시 한 번 해석합니다. 일반 모델 형상 베이크는 두 버전 모두 병렬로 유지합니다. EMF 모델 생성까지 병렬로 처리하려면 ThreadLocal 형식과 실제 적용된 EMF·ETF 동시성 보완 Mixin의 표식이 모두 필요합니다. 공유 문자열을 사용하는 3.2.4에서는 원래 렌더 스레드의 EMF/Fusion 후처리를 한 번 수행하며, 원본 모델을 EMF 처리 완료 모델로 잘못 전달하지 않습니다. 미검토 EMF·ETF 바이너리에는 EntityModelSet 최적화를 적용하지 않습니다. EMF는 애니메이션 식을 검사할 때 매니저의 검증 플래그를 공유하므로, 애니메이션 설정은 매니저마다 한 번에 하나씩 실행합니다. 모델 형상 베이크는 계속 병렬로 처리합니다.
 
 ## 원본 팩 최적화 호환 (2026.11.18.1)
 

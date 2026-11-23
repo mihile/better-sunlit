@@ -1,5 +1,7 @@
 package dev.sunlit.fishvisuals.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.sunlit.bettersunlit.client.EmfModelPrebakePerf;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
@@ -65,6 +67,15 @@ public abstract class PerfEmfManagerInitMixin implements dev.sunlit.bettersunlit
         this.EBE_JEMS_FOUND_LAST = ConcurrentHashMap.newKeySet();
         this.EBE_JEMS_FOUND = ConcurrentHashMap.newKeySet();
         this.loadingExceptions = new CopyOnWriteArrayList<>();
+    }
+
+    @WrapMethod(method = "setupAnimationsFromJemToModel", require = 1)
+    private void sunlit$validateAnimationsSerially(
+            EMFJemData jem, EMFModelPartRoot model, int variant, Operation<Void> original) {
+        // EMF's expression evaluator reads a validation flag shared by all models on this manager.
+        synchronized (this) {
+            original.call(jem, model, variant);
+        }
     }
 
     @Inject(method = "injectIntoModelRootGetter", at = @At("HEAD"), cancellable = true)

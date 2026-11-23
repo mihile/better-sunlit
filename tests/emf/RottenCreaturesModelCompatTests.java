@@ -22,7 +22,6 @@ public final class RottenCreaturesModelCompatTests {
     private static final String PATCH_ASSETS = "/assets/better_sunlit/compat/rottencreatures/";
     private static final List<String> MODELS = List.of(
             "burned", "frostbitten", "immortal", "immortal_overlay", "mummy", "swampy", "undead_miner", "zap");
-    private static final List<String> INLINE_ANIMATIONS = List.of("immortal", "immortal_overlay", "mummy");
 
     public static void main(String[] args) throws Exception {
         Path base = Path.of(args[0]);
@@ -93,8 +92,7 @@ public final class RottenCreaturesModelCompatTests {
             EMFJemData model = new Gson().fromJson(reader, EMFJemData.class);
             check(model.models.size() >= 3 && model.textureSize.length == 2, name + " parses as an EMF model");
             var root = model.models.stream().filter(part -> "root".equals(part.id)).findFirst().orElseThrow();
-            check(INLINE_ANIMATIONS.contains(name) ? root.model.isEmpty() && root.animations.size() == 5
-                    : root.model != null && root.model.endsWith("_animations.jpm"), name + " animation source");
+            check(root.model.isEmpty() && root.animations.size() == 5, name + " embedded animation sequence");
         }
     }
 

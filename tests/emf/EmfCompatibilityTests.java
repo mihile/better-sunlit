@@ -88,6 +88,61 @@ public final class EmfCompatibilityTests {
                 check(!f.name.equals("currentSpecifiedModelLoading"),"compiled helper retains version-specific field link");
         for(String[] pair:new String[][]{{"PerfEmfManagerInitMixin","ConcurrentModelManager"},{"PerfEtfManagerInitMixin","ConcurrentTextureManager"}})
             check(node(resource("dev.sunlit.fishvisuals.mixin."+pair[0])).interfaces.contains("dev/sunlit/bettersunlit/client/EmfLoadingContext$"+pair[1]),"actual mixin missing concurrency marker");
+        prepareAnimationFixture(newEmf, Path.of(args[6]));
         System.out.println("PASS: "+checks+" EMF compatibility checks; actual 3.2.4/3.3.12 binaries, context isolation and dependency gates; no game launched.");
     }
+    private static void prepareAnimationFixture(Path actualEmf, Path fixture) throws Exception {
+        // Apply the ModelPart access transformation normally supplied by Forge.
+        String modelPart = "net.minecraft.client.model.geom.ModelPart";
+        ClassNode part = node(resource(modelPart));
+        part.access &= ~Opcodes.ACC_FINAL;
+        writeFixture(fixture, part);
+
+        // Keep EMF's actual shared flag and expression evaluation. The standalone test
+        // does not have Forge's active mod list for the two optional-mod constructor probes.
+        ClassNode manager;
+        try (var jar = new JarFile(actualEmf.toFile());
+             var source = jar.getInputStream(jar.getJarEntry("traben/entity_model_features/EMFManager.class"))) {
+            manager = node(source.readAllBytes());
+        }
+        int probes = 0;
+        for (MethodNode constructor : manager.methods) {
+            if (!constructor.name.equals("<init>")) continue;
+            for (AbstractInsnNode instruction : constructor.instructions.toArray()) {
+                if (instruction instanceof MethodInsnNode call && call.name.equals("isThisModLoaded")
+                        && call.owner.equals("traben/entity_texture_features/ETF")
+                        && call.desc.equals("(Ljava/lang/String;)Z")) {
+                    constructor.instructions.insertBefore(call, new InsnNode(Opcodes.POP));
+                    constructor.instructions.set(call, new InsnNode(Opcodes.ICONST_0));
+                    probes++;
+                }
+            }
+        }
+        check(probes == 2, "unexpected optional-mod probes in actual EMF constructor");
+        var initializer = manager.methods.stream().filter(m -> m.name.equals("<clinit>")).findFirst().orElseThrow();
+        for (AbstractInsnNode instruction : initializer.instructions.toArray()) {
+            if (instruction instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTSTATIC
+                    && field.name.equals("EBETypes")) {
+                // The block entity registry is irrelevant to animation expression validation.
+                for (AbstractInsnNode previous = initializer.instructions.getFirst(); previous != field; ) {
+                    AbstractInsnNode next = previous.getNext();
+                    if (previous.getOpcode() >= 0) initializer.instructions.remove(previous);
+                    previous = next;
+                }
+                initializer.instructions.insertBefore(field,
+                        new MethodInsnNode(Opcodes.INVOKESTATIC, "java/util/Map", "of", "()Ljava/util/Map;", true));
+                break;
+            }
+        }
+        writeFixture(fixture, manager);
+    }
+
+    private static void writeFixture(Path root, ClassNode source) throws Exception {
+        Path output = root.resolve(source.name + ".class");
+        Files.createDirectories(output.getParent());
+        var writer = new ClassWriter(0);
+        source.accept(writer);
+        Files.write(output, writer.toByteArray());
+    }
+
 }
