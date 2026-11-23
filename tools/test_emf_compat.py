@@ -19,7 +19,9 @@ subprocess.run([jdk/'javac.exe','-J-Dfile.encoding=UTF-8','@'+str(argfile)], che
 base = [p for p in cp if not Path(p).name.startswith(('entity_model_features','entity_texture_features'))]
 (out/'classpath.txt').write_text('\n'.join(base), encoding='utf8')
 io_jar = instance.parents[1] / 'libraries/commons-io/commons-io/2.11.0/commons-io-2.11.0.jar'
-runtime = [str(out),*cp,str(io_jar)]
+fixture = out/'animation-fixture'
+fixture.mkdir(exist_ok=True)
+runtime = [str(out),str(fixture),*cp,str(io_jar)]
 line = 'Class-Path: '+' '.join(Path(p).resolve().as_uri()+('/' if Path(p).is_dir() else '') for p in runtime)
 wrapped=[line[:70]];line=line[70:]
 while line:wrapped.append(' '+line[:69]);line=line[69:]
@@ -30,7 +32,9 @@ old_etf=next((legacy/'minecraft/mods').glob('entity_texture_features*7.1.jar'))
 new_emf=next((instance/'minecraft/mods').glob('entity_model_features-3.3.12-*.jar'))
 new_etf=next((instance/'minecraft/mods').glob('entity_texture_features-7.2.7-*.jar'))
 subprocess.run([jdk/'java.exe','-Xmx512m','-Djava.awt.headless=true','-cp',bridge,'EmfCompatibilityTests',
-                old_emf,old_etf,new_emf,new_etf,out/'classpath.txt',out/'changed'],check=True)
+                old_emf,old_etf,new_emf,new_etf,out/'classpath.txt',out/'changed',fixture],check=True)
+subprocess.run([jdk/'java.exe','-Xmx512m','-Djava.awt.headless=true','-cp',bridge,
+                'EmfAnimationValidationTests'],check=True)
 subprocess.run([jdk/'java.exe','-Xmx512m','-Djava.awt.headless=true','-cp',bridge,
                 'RottenCreaturesModelCompatTests',
                 instance/'minecraft/resourcepacks/Fresh Patch - Rotten Creatures.zip'],check=True)
