@@ -365,6 +365,56 @@ public final class BackpackShapePerf {
         }
     }
 
+    private static int appendRotatedCoords(AabbSignature sig, Direction dir, double[] dst, int pos) {
+        double[] coords = sig.coords;
+        for (int i = 0; i < coords.length; i += 6) {
+            double x1 = coords[i];
+            double y1 = coords[i + 1];
+            double z1 = coords[i + 2];
+            double x2 = coords[i + 3];
+            double y2 = coords[i + 4];
+            double z2 = coords[i + 5];
+            double rx1;
+            double rz1;
+            double rx2;
+            double rz2;
+            switch (dir) {
+                case EAST -> {
+                    rx1 = 1.0 - z2;
+                    rz1 = x1;
+                    rx2 = 1.0 - z1;
+                    rz2 = x2;
+                }
+                case SOUTH -> {
+                    rx1 = 1.0 - x2;
+                    rz1 = 1.0 - z2;
+                    rx2 = 1.0 - x1;
+                    rz2 = 1.0 - z1;
+                }
+                case WEST -> {
+                    rx1 = z1;
+                    rz1 = 1.0 - x2;
+                    rx2 = z2;
+                    rz2 = 1.0 - x1;
+                }
+                default -> {
+                    rx1 = x1;
+                    rz1 = z1;
+                    rx2 = x2;
+                    rz2 = z2;
+                }
+            }
+            dst[pos] = Math.min(rx1, rx2);
+            dst[pos + 1] = Math.min(y1, y2);
+            dst[pos + 2] = Math.min(rz1, rz2);
+            dst[pos + 3] = Math.max(rx1, rx2);
+            dst[pos + 4] = Math.max(y1, y2);
+            dst[pos + 5] = Math.max(rz1, rz2);
+            pos += 6;
+        }
+        return pos;
+    }
+
     private record GeometryKey(
             AabbSignature base,
             AabbSignature left,
@@ -383,6 +433,15 @@ public final class BackpackShapePerf {
             int totalBoxes = (base.coords.length + left.coords.length + right.coords.length + front.coords.length) / 6;
             if (totalBoxes == 0) {
                 return Shapes.m_83040_();
+            }
+            double[] rotated = new double[totalBoxes * 6];
+            int pos = appendRotatedCoords(base, dir, rotated, 0);
+            pos = appendRotatedCoords(left, dir, rotated, pos);
+            pos = appendRotatedCoords(right, dir, rotated, pos);
+            pos = appendRotatedCoords(front, dir, rotated, pos);
+            VoxelShape fast = dev.sunlit.bettersunlit.perf.VoxelOptimizePerf.orBoxes(rotated, totalBoxes);
+            if (fast != null) {
+                return fast;
             }
             List<VoxelShape> boxes = new ArrayList<>(totalBoxes);
             appendRotatedBoxes(base, dir, boxes);

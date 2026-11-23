@@ -1,6 +1,10 @@
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import dev.sunlit.bettersunlit.client.ClientPostApplyPatches;
+import dev.sunlit.bettersunlit.client.EmfValidationScope;
 import dev.sunlit.fishvisuals.mixin.PerfEmfManagerInitMixin;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.ClassNode;
 import traben.entity_model_features.EMFManager;
 import traben.entity_model_features.models.animation.math.asm.ASMVariableHandler;
 import traben.entity_model_features.models.animation.math.expression_tree.MathComponent;
@@ -92,7 +96,51 @@ public final class EmfAnimationValidationTests {
             releaseFirst.countDown();
         }
         check(!manager.isAnimationValidationPhase, "validation flag left enabled");
+        testScopedValidation(manager);
         System.out.println("PASS: real EMF divide-by-zero validation race reproduced and serialized wrapper verified.");
+    }
+
+    private static void testScopedValidation(EMFManager manager) throws Exception {
+        String root = "traben/entity_model_features/";
+        String math = root + "models/animation/math/";
+        String[] targets = {root + "EMFManager", math + "asm/ASMHelper", math + "expression_tree/MathOperator$4",
+                math + "expression_tree/MathOperator$5", math + "methods/optifine/PrintBMethod",
+                math + "methods/optifine/PrintMethod", math + "variables/VariableRegistry"};
+        for (String target : targets) {
+            var node = new ClassNode();
+            try (var in = manager.getClass().getClassLoader().getResourceAsStream(target + ".class")) {
+                new ClassReader(in).accept(node, 0);
+            }
+            ClientPostApplyPatches.patchEmfValidationFlag(node);
+            check(node.fields.stream().anyMatch(f -> f.name.equals("sunlit$scopedAnimationValidation")),
+                    "Missing scoped flag marker for " + target);
+        }
+        check(!EmfValidationScope.ready(manager), "An unpatched EMF instance must use the serial wrapper");
+
+        var entered = new CountDownLatch(1);
+        var peerDone = new CountDownLatch(1);
+        var first = new FutureTask<>(() -> EmfValidationScope.bake(manager, () -> {
+            EmfValidationScope.write(manager, true);
+            entered.countDown();
+            await(peerDone);
+            check(EmfValidationScope.read(manager), "Another worker reset the local flag");
+            check(!manager.isAnimationValidationPhase, "A worker wrote the shared flag");
+            return null;
+        }));
+        new Thread(first, "scoped-animation").start();
+        try {
+            await(entered);
+            check(!EmfValidationScope.read(manager), "Caller inherited a worker validation scope");
+            EmfValidationScope.bake(manager, () -> {
+                EmfValidationScope.write(manager, true);
+                EmfValidationScope.write(manager, false);
+                return null;
+            });
+            check(!EmfValidationScope.isScoped(manager), "Caller scope leaked");
+        } finally {
+            peerDone.countDown();
+        }
+        first.get(5, TimeUnit.SECONDS);
     }
 
     private static float divide() {

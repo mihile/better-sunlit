@@ -269,6 +269,23 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("mezz.jei.api.constants.VanillaTypes$1","c84837d2b5a3ece3186c5f9c9112c709b6ea094d288ab2dcfeecab95595590f1"),
         Map.entry("mezz.jei.library.ingredients.itemStacks.TypedItemStack","d24191eb32f7f9b163fc08e2fbf26969b4dd8d357d5c2d756788b2c044b071cb"),
         Map.entry("net.minecraft.world.item.ItemStack","c898ad391a70978d7e0d275e7387b61f04211ecc295f040b655c0b2b263ed0ba"));
+    private static final Map<String,String> EMF_VALIDATION_HASHES = Map.of(
+        "traben.entity_model_features.EMFManager", "819d94e3fc64b04cd8cfcebb73f1b894ff836e3a97be29762a60babe7c714d40",
+        "traben.entity_model_features.models.animation.math.asm.ASMHelper", "54e8e855e6ce0b851ab1650094330d7d93994326b65cdb0c9ec9573223f598a1",
+        "traben.entity_model_features.models.animation.math.expression_tree.MathOperator$4", "d1f3b5a79c55ba0ca489ec8903c0460e761d5918a781b084d859becccd16bbc2",
+        "traben.entity_model_features.models.animation.math.expression_tree.MathOperator$5", "ded608abbfa2f372b365b6326b1100fde94ff670cb27edae3e9a8dd8939253b2",
+        "traben.entity_model_features.models.animation.math.methods.optifine.PrintBMethod", "f194b322bf4d0e1052f4939cb08b97efead7cf16ee16b7f8a57f90fa2bbe514a",
+        "traben.entity_model_features.models.animation.math.methods.optifine.PrintMethod", "9fb933b95cc48f345125e38f0ab9956f920bef249e3a89118a2d3257ff881cbc",
+        "traben.entity_model_features.models.animation.math.variables.VariableRegistry", "2a97d39b2532710d28c12c496f18520cb097b2ad90f8b310a2143ae1b178a873");
+
+    private boolean emfValidationReviewed(String target) {
+        if (!EMF_VALIDATION_HASHES.containsKey(target)) return false;
+        for (var entry : EMF_VALIDATION_HASHES.entrySet()) {
+            if (!matchesLegacy(entry.getKey(), entry.getValue())) return false;
+        }
+        return true;
+    }
+
     private boolean plainUidReviewed() {
         for (var entry : JEI_UID_HASHES.entrySet()) if (!matchesLegacy(entry.getKey(),entry.getValue())) return false;
         return true;
@@ -378,6 +395,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfOculusSamplerUnbindMixin" -> matchesLegacy(target,"7c33c255ee78762039be84cdef06724a7b8674bc1848ea20c02b7fec06ede83e");
             case "RottenCreaturesModelCompatMixin" -> matches(target);
             case "PerfEmfManagerInitMixin" -> hasWrapMethodApi() && matches(target);
+            case "PerfEmfValidationFlagMixin" -> emfValidationReviewed(target);
             case "LegacyEmfModelPartMixin" -> matchesLegacy(target,"8b0f4741818980e7d8704bb86f42e46c98efda1c7d103fd4ebbae41d8994ed90") && matches("com.mojang.blaze3d.vertex.PoseStack") && matches("org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack");
             case "LegacyParticleSpawnerMixin" -> hasWrapMethodApi() && matchesLegacy(target,"1f5457b859c9996f8941980a077fd068971b8c07c47b60f34dc328ec2d4f0750");
             case "LegacyCustomParticleMixin" -> matchesLegacy(target,"2f3f8e3d43f975a9d9177f4f2d18609beccfb1b00c54161e4e087a3b8ffc868a");
@@ -605,6 +623,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfModelPartCubeMixin"->applyClientPatch("patchModelPartCube",targetClass);
             case "PerfEmfModelPartMixin", "LegacyEmfModelPartMixin"->applyClientPatch("patchEmfModelPart",targetClass);
             case "PerfEmfMathParserMixin"->applyClientPatch("patchMathExpressionParser",targetClass);
+            case "PerfEmfValidationFlagMixin"->applyClientPatch("patchEmfValidationFlag",targetClass);
             case "PerfEmojiFontRendererMixin"->applyClientPatch("patchEmojiFontRenderer",targetClass);
             case "PerfChunkBuilderMeshingTaskMixin"->applyClientPatch("patchChunkBuilderMeshingTask",targetClass);
             case "PerfPalettedContainerMixin"->applyClientPatch("patchPalettedContainer",targetClass);

@@ -4573,6 +4573,25 @@ public final class PerfOptTests {
                 assertTrue(fastMap.get(st.m_61148_()) == st, "byValues must map to same TestState instance");
             }
 
+            var firstRegistryStates = new java.util.ArrayList<TestState>();
+            var nextRegistryStates = new java.util.ArrayList<TestState>();
+            dev.sunlit.bettersunlit.perf.StateDefinitionPerf.beginRegistryMapReuse();
+            try {
+                dev.sunlit.bettersunlit.perf.StateDefinitionPerf.populateAllStates(
+                        propsByName, TestState::new, "first", null, new java.util.HashMap<>(), firstRegistryStates);
+                dev.sunlit.bettersunlit.perf.StateDefinitionPerf.populateAllStates(
+                        propsByName, TestState::new, "next", null, new java.util.HashMap<>(), nextRegistryStates);
+                assertEquals(refOrder, nextRegistryStates.stream().map(TestState::m_61148_).toList(),
+                        "Registry property templates must keep the original combination order");
+                for (int i = 0; i < refOrder.size(); i++) {
+                    assertTrue(firstRegistryStates.get(i) != nextRegistryStates.get(i)
+                                    && firstRegistryStates.get(i).m_61148_() == nextRegistryStates.get(i).m_61148_(),
+                            "Only immutable property maps may be shared across owners");
+                }
+            } finally {
+                dev.sunlit.bettersunlit.perf.StateDefinitionPerf.endRegistryMapReuse();
+            }
+
             java.util.List<TestState> emptyOrder = new java.util.ArrayList<>();
             java.util.Map<Map<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>>, TestState> emptyMap =
                     new java.util.LinkedHashMap<>();

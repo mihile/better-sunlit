@@ -22,5 +22,11 @@ public abstract class PerfGameDataMixin {
     @Inject(method = "postRegisterEvents", at = @At("HEAD"))
     private static void sunlit$scheduleRegistryWindowPreload(CallbackInfo ci) {
         StartupClassPreloadPerf.schedulePreload();
+        StateDefinitionPerf.beginRegistryMapReuse();
+    }
+
+    @Inject(method = "postRegisterEvents", at = @At("RETURN"))
+    private static void sunlit$discardRegistryMapTemplates(CallbackInfo ci) {
+        StateDefinitionPerf.endRegistryMapReuse();
     }
 }

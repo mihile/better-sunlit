@@ -10,8 +10,63 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Fails closed when executable instructions differ from the reviewed mod version. */
 public final class InlineMixinPlugin implements IMixinConfigPlugin {
+    private record Site(
+            String cls,
+            boolean clientOnly,
+            String selector,
+            String sourceMixin,
+            String classSha256,
+            String textHash,
+            String methodHash,
+            String target,
+            int ordinal,
+            String group,
+            String newOwner,
+            String newName,
+            String newDesc) {}
+
     private static final class Data {
         static final JsonArray SITES=InlineResources.read("assets/better_sunlit/inline/rules.json").getAsJsonArray("sites");
+        static final Map<String, Map<String, List<Site>>> BY_CLASS_SERVER;
+        static final Map<String, Map<String, List<Site>>> BY_CLASS_CLIENT;
+        static {
+            Map<String, Map<String, List<Site>>> srv = new HashMap<>(512);
+            Map<String, Map<String, List<Site>>> cli = new HashMap<>(768);
+            for (JsonElement e : SITES) {
+                JsonObject obj = e.getAsJsonObject();
+                String cls = obj.get("class").getAsString();
+                boolean clientOnly = obj.get("clientOnly").getAsBoolean();
+                String method = obj.get("method").getAsString();
+                String sourceMixin = obj.has("sourceMixin") ? obj.get("sourceMixin").getAsString() : null;
+                String selector = sourceMixin != null
+                        ? "@" + sourceMixin + method.substring(method.indexOf('('))
+                        : method;
+                Site s = new Site(
+                        cls,
+                        clientOnly,
+                        selector,
+                        sourceMixin,
+                        sourceMixin != null ? obj.get("classSha256").getAsString() : null,
+                        sourceMixin != null ? obj.get("textHash").getAsString() : null,
+                        sourceMixin == null ? obj.get("methodHash").getAsString() : null,
+                        obj.get("target").getAsString(),
+                        obj.get("ordinal").getAsInt(),
+                        obj.get("group").getAsString(),
+                        obj.get("newOwner").getAsString(),
+                        obj.get("newName").getAsString(),
+                        obj.get("newDesc").getAsString());
+                cli.computeIfAbsent(cls, k -> new HashMap<>(4))
+                        .computeIfAbsent(selector, k -> new ArrayList<>(2))
+                        .add(s);
+                if (!clientOnly) {
+                    srv.computeIfAbsent(cls, k -> new HashMap<>(4))
+                            .computeIfAbsent(selector, k -> new ArrayList<>(2))
+                            .add(s);
+                }
+            }
+            BY_CLASS_SERVER = srv;
+            BY_CLASS_CLIENT = cli;
+        }
     }
     private static final Map<String,String> sourceHashes=new ConcurrentHashMap<>();
     public static JsonArray sites() {
@@ -23,52 +78,66 @@ public final class InlineMixinPlugin implements IMixinConfigPlugin {
                 for(int i=0;i<annotation.values.size();i+=2)if(annotation.values.get(i).equals("mixin"))return annotation.values.get(i+1).toString().replace('.','/');
         return "";
     }
-    private static boolean sourceMatches(JsonObject site) {
-        String name=site.get("sourceMixin").getAsString();
+    private static boolean sourceMatches(Site site) {
+        String name=site.sourceMixin();
         String hash=sourceHashes.computeIfAbsent(name,n->{
             try(var stream=InlineMixinPlugin.class.getClassLoader().getResourceAsStream(n+".class")) {
                 return stream==null?"":InlineBytecode.sha256(stream.readAllBytes());
             }catch(java.io.IOException e){return "";}
         });
-        return hash.equals(site.get("classSha256").getAsString());
+        return hash.equals(site.classSha256());
     }
     public static int transform(ClassNode node,boolean client) {
-        Map<String,List<JsonObject>> planned=new HashMap<>();
-        for(JsonElement e:sites()) {
-            JsonObject site=e.getAsJsonObject();
-            if(!node.name.equals(site.get("class").getAsString())||(!client&&site.get("clientOnly").getAsBoolean()))continue;
-            String method=site.get("method").getAsString();
-            String selector=site.has("sourceMixin")?"@"+site.get("sourceMixin").getAsString()+method.substring(method.indexOf('(')):method;
-            planned.computeIfAbsent(selector,k->new ArrayList<>()).add(site);
+        Map<String, List<Site>> planned = (client ? Data.BY_CLASS_CLIENT : Data.BY_CLASS_SERVER).get(node.name);
+        if (planned == null || planned.isEmpty()) {
+            return 0;
         }
         int changed=0;
         for(MethodNode method:node.methods) {
-            List<JsonObject> choices=new ArrayList<>(planned.getOrDefault(method.name+method.desc,List.of()));
+            List<Site> direct = planned.get(method.name+method.desc);
             String origin=mergedFrom(method);
-            if(!origin.isEmpty())choices.addAll(planned.getOrDefault("@"+origin+method.desc,List.of()));
-            if(choices.isEmpty())continue;
+            List<Site> merged = origin.isEmpty() ? null : planned.get("@"+origin+method.desc);
+            if((direct == null || direct.isEmpty()) && (merged == null || merged.isEmpty())) continue;
+            List<Site> choices;
+            if (direct == null || direct.isEmpty()) {
+                choices = merged;
+            } else if (merged == null || merged.isEmpty()) {
+                choices = direct;
+            } else {
+                choices = new ArrayList<>(direct.size() + merged.size());
+                choices.addAll(direct);
+                choices.addAll(merged);
+            }
             String hash=InlineBytecode.hash(method);
-            List<JsonObject> matching=choices.stream().filter(s->s.has("sourceMixin")?
-                    sourceMatches(s)&&InlineBytecode.textHash(method).equals(s.get("textHash").getAsString()):hash.equals(s.get("methodHash").getAsString())).toList();
+            String tHash = null;
+            List<Site> matching = new ArrayList<>(choices.size());
+            for (Site s : choices) {
+                if (s.sourceMixin() != null) {
+                    if (tHash == null) tHash = InlineBytecode.textHash(method);
+                    if (sourceMatches(s) && tHash.equals(s.textHash())) matching.add(s);
+                } else if (hash.equals(s.methodHash())) {
+                    matching.add(s);
+                }
+            }
             if(matching.isEmpty()) {
                 LoggerFactory.getLogger("BetterSunlit/Localization").warn("Kept original text in changed method {}.{}",node.name,method.name);
                 continue;
             }
-            Map<String,JsonObject> byCall=new HashMap<>();
-            for(JsonObject site:matching)byCall.put(site.get("target").getAsString()+"#"+site.get("ordinal").getAsInt(),site);
-            Map<String,Integer> ordinals=new HashMap<>();List<Map.Entry<MethodInsnNode,JsonObject>> edits=new ArrayList<>();
+            Map<String,Site> byCall=new HashMap<>(matching.size() * 2);
+            for(Site site:matching)byCall.put(site.target()+"#"+site.ordinal(),site);
+            Map<String,Integer> ordinals=new HashMap<>();List<Map.Entry<MethodInsnNode,Site>> edits=new ArrayList<>(matching.size());
             for(AbstractInsnNode instruction:method.instructions)if(instruction instanceof MethodInsnNode call) {
                 String signature=call.owner+"."+call.name+call.desc;
                 int ordinal=ordinals.merge(signature,1,Integer::sum)-1;
-                JsonObject site=byCall.get(signature+"#"+ordinal);
+                Site site=byCall.get(signature+"#"+ordinal);
                 if(site!=null)edits.add(Map.entry(call,site));
             }
             if(edits.size()!=byCall.size())throw new IllegalStateException("Inline call-site guard mismatch in "+node.name+"."+method.name);
             for(var edit:edits) {
-                MethodInsnNode call=edit.getKey();JsonObject site=edit.getValue();
-                method.instructions.insertBefore(call,new LdcInsnNode(site.get("group").getAsString()));
-                call.setOpcode(Opcodes.INVOKESTATIC);call.owner=site.get("newOwner").getAsString();
-                call.name=site.get("newName").getAsString();call.desc=site.get("newDesc").getAsString();call.itf=false;
+                MethodInsnNode call=edit.getKey();Site site=edit.getValue();
+                method.instructions.insertBefore(call,new LdcInsnNode(site.group()));
+                call.setOpcode(Opcodes.INVOKESTATIC);call.owner=site.newOwner();
+                call.name=site.newName();call.desc=site.newDesc();call.itf=false;
                 method.maxStack+=1;changed++;
             }
         }

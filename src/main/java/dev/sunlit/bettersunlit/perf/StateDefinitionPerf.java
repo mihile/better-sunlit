@@ -6,6 +6,10 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.StateHolder;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 
 import java.lang.invoke.LambdaMetafactory;
@@ -41,6 +45,7 @@ public final class StateDefinitionPerf {
     private static volatile Thread SINGLE_STATE_THREAD;
     private static final List<Runnable> POST_CONSTRUCT_HOOKS = new ArrayList<>(4);
     private static volatile boolean POST_CONSTRUCT_FIRED;
+    private static final ThreadLocal<PropertyMapReuse> REGISTRY_MAPS = new ThreadLocal<>();
     private static final LayoutFn PRECOMPUTE_LAYOUT_FN;
     private static final BuildStateMapFn BUILD_STATE_MAP_FN;
     private static final ThreadLocal<?> LAST_FAST_STATE_MAP_TL;
@@ -177,6 +182,36 @@ public final class StateDefinitionPerf {
         return allStates;
     }
 
+    public static void beginRegistryMapReuse() {
+        REGISTRY_MAPS.set(new PropertyMapReuse());
+    }
+
+    public static void endRegistryMapReuse() {
+        REGISTRY_MAPS.remove();
+    }
+
+    private static final class PropertyMapReuse {
+        private PropertyMaps previous;
+    }
+
+    private record PropertyMaps(Property<?>[] properties, ImmutableMap<Property<?>, Comparable<?>>[] maps) {
+        boolean matches(Property<?>[] other) {
+            if (properties.length != other.length) return false;
+            for (int i = 0; i < properties.length; i++) if (properties[i] != other[i]) return false;
+            return true;
+        }
+    }
+
+    private static boolean hasStablePropertyValues(Property<?>[] properties, long count) {
+        if (count < 2 || count > 512) return false;
+        for (Property<?> property : properties) {
+            Class<?> type = property.getClass();
+            if (type != BooleanProperty.class && type != IntegerProperty.class
+                    && type != EnumProperty.class && type != DirectionProperty.class) return false;
+        }
+        return true;
+    }
+
     public static <O, S extends StateHolder<O, S>> void populateAllStates(
             ImmutableSortedMap<String, Property<?>> propertiesByName,
             StateDefinition.Factory<O, S> factory,
@@ -196,6 +231,7 @@ public final class StateDefinitionPerf {
         Property<?>[] props = new Property<?>[propCount];
         Comparable<?>[][] values = new Comparable<?>[propCount][];
         int pIdx = 0;
+        long totalStatesLong = 1L;
         for (Property<?> prop : propertiesByName.values()) {
             props[pIdx] = prop;
             Collection<? extends Comparable<?>> possible = prop.m_6908_();
@@ -203,8 +239,30 @@ public final class StateDefinitionPerf {
             if (values[pIdx].length == 0) {
                 return;
             }
+            totalStatesLong *= values[pIdx].length;
             pIdx++;
         }
+        if (statesOut instanceof ArrayList<?> statesArray
+                && totalStatesLong > 0L
+                && totalStatesLong <= Integer.MAX_VALUE - statesArray.size()) {
+            statesArray.ensureCapacity(statesArray.size() + (int) totalStatesLong);
+        }
+
+        var sharing = REGISTRY_MAPS.get();
+        PropertyMaps previous = sharing == null ? null : sharing.previous;
+        if (previous != null && previous.matches(props)) {
+            for (var propMap : previous.maps()) {
+                S state = factory.m_61106_(owner, propMap, codec);
+                byValues.put(propMap, state);
+                statesOut.add(state);
+            }
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        ImmutableMap<Property<?>, Comparable<?>>[] nextMaps = sharing != null && hasStablePropertyValues(props, totalStatesLong)
+                ? (ImmutableMap<Property<?>, Comparable<?>>[]) new ImmutableMap<?, ?>[(int) totalStatesLong]
+                : null;
+        int mapIndex = 0;
 
         Object[] stateVals = (propCount >= 2 && BUILD_STATE_MAP_FN != null)
                 ? new Object[propCount]
@@ -297,6 +355,7 @@ public final class StateDefinitionPerf {
                 }
             };
             }
+            if (nextMaps != null) nextMaps[mapIndex++] = propMap;
             S state = factory.m_61106_(owner, propMap, codec);
             byValues.put(propMap, state);
             statesOut.add(state);
@@ -313,5 +372,6 @@ public final class StateDefinitionPerf {
                 break;
             }
         }
+        if (nextMaps != null) sharing.previous = new PropertyMaps(props, nextMaps);
     }
 }

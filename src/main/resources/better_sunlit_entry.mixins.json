@@ -155,6 +155,7 @@
     "PerfForgeLayerDefinitionsMixin",
     "PerfDynamicBakedModelProviderMixin",
     "PerfEmfManagerInitMixin",
+    "PerfEmfValidationFlagMixin",
     "PerfEtfManagerInitMixin",
     "PerfEntityModelSetMixin",
     "PerfNativeImageAccessor",

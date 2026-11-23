@@ -9,22 +9,27 @@ import net.minecraftforge.client.ForgeHooksClient;
 import org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Parallelizes per-sprite mipmap generation and accelerates mipmap downsampling and Embeddium
  * sprite transparency scans via bulk row-major off-heap transfers and early exits.
  */
 public final class SpriteMipmapPerf {
+    private static final boolean LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
     private static final ThreadLocal<int[]> TL_SRC = ThreadLocal.withInitial(() -> new int[4096]);
     private static final ThreadLocal<int[]> TL_DST = ThreadLocal.withInitial(() -> new int[1024]);
     private static final float[] SRGB_TO_LINEAR = new float[256];
     private static final float[] SRGB_TO_LINEAR_QUARTER = new float[256];
     private static final float[] SRGB_TO_LINEAR_255 = new float[256];
+
+    private static final AtomicBoolean EXTENDED_PREWARMED = new AtomicBoolean(false);
 
     static {
         for (int i = 0; i < 256; i++) {
@@ -32,6 +37,141 @@ public final class SpriteMipmapPerf {
             SRGB_TO_LINEAR[i] = v;
             SRGB_TO_LINEAR_QUARTER[i] = v * 0.25F;
             SRGB_TO_LINEAR_255[i] = v * 255.0F;
+        }
+        prewarmOffHeapScans();
+    }
+
+    private static void prewarmOffHeapScans() {
+        if (!LITTLE_ENDIAN) {
+            return;
+        }
+        long ptr = 0L;
+        try {
+            ptr = MemoryUtil.nmemAlloc(32L);
+            if (ptr == 0L) {
+                return;
+            }
+            for (int i = 0; i < 256; i++) {
+                // Pattern 0: all opaque (8 pixels)
+                for (int p = 0; p < 8; p++) {
+                    MemoryUtil.memPutInt(ptr + ((long) p << 2), 0xFF204060);
+                }
+                processTransparentOffHeapLE(ptr, 8, false);
+                processTransparentOffHeapLE(ptr, 8, true);
+
+                // Pattern 1: cutout with opaque + transparent pixels (7 pixels to exercise odd tail)
+                MemoryUtil.memPutInt(ptr, 0);
+                MemoryUtil.memPutInt(ptr + 4L, 0xFF334455);
+                MemoryUtil.memPutInt(ptr + 8L, 0);
+                MemoryUtil.memPutInt(ptr + 12L, 0xFF556677);
+                MemoryUtil.memPutInt(ptr + 16L, 0);
+                MemoryUtil.memPutInt(ptr + 20L, 0xFF778899);
+                MemoryUtil.memPutInt(ptr + 24L, 0);
+                processTransparentOffHeapLE(ptr, 7, false);
+                processTransparentOffHeapLE(ptr, 7, true);
+
+                // Pattern 2: mixed opaque + translucent + zero alpha (7 pixels)
+                MemoryUtil.memPutInt(ptr, 0xFF102030);
+                MemoryUtil.memPutInt(ptr + 4L, 0x80405060);
+                MemoryUtil.memPutInt(ptr + 8L, 0);
+                MemoryUtil.memPutInt(ptr + 12L, 0xFF708090);
+                MemoryUtil.memPutInt(ptr + 16L, 0x40A0B0C0);
+                MemoryUtil.memPutInt(ptr + 20L, 0);
+                MemoryUtil.memPutInt(ptr + 24L, 0xFFD0E0F0);
+                processTransparentOffHeapLE(ptr, 7, false);
+                processTransparentOffHeapLE(ptr, 7, true);
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (ptr != 0L) {
+                try {
+                    MemoryUtil.nmemFree(ptr);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Background Tier-4 JIT warmup across realistic 16x16/32x32 pixel patterns so Graal compiles
+     * every fast-path and fallback loop of {@link #isOpaqueFastLE} and
+     * {@link #accumulateAndFillLE} before parallel sprite atlas stitching begins.
+     */
+    public static void prewarmExtendedOffHeap() {
+        if (!LITTLE_ENDIAN || !EXTENDED_PREWARMED.compareAndSet(false, true)) {
+            return;
+        }
+        long ptr = 0L;
+        try {
+            ptr = MemoryUtil.nmemAlloc(4096L);
+            if (ptr == 0L) {
+                return;
+            }
+            for (int i = 0; i < 2500; i++) {
+                int mode = i & 7;
+                if (mode == 0) {
+                    // 32x32 (1024 px): fully opaque -> Tier-4 compiles full-quad isOpaqueFastLE(true).
+                    for (int p = 0; p < 1024; p++) {
+                        MemoryUtil.memPutInt(ptr + ((long) p << 2), 0xFF284868);
+                    }
+                    processTransparentOffHeapLE(ptr, 1024, false);
+                    processTransparentOffHeapLE(ptr, 1024, true);
+                } else if (mode == 1) {
+                    // 16x16 (256 px): opaque except last pixel -> forces late loop exit.
+                    for (int p = 0; p < 255; p++) {
+                        MemoryUtil.memPutInt(ptr + ((long) p << 2), 0xFF305070);
+                    }
+                    MemoryUtil.memPutInt(ptr + (255L << 2), 0x80305070);
+                    processTransparentOffHeapLE(ptr, 256, false);
+                    processTransparentOffHeapLE(ptr, 256, true);
+                } else if (mode == 2 || mode == 3) {
+                    // 16x16 (256 px): mix of all-zero quads, all-opaque quads, and translucent pixels.
+                    for (int p = 0; p < 256; p++) {
+                        int mod = p & 15;
+                        int px;
+                        if (mod < 4) {
+                            px = 0;
+                        } else if (mod < 8) {
+                            px = 0xFF406080;
+                        } else if (mod < 12) {
+                            px = (mod & 1) == 0 ? 0xFF203040 : 0x80507090;
+                        } else {
+                            px = 0xFF708090;
+                        }
+                        MemoryUtil.memPutInt(ptr + ((long) p << 2), px);
+                    }
+                    processTransparentOffHeapLE(ptr, 256, true);
+                } else if (mode == 4) {
+                    // 19 px (4 quads + 3 tail): mix of opaque, zero, and translucent in both quad & tail.
+                    for (int p = 0; p < 19; p++) {
+                        int px = (p % 3 == 0) ? 0 : ((p % 3 == 1) ? 0xFF335577 : 0x60446688);
+                        MemoryUtil.memPutInt(ptr + ((long) p << 2), px);
+                    }
+                    processTransparentOffHeapLE(ptr, 19, true);
+                    processTransparentOffHeapLE(ptr, 19, false);
+                } else if (mode == 5) {
+                    // 64 px: fully transparent -> totalWeight == 0 early return.
+                    for (int p = 0; p < 64; p++) {
+                        MemoryUtil.memPutInt(ptr + ((long) p << 2), 0);
+                    }
+                    processTransparentOffHeapLE(ptr, 64, true);
+                    processTransparentOffHeapLE(ptr, 64, false);
+                } else {
+                    // 17 px: opaque + zero checkerboard hitting fillZeroAlphaLE.
+                    for (int p = 0; p < 17; p++) {
+                        MemoryUtil.memPutInt(ptr + ((long) p << 2), (p & 1) == 0 ? 0 : 0xFF8899AA);
+                    }
+                    processTransparentOffHeapLE(ptr, 17, false);
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (ptr != 0L) {
+                try {
+                    MemoryUtil.nmemFree(ptr);
+                } catch (Throwable ignored) {
+                }
+            }
         }
     }
 
@@ -208,17 +348,218 @@ public final class SpriteMipmapPerf {
         if (totalPixels <= 0) {
             return SpriteTransparencyLevel.OPAQUE;
         }
-        int[] px = borrowIntBuffer(TL_SRC, totalPixels);
-        MemoryUtil.memIntBuffer(ptr, totalPixels).get(px, 0, totalPixels);
-        int result = processTransparentPixels(px, totalPixels, fillInTransparent);
-        if ((result & 4) != 0) {
-            MemoryUtil.memIntBuffer(ptr, totalPixels).put(px, 0, totalPixels);
+        int result;
+        if (LITTLE_ENDIAN) {
+            result = processTransparentOffHeapLE(ptr, totalPixels, fillInTransparent);
+        } else {
+            int[] px = borrowIntBuffer(TL_SRC, totalPixels);
+            MemoryUtil.memIntBuffer(ptr, totalPixels).get(px, 0, totalPixels);
+            result = processTransparentPixels(px, totalPixels, fillInTransparent);
+            if ((result & 4) != 0) {
+                MemoryUtil.memIntBuffer(ptr, totalPixels).put(px, 0, totalPixels);
+            }
         }
         return switch (result & 3) {
             case 0 -> SpriteTransparencyLevel.OPAQUE;
             case 1 -> SpriteTransparencyLevel.TRANSPARENT;
             default -> SpriteTransparencyLevel.TRANSLUCENT;
         };
+    }
+
+    /** Zero-copy 64-bit off-heap transparency scan & optional zero-alpha fill for little-endian systems. */
+    private static int processTransparentOffHeapLE(long ptr, int totalPixels, boolean fillInTransparent) {
+        if (!fillInTransparent) {
+            return scanTransparentOnlyLE(ptr, totalPixels);
+        }
+        if (isOpaqueFastLE(ptr, totalPixels)) {
+            return 0;
+        }
+        return accumulateAndFillLE(ptr, totalPixels);
+    }
+
+    private static int scanTransparentOnlyLE(long ptr, int totalPixels) {
+        boolean sawZeroAlpha = false;
+        int i = 0;
+        int quadLimit = totalPixels & ~3;
+        long addr = ptr;
+        for (; i < quadLimit; i += 4, addr += 16L) {
+            long w0 = MemoryUtil.memGetLong(addr);
+            long w1 = MemoryUtil.memGetLong(addr + 8L);
+            if ((w0 & w1 & 0xFF000000FF000000L) != 0xFF000000FF000000L) {
+                int a0 = (int) ((w0 >>> 24) & 0xFFL);
+                int a1 = (int) (w0 >>> 56);
+                int a2 = (int) ((w1 >>> 24) & 0xFFL);
+                int a3 = (int) (w1 >>> 56);
+                if ((a0 != 0 && a0 < 255) || (a1 != 0 && a1 < 255)
+                        || (a2 != 0 && a2 < 255) || (a3 != 0 && a3 < 255)) {
+                    return 2;
+                }
+                sawZeroAlpha = true;
+            }
+        }
+        if (i + 2 <= totalPixels) {
+            long w = MemoryUtil.memGetLong(addr);
+            if ((w & 0xFF000000FF000000L) != 0xFF000000FF000000L) {
+                int a0 = (int) ((w >>> 24) & 0xFFL);
+                int a1 = (int) (w >>> 56);
+                if ((a0 != 0 && a0 < 255) || (a1 != 0 && a1 < 255)) {
+                    return 2;
+                }
+                sawZeroAlpha = true;
+            }
+            i += 2;
+            addr += 8L;
+        }
+        if (i < totalPixels) {
+            int a = MemoryUtil.memGetInt(addr) >>> 24;
+            if (a == 0) {
+                sawZeroAlpha = true;
+            } else if (a < 255) {
+                return 2;
+            }
+        }
+        return sawZeroAlpha ? 1 : 0;
+    }
+
+    private static boolean isOpaqueFastLE(long ptr, int totalPixels) {
+        if (totalPixels >= 4
+                && ((MemoryUtil.memGetInt(ptr)
+                        & MemoryUtil.memGetInt(ptr + ((long) (totalPixels - 1) << 2))
+                        & MemoryUtil.memGetInt(ptr + ((long) (totalPixels >>> 1) << 2))
+                        & 0xFF000000) != 0xFF000000)) {
+            return false;
+        }
+        int i = 0;
+        int quadLimit = totalPixels & ~3;
+        long addr = ptr;
+        for (; i < quadLimit; i += 4, addr += 16L) {
+            if ((MemoryUtil.memGetLong(addr) & MemoryUtil.memGetLong(addr + 8L) & 0xFF000000FF000000L)
+                    != 0xFF000000FF000000L) {
+                return false;
+            }
+        }
+        for (; i < totalPixels; i++, addr += 4L) {
+            if ((MemoryUtil.memGetInt(addr) & 0xFF000000) != 0xFF000000) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int accumulateAndFillLE(long ptr, int totalPixels) {
+        boolean sawZeroAlpha = false;
+        boolean sawTranslucent = false;
+
+        final float[] lut = SRGB_TO_LINEAR;
+        final float[] lut255 = SRGB_TO_LINEAR_255;
+        float rSum = 0.0F;
+        float gSum = 0.0F;
+        float bSum = 0.0F;
+        float totalWeight = 0.0F;
+
+        int firstZeroIdx = -1;
+        int i = 0;
+        int quadLimit = totalPixels & ~3;
+        long addr = ptr;
+        for (; i < quadLimit; i += 4, addr += 16L) {
+            long w0 = MemoryUtil.memGetLong(addr);
+            long w1 = MemoryUtil.memGetLong(addr + 8L);
+            if (((w0 | w1) & 0xFF000000FF000000L) == 0L) {
+                if (firstZeroIdx < 0) {
+                    firstZeroIdx = i;
+                }
+                continue;
+            }
+            if ((w0 & w1 & 0xFF000000FF000000L) == 0xFF000000FF000000L) {
+                int c0 = (int) w0;
+                int c1 = (int) (w0 >>> 32);
+                int c2 = (int) w1;
+                int c3 = (int) (w1 >>> 32);
+                rSum += lut255[c0 & 0xFF] + lut255[c1 & 0xFF] + lut255[c2 & 0xFF] + lut255[c3 & 0xFF];
+                gSum += lut255[(c0 >>> 8) & 0xFF] + lut255[(c1 >>> 8) & 0xFF]
+                        + lut255[(c2 >>> 8) & 0xFF] + lut255[(c3 >>> 8) & 0xFF];
+                bSum += lut255[(c0 >>> 16) & 0xFF] + lut255[(c1 >>> 16) & 0xFF]
+                        + lut255[(c2 >>> 16) & 0xFF] + lut255[(c3 >>> 16) & 0xFF];
+                totalWeight += 1020.0F;
+                continue;
+            }
+            long cur = w0;
+            for (int q = 0; q < 4; q++) {
+                int color = (int) cur;
+                cur = (q == 1) ? w1 : (cur >>> 32);
+                int a = color >>> 24;
+                if (a == 255) {
+                    rSum += lut255[color & 0xFF];
+                    gSum += lut255[(color >>> 8) & 0xFF];
+                    bSum += lut255[(color >>> 16) & 0xFF];
+                    totalWeight += 255.0F;
+                } else if (a == 0) {
+                    if (firstZeroIdx < 0) {
+                        firstZeroIdx = i + q;
+                    }
+                } else {
+                    sawTranslucent = true;
+                    float w = a;
+                    rSum += lut[color & 0xFF] * w;
+                    gSum += lut[(color >>> 8) & 0xFF] * w;
+                    bSum += lut[(color >>> 16) & 0xFF] * w;
+                    totalWeight += w;
+                }
+            }
+        }
+        for (; i < totalPixels; i++, addr += 4L) {
+            int color = MemoryUtil.memGetInt(addr);
+            int a = color >>> 24;
+            if (a == 255) {
+                rSum += lut255[color & 0xFF];
+                gSum += lut255[(color >>> 8) & 0xFF];
+                bSum += lut255[(color >>> 16) & 0xFF];
+                totalWeight += 255.0F;
+            } else if (a == 0) {
+                if (firstZeroIdx < 0) {
+                    firstZeroIdx = i;
+                }
+            } else {
+                sawTranslucent = true;
+                float w = a;
+                rSum += lut[color & 0xFF] * w;
+                gSum += lut[(color >>> 8) & 0xFF] * w;
+                bSum += lut[(color >>> 16) & 0xFF] * w;
+                totalWeight += w;
+            }
+        }
+        int level = sawTranslucent ? 2 : (firstZeroIdx >= 0 ? 1 : 0);
+        if (firstZeroIdx < 0 || totalWeight <= 0.0F) {
+            return level;
+        }
+        int fillColor = linearToSrgbFast(
+                rSum / totalWeight,
+                gSum / totalWeight,
+                bSum / totalWeight,
+                0);
+        fillZeroAlphaLE(ptr, firstZeroIdx & ~1, totalPixels, fillColor);
+        return level | 4;
+    }
+
+    private static void fillZeroAlphaLE(long ptr, int startPixel, int totalPixels, int fillColor) {
+        long fillLong = ((long) fillColor << 32) | (fillColor & 0xFFFFFFFFL);
+        int twoLimit = totalPixels & ~1;
+        int wIdx = startPixel;
+        long writeAddr = ptr + ((long) startPixel << 2);
+        for (; wIdx < twoLimit; wIdx += 2, writeAddr += 8L) {
+            long w = MemoryUtil.memGetLong(writeAddr);
+            long mask = w & 0xFF000000FF000000L;
+            if (mask == 0L) {
+                MemoryUtil.memPutLong(writeAddr, fillLong);
+            } else if ((mask & 0xFF000000L) == 0L) {
+                MemoryUtil.memPutInt(writeAddr, fillColor);
+            } else if ((mask >>> 56) == 0L) {
+                MemoryUtil.memPutInt(writeAddr + 4L, fillColor);
+            }
+        }
+        if (wIdx < totalPixels && (MemoryUtil.memGetInt(writeAddr) & 0xFF000000) == 0) {
+            MemoryUtil.memPutInt(writeAddr, fillColor);
+        }
     }
 
     /** Returns transparency ordinal, with bit 2 set when transparent pixels were filled. */

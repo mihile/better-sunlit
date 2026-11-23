@@ -41,6 +41,16 @@ public final class ClientLanguagePerf {
     }
 
     public static HashMap<String, String> newPresizedLanguageMap() {
+        Deque<Session> stack = ACTIVE_SESSIONS.get();
+        if (!stack.isEmpty()) {
+            Session session = stack.peek();
+            if (session != null) {
+                HashMap<String, String> premerged = session.claimPremergedMap();
+                if (premerged != null) {
+                    return premerged;
+                }
+            }
+        }
         return new HashMap<>(131072, 0.75f);
     }
 
@@ -134,6 +144,9 @@ public final class ClientLanguagePerf {
             }
             throw new RuntimeException(result.error);
         }
+        if (target == session.claimedPremergedMap) {
+            return true;
+        }
         if (!result.entries.isEmpty()) {
             target.putAll(result.entries);
         }
@@ -182,7 +195,17 @@ public final class ClientLanguagePerf {
             byLang.computeIfAbsent(spec.langCode, k -> new Object2ObjectOpenHashMap<>())
                     .put(spec.location, res);
         }
-        return new Session(byLang);
+        HashMap<String, String> premerged = null;
+        if (total >= 4) {
+            premerged = new HashMap<>(131072, 0.75f);
+            for (int i = 0; i < total; i++) {
+                EntryResult res = results[i];
+                if (res != null && res.error == null && !res.entries.isEmpty()) {
+                    premerged.putAll(res.entries);
+                }
+            }
+        }
+        return new Session(byLang, premerged);
     }
 
     private static EntryResult loadOne(ResourceManager resourceManager, TaskSpec spec) {
@@ -235,10 +258,22 @@ public final class ClientLanguagePerf {
 
     static final class Session {
         private final Map<String, Map<ResourceLocation, EntryResult>> byLang;
+        private HashMap<String, String> premergedMap;
+        private HashMap<String, String> claimedPremergedMap;
         private ResourceLocation lastQueriedLocation;
 
-        Session(Map<String, Map<ResourceLocation, EntryResult>> byLang) {
+        Session(Map<String, Map<ResourceLocation, EntryResult>> byLang, HashMap<String, String> premergedMap) {
             this.byLang = byLang;
+            this.premergedMap = premergedMap;
+        }
+
+        HashMap<String, String> claimPremergedMap() {
+            HashMap<String, String> map = this.premergedMap;
+            if (map != null) {
+                this.premergedMap = null;
+                this.claimedPremergedMap = map;
+            }
+            return map;
         }
 
         boolean handles(ResourceLocation location) {

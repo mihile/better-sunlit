@@ -183,7 +183,91 @@ public final class StartupClassPreloadPerf {
             "me.cortex.voxy.client.VoxyClientInstance",
             "me.cortex.voxy.client.compat.LodPipelineHooks",
             "me.cortex.voxy.client.compat.create.DistantCreateRenderer",
-            "me.cortex.voxy.client.compat.create.DistantKineticRenderer"
+            "me.cortex.voxy.client.compat.create.DistantKineticRenderer",
+            // Late-startup client / UI / renderer Mixin targets preloaded with initialize = false
+            "net.minecraft.client.renderer.item.ItemProperties",
+            "net.minecraft.client.gui.screens.TitleScreen",
+            "net.minecraft.client.renderer.LevelRenderer",
+            "net.minecraft.client.renderer.GameRenderer",
+            "net.minecraft.client.renderer.entity.LivingEntityRenderer",
+            "net.minecraft.client.renderer.entity.HumanoidMobRenderer",
+            "net.minecraft.client.renderer.entity.BoatRenderer",
+            "net.minecraft.client.particle.ParticleEngine",
+            "net.minecraft.client.renderer.ItemModelShaper",
+            "net.minecraft.client.renderer.block.BlockRenderDispatcher",
+            "net.minecraft.client.renderer.entity.ItemRenderer",
+            "de.keksuccino.fancymenu.customization.screen.identifier.UniversalScreenIdentifierRegistry",
+            "vectorwing.farmersdelight.common.registry.ModBlocks",
+            "de.keksuccino.fancymenu.customization.background.backgrounds.MenuBackgrounds",
+            "de.keksuccino.fancymenu.customization.element.elements.Elements",
+            "de.keksuccino.fancymenu.customization.placeholder.PlaceholderParser",
+            "de.keksuccino.fancymenu.customization.loadingrequirement.internal.LoadingRequirementContainer",
+            "de.keksuccino.drippyloadingscreen.customization.DrippyOverlayScreen",
+            "io.github.chakyl.societytrading.events.ClientModEvents",
+            "com.alc.moreminecarts.MoreMinecartsMod",
+            "dev.ftb.mods.ftblibrary.icon.ImageIcon",
+            "net.minecraft.client.model.geom.EntityModelSet",
+            "de.markusbordihn.easynpc.client.model.EasyNPCModelManager",
+            "net.rasanovum.viaromana.client.render.ClientCursorHandler",
+            "dev.uncandango.alltheleaks.utils.ReflectionHelper",
+            "com.github.alexthe666.citadel.client.model.AdvancedModelBox",
+            "journeymap.client.ui.minimap.MiniMap",
+            "net.minecraftforge.client.model.obj.ObjModel",
+            "net.minecraftforge.client.model.obj.ObjLoader",
+            "com.supermartijn642.fusion.entity.model.loader.FusionEntityModelLoader",
+            "traben.entity_model_features.models.animation.math.variables.factories.ModelVariableFactory",
+            "traben.entity_model_features.models.jem_objects.EMFJemData",
+            "net.satisfy.wildernature.client.WilderNatureClient",
+            "com.ninni.species.registry.SpeciesBlocks",
+            "net.satisfy.farm_and_charm.registry.ObjectRegistry",
+            "net.minecraft.client.gui.screens.MenuScreens",
+            "de.markusbordihn.easynpc.commands.ModArgumentTypes",
+            "dev.emi.emi.platform.forge.EmiClientForge",
+            "at.ridgo8.moreoverlays.KeyBindings",
+            "com.simibubi.create.content.kinetics.mechanicalArm.AllArmInteractionPointTypes",
+            "com.teammetallurgy.aquaculture.init.FishRegistry",
+            "sfiomn.legendarycreatures.registry.EntityTypeRegistry",
+            "net.mehvahdjukaar.supplementaries.reg.ModEntities",
+            "net.liukrast.eg.registry.EGBlockEntityTypes",
+            "software.bernie.geckolib.core.animation.Animation$LoopType",
+            "net.mehvahdjukaar.supplementaries.reg.ClientRegistry",
+            "net.minecraftforge.client.PresetEditorManager",
+            "dev.emi.emi.data.EmiData",
+            "com.blackgear.vanillabackport.client.Rendering",
+            "com.mrcrayfish.furniture.refurbished.client.ForgeClientEvents",
+            "de.keksuccino.fancymenu.customization.screen.identifier.UniversalScreenIdentifierRegistry",
+            "top.yourzi.dialog.network.NetworkHandler",
+            "fuzs.armorstatues.client.gui.screens.armorstand.ArmorStandAlignmentsScreen",
+            "io.github.mortuusars.scholar.client.gui.screen.view.LecternSpreadBookViewScreen",
+            "io.github.mortuusars.scholar.client.gui.screen.edit.LecternSpreadBookEditScreen",
+            "de.markusbordihn.easynpc.client.screen.dialog.DialogScreen",
+            "de.markusbordihn.easynpc.client.screen.dialog.DialogScreenWrapper",
+            "com.github.alexthe666.citadel.client.model.TabulaModelHandler",
+            "journeymap.common.properties.catagory.CategorySet",
+            "journeymap.client.texture.ComparableNativeImage",
+            "xyz.apex.forge.fantasyfurniture.client.screen.FurnitureStationMenuScreen",
+            "dev.ftb.mods.ftbquests.client.gui.quests.QuestPanel",
+            "dev.ftb.mods.ftbquests.client.gui.quests.ViewQuestPanel",
+            "net.rasanovum.viaromana.client.gui.TeleportMapScreen",
+            "net.satisfy.candlelight.client.CandlelightClient",
+            "io.github.mortuusars.exposure.Exposure$Blocks",
+            "vectorwing.farmersdelight.common.registry.ModBlocks",
+            "net.liukrast.eg.registry.EGPanels",
+            "com.ninni.species.client.events.ClientEvents",
+            "vectorwing.farmersdelight.client.event.ClientSetupEvents",
+            "de.keksuccino.fancymenu.customization.element.elements.Elements",
+            "dev.uncandango.alltheleaks.leaks.common.mods.smallships.UntrackedIssue001",
+            "com.mrcrayfish.furniture.refurbished.client.ClientBootstrap",
+            "com.corosus.watut.client.screen.RenderHelper",
+            "noobanidus.mods.lootr.init.ModBlocks",
+            "com.alc.moreminecarts.registry.MMEntities",
+            "com.simibubi.create.AllMenuTypes",
+            "com.github.teamfusion.rottencreatures.client.ClientSetup",
+            "codyhuh.unusualfishmod.client.ClientEvents",
+            "com.ninni.species.client.events.ClientEvents",
+            "vectorwing.farmersdelight.client.event.ClientSetupEvents",
+            "de.keksuccino.fancymenu.util.event.acara.EventHandler",
+            "dev.uncandango.alltheleaks.leaks.IssueManager"
     ));
 
     private StartupClassPreloadPerf() {
@@ -191,6 +275,15 @@ public final class StartupClassPreloadPerf {
 
     public static void schedulePreload() {
         schedulePreload(StartupClassPreloadPerf.class.getClassLoader(), PRELOAD_TARGETS);
+        Thread warmup = new Thread(() -> {
+            try {
+                SpriteMipmapPerf.prewarmExtendedOffHeap();
+            } catch (Throwable ignored) {
+            }
+        }, "BetterSunlit-MipmapWarmup");
+        warmup.setDaemon(true);
+        warmup.setPriority(Thread.NORM_PRIORITY - 1);
+        warmup.start();
     }
 
     public static int computeWorkerCount(int availableProcessors) {
