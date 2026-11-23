@@ -8,6 +8,7 @@ import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.FrameNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.InsnNode;
@@ -41,6 +42,35 @@ public final class ClientPostApplyPatches {
     private static final String OBE_MESHING_UTIL = "fr/madu59/obe/client/util/meshing/SectionMeshingUtil";
 
     private ClientPostApplyPatches() {}
+
+    public static void patchEmfValidationFlag(ClassNode target) {
+        String manager = "traben/entity_model_features/EMFManager";
+        String scope = "dev/sunlit/bettersunlit/client/EmfValidationScope";
+        int expected = switch (target.name.substring(target.name.lastIndexOf('/') + 1)) {
+            case "EMFManager" -> 7;
+            case "ASMHelper" -> 2;
+            case "MathOperator$4", "MathOperator$5", "VariableRegistry" -> 1;
+            case "PrintBMethod", "PrintMethod" -> 4;
+            default -> 0;
+        };
+        int patched = 0;
+        for (var method : target.methods) {
+            if ("<init>".equals(method.name)) continue;
+            for (var insn : method.instructions.toArray()) {
+                if (!(insn instanceof FieldInsnNode field) || !manager.equals(field.owner)
+                        || !"isAnimationValidationPhase".equals(field.name) || !"Z".equals(field.desc)) continue;
+                boolean read = field.getOpcode() == Opcodes.GETFIELD;
+                if (!read && field.getOpcode() != Opcodes.PUTFIELD) continue;
+                method.instructions.set(field, new MethodInsnNode(Opcodes.INVOKESTATIC, scope,
+                        read ? "read" : "write", "(L" + manager + (read ? ";)Z" : ";Z)V"), false));
+                patched++;
+            }
+        }
+        if (expected > 0 && patched == expected) {
+            target.fields.add(new FieldNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                    EmfValidationScope.MARKER, "Z", null, 1));
+        }
+    }
 
     /**
      * Guards Optimised Block Entities' Mixin {@code CallbackInfoReturnable} allocation at the entry of

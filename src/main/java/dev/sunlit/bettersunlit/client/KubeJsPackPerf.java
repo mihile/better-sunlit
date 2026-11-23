@@ -127,6 +127,24 @@ public final class KubeJsPackPerf {
             EARLY_LANG_PREFETCH = CompletableFuture.runAsync(
                     () -> preloadLangFiles(KubeJSPaths.get(PackType.CLIENT_RESOURCES)),
                     ForkJoinPool.commonPool());
+            CompletableFuture.runAsync(() -> {
+                try {
+                    net.minecraftforge.fml.ModList modList = null;
+                    for (int i = 0; i < 500; i++) {
+                        modList = net.minecraftforge.fml.ModList.get();
+                        if (modList != null && modList.getModFileById("rhino") != null) {
+                            break;
+                        }
+                        modList = null;
+                        Thread.sleep(10L);
+                    }
+                    if (modList != null) {
+                        Class<?> cls = Class.forName("dev.latvian.mods.rhino.mod.util.RemappingHelper");
+                        cls.getMethod("getMinecraftRemapper").invoke(null);
+                    }
+                } catch (Throwable ignored) {
+                }
+            }, ForkJoinPool.commonPool());
         }
     }
 

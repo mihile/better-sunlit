@@ -31,8 +31,8 @@ public final class IdMapperPerf {
         if (PRESIZED_MAPS.contains(existing)) {
             return existing;
         }
-        float loadFactor = expectedSize > 10000 ? 0.5F : Object2IntOpenCustomHashMap.DEFAULT_LOAD_FACTOR;
-        Object2IntOpenCustomHashMap<T> sized = new Object2IntOpenCustomHashMap<>(expectedSize, loadFactor, openMap.strategy());
+        Object2IntOpenCustomHashMap<T> sized = new Object2IntOpenCustomHashMap<>(
+                expectedSize, Object2IntOpenCustomHashMap.DEFAULT_LOAD_FACTOR, openMap.strategy());
         sized.defaultReturnValue(existing.defaultReturnValue());
         if (!existing.isEmpty()) {
             sized.putAll(existing);

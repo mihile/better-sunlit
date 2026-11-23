@@ -4,6 +4,7 @@ import dev.sunlit.bettersunlit.client.CaramelInputBridge;
 import io.github.mortuusars.exposure.gui.screen.element.textbox.TextBox;
 import moe.caramel.chat.util.Rect;
 import moe.caramel.chat.wrapper.AbstractIMEWrapper;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.font.TextFieldHelper;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,18 +21,13 @@ public abstract class ExposureTextBoxCaramelMixin implements CaramelInputBridge.
     @Shadow public abstract String getText();
     @Shadow public abstract TextBox setText(String text);
     @Shadow protected abstract boolean validateText(String text);
-    @Shadow public abstract boolean m_93696_();
-    @Shadow public abstract int m_252754_();
-    @Shadow public abstract int m_252907_();
-    @Shadow public abstract int m_5711_();
-    @Shadow public abstract int m_93694_();
     @Unique private CaramelInputBridge sunlit$ime;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void sunlit$initIme(CallbackInfo ci) { sunlit$ime = new CaramelInputBridge(this); }
     @Inject(method = "tick", at = @At("RETURN"))
     private void sunlit$focusIme(CallbackInfo ci) {
-        boolean focused = m_93696_();
+        boolean focused = editable();
         if (focused && !sunlit$ime.getIme().isFocused()) sunlit$ime.setOrigin(text());
         sunlit$ime.setFocused(focused);
     }
@@ -43,12 +39,15 @@ public abstract class ExposureTextBoxCaramelMixin implements CaramelInputBridge.
     private void sunlit$afterEdit(CallbackInfoReturnable<Boolean> ci) {
         if (sunlit$ime.getStatus() == AbstractIMEWrapper.InputStatus.NONE) sunlit$ime.setOrigin(text());
     }
-    @Override public boolean editable() { return m_93696_(); }
+    @Override public boolean editable() { return ((AbstractWidget) (Object) this).m_93696_(); }
     @Override public boolean full() { return !validateText(sunlit$ime.probeReplacement()); }
     @Override public String text() { return getText(); }
     @Override public void preview(String text) { setText(text); }
     @Override public void insert(String text) { textFieldHelper.m_95158_(text); }
     @Override public int cursor() { return textFieldHelper.m_95194_(); }
     @Override public int selection() { return textFieldHelper.m_95197_(); }
-    @Override public Rect rect() { return new Rect(m_252754_(), m_252907_(), m_5711_(), m_93694_()); }
+    @Override public Rect rect() {
+        AbstractWidget widget = (AbstractWidget) (Object) this;
+        return new Rect(widget.m_252754_(), widget.m_252907_(), widget.m_5711_(), widget.m_93694_());
+    }
 }

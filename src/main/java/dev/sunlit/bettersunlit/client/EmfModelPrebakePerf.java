@@ -100,6 +100,7 @@ public final class EmfModelPrebakePerf {
         EMFManager emf = EMFManager.getInstance();
         ETFManager textures = ETFManager.getInstance();
         final boolean parallelEmf = CONTEXT.canBakeEmfInParallel(emf, textures);
+        final boolean scopedValidation = parallelEmf && EmfValidationScope.ready(emf);
         prebakedEmfResults = parallelEmf;
         if (parallelEmf) {
             // Warm the reviewed concurrent EMF path before worker threads run.
@@ -128,7 +129,12 @@ public final class EmfModelPrebakePerf {
                 ModelPart raw = entry.getValue().m_171564_();
                 // 3.2.4 has shared model-loading state: bake vanilla geometry in parallel,
                 // then let its normal render-thread EMF/Fusion hooks run exactly once.
-                ModelPart baked = parallelEmf ? emf.injectIntoModelRootGetter(entry.getKey(), raw) : raw;
+                ModelPart baked = raw;
+                if (scopedValidation) {
+                    baked = EmfValidationScope.bake(emf, () -> emf.injectIntoModelRootGetter(entry.getKey(), raw));
+                } else if (parallelEmf) {
+                    baked = emf.injectIntoModelRootGetter(entry.getKey(), raw);
+                }
                 PREBAKED.put(entry.getKey(), baked != null ? baked : raw);
             } catch (Throwable ignored) {
                 // Fall back to synchronous Render-thread evaluation for any entry that fails off-thread.

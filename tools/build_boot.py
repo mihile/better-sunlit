@@ -235,6 +235,17 @@ public class VerifyBootAgent {
         byte[] zipEntryOut = SunlitBootAgent.transformZipFileSystemEntry(ClassLoader.getPlatformClassLoader(), zipEntryBytes);
         if (zipEntryOut == null) throw new AssertionError("ZipFileSystem$Entry not transformed");
 
+        Path minecraft = Path.of(libs, "net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-srg.jar");
+        if (Files.isRegularFile(minecraft)) {
+            byte[] resources = readZip(minecraft.toString(), "net/minecraft/server/packs/PathPackResources.class");
+            byte[] patchedResources = dev.sunlit.bootagent.SunlitBootTransformer.transformVanillaPathPackResources(resources);
+            if (patchedResources == null) throw new AssertionError("Vanilla PathPackResources not transformed");
+            try (var zip = FileSystems.newFileSystem(minecraft)) {
+                verifyRelativePackPaths(zip.getPath("/assets"));
+            }
+        }
+        verifyRelativePackPaths(Path.of("assets").toAbsolutePath());
+
         byte[] unionOut = SunlitBootAgent.transformUnionFileSystem(null, readZip(sjh, "cpw/mods/niofs/union/UnionFileSystem.class"));
         if (unionOut == null) throw new AssertionError("UnionFileSystem not transformed");
         byte[] ufspOut = SunlitBootAgent.transformUnionFileSystemProvider(readZip(sjh, "cpw/mods/niofs/union/UnionFileSystemProvider.class"));
@@ -615,6 +626,363 @@ public class VerifyBootAgent {
         if (!rmAuto1.reads().contains(rmAuto2) || !rmAuto1.reads().contains(rmNamed) || !rmAuto1.reads().contains(rmBase) || !rmNamed.reads().contains(rmAuto2)) {
             throw new AssertionError("Resolver shared auto reads mismatch");
         }
+        // Verify BootJarPayload scan interning & parallelForEach helpers
+        dev.sunlit.bootagent.payload.BootJarPayload.clearScanTypes();
+        String scanA1 = new String("test/scan/Type");
+        String scanA2 = new String("test/scan/Type");
+        Object interned1 = dev.sunlit.bootagent.payload.BootJarPayload.internScanType(scanA1);
+        Object interned2 = dev.sunlit.bootagent.payload.BootJarPayload.internScanType(scanA2);
+        Object internedFn = dev.sunlit.bootagent.payload.BootJarPayload.internScanTypeFn().apply(new String("test/scan/Type"));
+        if (interned1 != scanA1 || interned2 != scanA1 || internedFn != scanA1) {
+            throw new AssertionError("internScanType deduplication mismatch");
+        }
+        if (dev.sunlit.bootagent.payload.BootJarPayload.internScanType(null) != null) {
+            throw new AssertionError("internScanType(null) must return null");
+        }
+        dev.sunlit.bootagent.payload.BootJarPayload.clearScanTypes();
+        List<Integer> parItems = new ArrayList<>();
+        for (int i = 0; i < 64; i++) parItems.add(i);
+        var parVisited = java.util.Collections.synchronizedSet(new HashSet<Object>());
+        dev.sunlit.bootagent.payload.BootJarPayload.parallelForEach(parItems, parVisited::add);
+        if (parVisited.size() != 64) {
+            throw new AssertionError("parallelForEach count mismatch: " + parVisited.size());
+        }
+        // Verify CarryOn wildcard helper
+        List<String> coInput = List.of("mod:exact", "#mod:tag_ignored", "wild:*_plank", "multi:*foo*bar");
+        Set<String> coSet = new HashSet<>();
+        Set<String> coKeys = Set.of("wild:oak_plank", "wild:oak_log", "multi:xfooybarz", "multi:barfoo");
+        dev.sunlit.bootagent.payload.BootJarPayload.applyCarryOnWildcards(coInput, coSet, coKeys);
+        if (!coSet.equals(Set.of("mod:exact", "wild:oak_plank", "multi:xfooybarz"))) {
+            throw new AssertionError("applyCarryOnWildcards mismatch: " + coSet);
+        }
+        // Verify Batch 4/5 BootJarPayload helpers (regex, split, replace, fastParseFloat, fastWritePng, unpackaged cache)
+        if (!dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("twigs", "twigs")
+                || dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("twigs", "oak")
+                || !dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("foo/Bar_1$", "(?i)^[\\\\w\\\\p{Sc}/]+$")
+                || dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("bad.name", "(?i)^[\\\\w\\\\p{Sc}/]+$")
+                || !dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("-12.34", "^-?\\\\d+(\\\\.\\\\d+)?$")
+                || dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("12.", "^-?\\\\d+(\\\\.\\\\d+)?$")
+                || dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("abc", "^-?\\\\d+(\\\\.\\\\d+)?$")
+                || !dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches("abc", ".*")
+                || !"ab1c".equals(dev.sunlit.bootagent.payload.BootJarPayload.fastStringReplaceAll(" a b\\t1\\nc ", "\\\\s+", ""))
+                || !Arrays.equals(new String[]{"a", "b", "c"}, dev.sunlit.bootagent.payload.BootJarPayload.fastStringSplit("abc", "(?!^)"))
+                || !Arrays.equals(new String[]{""}, dev.sunlit.bootagent.payload.BootJarPayload.fastStringSplit("", "(?!^)"))
+                || Float.compare(dev.sunlit.bootagent.payload.BootJarPayload.fastParseFloat("-0.125"), -0.125F) != 0
+                || Float.compare(dev.sunlit.bootagent.payload.BootJarPayload.fastParseFloat("1.5e-2"), 1.5e-2F) != 0) {
+            throw new AssertionError("fastString/fastParseFloat check failed");
+        }
+        try {
+            dev.sunlit.bootagent.payload.BootJarPayload.fastStringMatches(null, "a");
+            throw new AssertionError("fastStringMatches(null, ...) should throw NPE");
+        } catch (NullPointerException expected) {
+        }
+        Object fakeLoader = new Object();
+        List<java.net.URL> cachedUrls = List.of();
+        if (dev.sunlit.bootagent.payload.BootJarPayload.getCachedUnpackagedResources(fakeLoader, "x.json") != null) {
+            throw new AssertionError("Unexpected cache hit before put");
+        }
+        dev.sunlit.bootagent.payload.BootJarPayload.cacheUnpackagedResources(fakeLoader, "x.json", cachedUrls);
+        if (dev.sunlit.bootagent.payload.BootJarPayload.getCachedUnpackagedResources(fakeLoader, "x.json") != cachedUrls) {
+            throw new AssertionError("Expected cache hit after put");
+        }
+        java.awt.image.BufferedImage testImg = new java.awt.image.BufferedImage(16, 16, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        testImg.setRGB(0, 0, 0x80112233);
+        testImg.setRGB(15, 15, 0xFF445566);
+        var pngBaos = new java.io.ByteArrayOutputStream();
+        if (!dev.sunlit.bootagent.payload.BootJarPayload.fastWritePng(testImg, "png", pngBaos)) {
+            throw new AssertionError("fastWritePng returned false");
+        }
+        byte[] pngBytes = pngBaos.toByteArray();
+        if (pngBytes.length < 32 || (pngBytes[0] & 0xFF) != 0x89 || pngBytes[1] != 'P' || pngBytes[2] != 'N' || pngBytes[3] != 'G') {
+            throw new AssertionError("Invalid PNG header from fastWritePng");
+        }
+        // Verify SunlitExtraTransformer transforms (ModFileScanDataCompactor, EMFResourceCaching, CarryOn ListHandler)
+        if (args.length >= 12 && !args[9].isEmpty() && !args[10].isEmpty()) {
+            byte[] rawMfScan = readZip(args[9], "org/embeddedt/modernfix/forge/load/ModFileScanDataCompactor.class");
+            byte[] outMfScan = dev.sunlit.bootagent.SunlitExtraTransformer.transformScanDataCompactor(null, rawMfScan, true);
+            if (outMfScan == null) throw new AssertionError("transformScanDataCompactor returned null");
+            byte[] rawEmfRc = readZip(args[10], "traben/entity_model_features/utils/EMFResourceCaching.class");
+            byte[] outEmfRc = dev.sunlit.bootagent.SunlitExtraTransformer.transformEmfResourceCaching(rawEmfRc);
+            if (outEmfRc == null) throw new AssertionError("transformEmfResourceCaching returned null");
+            byte[] outCarryOn = null;
+            if (!args[11].isEmpty()) {
+                byte[] rawCarryOn = readZip(args[11], "tschipp/carryon/common/config/ListHandler.class");
+                outCarryOn = dev.sunlit.bootagent.SunlitExtraTransformer.transformCarryOnListHandler(null, rawCarryOn);
+                if (outCarryOn == null) throw new AssertionError("transformCarryOnListHandler returned null");
+            }
+            List<java.net.URL> verifyUrls = new ArrayList<>();
+            List<java.net.URL> modUrls = new ArrayList<>();
+            List<String> modJars = new ArrayList<>();
+            for (int i = 1; i < args.length; i++) {
+                String a = args[i];
+                if (a.isEmpty()) continue;
+                String base = Path.of(a).getFileName().toString();
+                if (base.startsWith("tanukidecor-") || base.startsWith("everycomp-")
+                        || base.startsWith("moonlight-") || base.startsWith("kubejs-forge-")) {
+                    modUrls.add(Path.of(a).toUri().toURL());
+                    modJars.add(a);
+                } else {
+                    verifyUrls.add(Path.of(a).toUri().toURL());
+                }
+            }
+            try (var mcl = new java.net.URLClassLoader(verifyUrls.toArray(new java.net.URL[0]), VerifyBootAgent.class.getClassLoader())) {
+                Class<?> cca = Class.forName("org.objectweb.asm.util.CheckClassAdapter", true, mcl);
+                Class<?> crCls = Class.forName("org.objectweb.asm.ClassReader", true, mcl);
+                Method verifyM = cca.getMethod("verify", crCls, ClassLoader.class, boolean.class, PrintWriter.class);
+                var sw = new StringWriter();
+                var pw = new PrintWriter(sw);
+                Object crMf = crCls.getConstructor(byte[].class).newInstance((Object) outMfScan);
+                verifyM.invoke(null, crMf, mcl, false, pw);
+                String diag = sw.toString();
+                if (!diag.isEmpty() && diag.contains("Error")) {
+                    throw new AssertionError("CheckClassAdapter error on ModFileScanDataCompactor: " + diag);
+                }
+                ClassLoader stubMcCl = new ClassLoader(mcl) {
+                    @Override
+                    protected Class<?> findClass(String name) throws ClassNotFoundException {
+                        if (name.startsWith("net.minecraft.") || name.startsWith("net.minecraftforge.")) {
+                            Class<?> cwCls = Class.forName("org.objectweb.asm.ClassWriter", true, mcl);
+                            try {
+                                Object cw = cwCls.getConstructor(int.class).newInstance(0);
+                                boolean isItf = name.endsWith("ResourceManager")
+                                        || name.endsWith("Registry")
+                                        || name.endsWith("StringRepresentable")
+                                        || name.endsWith("SimpleWaterloggedBlock")
+                                        || name.endsWith("EntityBlock")
+                                        || name.endsWith("BlockGetter")
+                                        || name.endsWith("CollisionContext")
+                                        || name.endsWith("LevelAccessor")
+                                        || name.endsWith("LevelReader");
+                                int acc = 1 | (isItf ? (512 | 1024) : 0);
+                                String superCls = "java/lang/Object";
+                                if ("net.minecraft.world.level.block.state.properties.DirectionProperty".equals(name)) {
+                                    superCls = "net/minecraft/world/level/block/state/properties/EnumProperty";
+                                } else if (name.startsWith("net.minecraft.world.level.block.state.properties.") && !name.endsWith(".Property")) {
+                                    superCls = "net/minecraft/world/level/block/state/properties/Property";
+                                } else if ("net.minecraft.core.BlockPos".equals(name)) {
+                                    superCls = "net/minecraft/core/Vec3i";
+                                } else if ("net.minecraft.core.BlockPos$MutableBlockPos".equals(name)) {
+                                    superCls = "net/minecraft/core/BlockPos";
+                                } else if ("net.minecraft.world.level.block.HorizontalDirectionalBlock".equals(name)) {
+                                    superCls = "net/minecraft/world/level/block/Block";
+                                } else if ("net.minecraft.world.level.block.Block".equals(name)) {
+                                    superCls = "net/minecraft/world/level/block/state/BlockBehaviour";
+                                } else if ("net.minecraft.world.level.material.FlowingFluid".equals(name)) {
+                                    superCls = "net/minecraft/world/level/material/Fluid";
+                                } else if ("net.minecraft.world.level.block.state.BlockState".equals(name)) {
+                                    superCls = "net/minecraft/world/level/block/state/StateHolder";
+                                } else if ("net.minecraft.world.entity.LivingEntity".equals(name)) {
+                                    superCls = "net/minecraft/world/entity/Entity";
+                                } else if ("net.minecraft.world.entity.player.Player".equals(name)) {
+                                    superCls = "net/minecraft/world/entity/LivingEntity";
+                                }
+                                String[] itfs = "net.minecraft.core.DefaultedRegistry".equals(name)
+                                        ? new String[]{"net/minecraft/core/Registry"}
+                                        : null;
+                                cwCls.getMethod("visit", int.class, int.class, String.class, String.class, String.class, String[].class)
+                                        .invoke(cw, 61, acc, name.replace('.', '/'), null, superCls, itfs);
+                                cwCls.getMethod("visitEnd").invoke(cw);
+                                byte[] b = (byte[]) cwCls.getMethod("toByteArray").invoke(cw);
+                                return defineClass(name, b, 0, b.length);
+                            } catch (Exception e) {
+                                throw new ClassNotFoundException(name, e);
+                            }
+                        }
+                        throw new ClassNotFoundException(name);
+                    }
+                };
+                var sw2 = new StringWriter();
+                var pw2 = new PrintWriter(sw2);
+                Object crEmf = crCls.getConstructor(byte[].class).newInstance((Object) outEmfRc);
+                verifyM.invoke(null, crEmf, stubMcCl, false, pw2);
+                String diag2 = sw2.toString();
+                if (!diag2.isEmpty() && diag2.contains("Error")) {
+                    throw new AssertionError("CheckClassAdapter error on EMFResourceCaching: " + diag2);
+                }
+                if (outCarryOn != null) {
+                    var sw3 = new StringWriter();
+                    var pw3 = new PrintWriter(sw3);
+                    Object crCo = crCls.getConstructor(byte[].class).newInstance((Object) outCarryOn);
+                    verifyM.invoke(null, crCo, stubMcCl, false, pw3);
+                    String diag3 = sw3.toString();
+                    if (!diag3.isEmpty() && diag3.contains("Error")) {
+                        throw new AssertionError("CheckClassAdapter error on ListHandler: " + diag3);
+                    }
+                }
+                // Verify MemberInfo & ModuleClassLoader transforms + TanukiDecor / EveryCompat / KJS transforms
+                var sbt = new dev.sunlit.bootagent.SunlitBootTransformer();
+                var sbtTransform = dev.sunlit.bootagent.SunlitBootTransformer.class
+                        .getMethod("transform", Module.class, ClassLoader.class, String.class, Class.class, java.security.ProtectionDomain.class, byte[].class);
+                byte[] rawMcl = readZip(args[1], "cpw/mods/cl/ModuleClassLoader.class");
+                byte[] outMcl = (byte[]) sbtTransform.invoke(sbt, null, mcl, "cpw/mods/cl/ModuleClassLoader", null, null, rawMcl);
+                if (outMcl == null) throw new AssertionError("ModuleClassLoader transform returned null");
+                var swMcl = new StringWriter();
+                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outMcl), mcl, false, new PrintWriter(swMcl));
+                if (swMcl.toString().contains("Error")) {
+                    throw new AssertionError("CheckClassAdapter error on ModuleClassLoader: " + swMcl);
+                }
+                byte[] rawMi = readZip(args[3], "org/spongepowered/asm/mixin/injection/struct/MemberInfo.class");
+                byte[] outMi = (byte[]) sbtTransform.invoke(sbt, null, mcl, "org/spongepowered/asm/mixin/injection/struct/MemberInfo", null, null, rawMi);
+                if (outMi == null) throw new AssertionError("MemberInfo transform returned null");
+                var swMi = new StringWriter();
+                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outMi), mcl, false, new PrintWriter(swMi));
+                if (swMi.toString().contains("Error")) {
+                    throw new AssertionError("CheckClassAdapter error on MemberInfo: " + swMi);
+                }
+                byte[] outEmfMap = dev.sunlit.bootagent.SunlitExtraTransformer.transformStringMatches(
+                        null, readZip(args[10], "traben/entity_model_features/models/EMFModelMappings.class"));
+                if (outEmfMap == null) throw new AssertionError("EMFModelMappings transform returned null");
+                var swEmfMap = new StringWriter();
+                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outEmfMap), stubMcCl, false, new PrintWriter(swEmfMap));
+                if (swEmfMap.toString().contains("Error")) {
+                    throw new AssertionError("CheckClassAdapter error on EMFModelMappings: " + swEmfMap);
+                }
+                try (var stubModCl = new java.net.URLClassLoader(modUrls.toArray(new java.net.URL[0]), stubMcCl)) {
+                    for (String jp : modJars) {
+                        try (ZipFile zf = new ZipFile(jp)) {
+                            for (String clsName : new String[]{
+                                    "tanukidecor/block/RotatingBlock",
+                                    "tanukidecor/block/RotatingMultiblock",
+                                    "tanukidecor/block/RotatingTallBlock",
+                                    "tanukidecor/block/RotatingWideBlock",
+                                    "tanukidecor/block/TallBlock",
+                                    "tanukidecor/block/misc/PlasmaBallBlock"}) {
+                                if (zf.getEntry(clsName + ".class") != null) {
+                                    byte[] rawTd = readZip(jp, clsName + ".class");
+                                    byte[] outTd = dev.sunlit.bootagent.SunlitExtraTransformer.transformTanukiBlockShapes(clsName, rawTd);
+                                    if (outTd == null) throw new AssertionError("transformTanukiBlockShapes null for " + clsName);
+                                    var swTd = new StringWriter();
+                                    verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outTd), stubModCl, false, new PrintWriter(swTd));
+                                    if (swTd.toString().contains("Error")) {
+                                        throw new AssertionError("CheckClassAdapter error on " + clsName + ": " + swTd);
+                                    }
+                                }
+                            }
+                            if (zf.getEntry("net/mehvahdjukaar/every_compat/misc/HardcodedBlockType$PendingBlockInfo.class") != null) {
+                                byte[] rawEc = readZip(jp, "net/mehvahdjukaar/every_compat/misc/HardcodedBlockType$PendingBlockInfo.class");
+                                byte[] outEc = dev.sunlit.bootagent.SunlitExtraTransformer.transformStringMatches(null, rawEc);
+                                if (outEc == null) throw new AssertionError("transformStringMatches null on PendingBlockInfo");
+                                var swEc = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outEc), stubModCl, false, new PrintWriter(swEc));
+                                if (swEc.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on PendingBlockInfo: " + swEc);
+                                }
+                            }
+                            if (zf.getEntry("net/mehvahdjukaar/moonlight/api/resources/BlockTypeResTransformer.class") != null) {
+                                byte[] rawMl = readZip(jp, "net/mehvahdjukaar/moonlight/api/resources/BlockTypeResTransformer.class");
+                                byte[] outMl = dev.sunlit.bootagent.SunlitExtraTransformer.transformMoonlightResTransformer(null, rawMl);
+                                if (outMl == null) throw new AssertionError("transformMoonlightResTransformer null");
+                                var swMl = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outMl), stubModCl, false, new PrintWriter(swMl));
+                                if (swMl.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on BlockTypeResTransformer: " + swMl);
+                                }
+                            }
+                            if (zf.getEntry("net/mehvahdjukaar/moonlight/api/misc/PathTrie.class") != null) {
+                                byte[] rawPt = readZip(jp, "net/mehvahdjukaar/moonlight/api/misc/PathTrie.class");
+                                byte[] outPt = dev.sunlit.bootagent.SunlitExtraTransformer.transformStringMatches(null, rawPt);
+                                if (outPt == null) throw new AssertionError("transformStringMatches null for PathTrie");
+                                var swPt = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outPt), stubModCl, false, new PrintWriter(swPt));
+                                if (swPt.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on PathTrie: " + swPt);
+                                }
+                            }
+                            if (zf.getEntry("dev/latvian/mods/kubejs/core/WindowKJS$KJSScaledIconProvider.class") != null) {
+                                byte[] rawKjs = readZip(jp, "dev/latvian/mods/kubejs/core/WindowKJS$KJSScaledIconProvider.class");
+                                byte[] outKjs = dev.sunlit.bootagent.SunlitExtraTransformer.transformKubeJsIconProvider(null, rawKjs);
+                                if (outKjs == null) throw new AssertionError("transformKubeJsIconProvider null");
+                                var swKjs = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outKjs), stubModCl, false, new PrintWriter(swKjs));
+                                if (swKjs.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on WindowKJS: " + swKjs);
+                                }
+                            }
+                            for (String strCls : new String[]{
+                                    "traben/entity_model_features/models/animation/math/expression_tree/MathExpressionParser",
+                                    "traben/entity_model_features/models/animation/math/variables/factories/ModelVariableFactory",
+                                    "com/supermartijn642/fusion/entity/model/loader/FusionEntityModelLoader",
+                                    "com/Pink_Cats/createschematicchecker/core/attach/Math",
+                                    "com/Pink_Cats/createschematicchecker/FancyConfig/SimpleTomlEditor",
+                                    "de/keksuccino/fancymenu/customization/loadingrequirement/internal/LoadingRequirementContainer"}) {
+                                if (zf.getEntry(strCls + ".class") != null) {
+                                    byte[] rawS = readZip(jp, strCls + ".class");
+                                    byte[] outS = dev.sunlit.bootagent.SunlitExtraTransformer.transformStringMatches(null, rawS);
+                                    if (outS == null) throw new AssertionError("transformStringMatches null for " + strCls);
+                                    var swS = new StringWriter();
+                                    verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outS), stubModCl, false, new PrintWriter(swS));
+                                    if (swS.toString().contains("Error")) {
+                                        throw new AssertionError("CheckClassAdapter error on " + strCls + ": " + swS);
+                                    }
+                                }
+                            }
+                            if (zf.getEntry("me/jellysquid/mods/sodium/client/compatibility/checks/ModuleScanner.class") != null) {
+                                byte[] rawMs = readZip(jp, "me/jellysquid/mods/sodium/client/compatibility/checks/ModuleScanner.class");
+                                byte[] outMs = dev.sunlit.bootagent.SunlitExtraTransformer.transformEmberbiumModuleScanner(null, rawMs);
+                                if (outMs == null) throw new AssertionError("transformEmberbiumModuleScanner null");
+                                var swMs = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outMs), stubModCl, false, new PrintWriter(swMs));
+                                if (swMs.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on ModuleScanner: " + swMs);
+                                }
+                            }
+                            if (zf.getEntry("net/mehvahdjukaar/amendments/common/block/WallLanternBlock.class") != null) {
+                                byte[] rawWl = readZip(jp, "net/mehvahdjukaar/amendments/common/block/WallLanternBlock.class");
+                                byte[] outWl = dev.sunlit.bootagent.SunlitExtraTransformer.transformWallLanternBlock(null, rawWl);
+                                if (outWl == null) throw new AssertionError("transformWallLanternBlock null");
+                                var swWl = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outWl), stubModCl, false, new PrintWriter(swWl));
+                                if (swWl.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on WallLanternBlock: " + swWl);
+                                }
+                            }
+                            if (zf.getEntry("traben/entity_model_features/models/jem_objects/EMFJemData.class") != null) {
+                                byte[] rawEj = readZip(jp, "traben/entity_model_features/models/jem_objects/EMFJemData.class");
+                                byte[] outEj = dev.sunlit.bootagent.SunlitExtraTransformer.transformEmfJemData(null, rawEj);
+                                if (outEj == null) throw new AssertionError("transformEmfJemData null");
+                                var swEj = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outEj), stubModCl, false, new PrintWriter(swEj));
+                                if (swEj.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on EMFJemData: " + swEj);
+                                }
+                            }
+                            if (zf.getEntry("dev/latvian/mods/rhino/JavaMembers.class") != null) {
+                                byte[] rawJm = readZip(jp, "dev/latvian/mods/rhino/JavaMembers.class");
+                                byte[] outJm = dev.sunlit.bootagent.SunlitExtraTransformer.transformRhinoJavaMembers(null, rawJm);
+                                if (outJm == null) throw new AssertionError("transformRhinoJavaMembers null");
+                                var swJm = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outJm), stubModCl, false, new PrintWriter(swJm));
+                                if (swJm.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on JavaMembers: " + swJm);
+                                }
+                            }
+                            if (zf.getEntry("dev/latvian/mods/rhino/NativeJavaMethod.class") != null) {
+                                byte[] rawNjm = readZip(jp, "dev/latvian/mods/rhino/NativeJavaMethod.class");
+                                byte[] outNjm = dev.sunlit.bootagent.SunlitExtraTransformer.transformRhinoNativeJavaMethod(rawNjm);
+                                if (outNjm != null) {
+                                    var swNjm = new StringWriter();
+                                    verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outNjm),
+                                            stubModCl, false, new PrintWriter(swNjm));
+                                    if (swNjm.toString().contains("Error")) {
+                                        throw new AssertionError("CheckClassAdapter error on NativeJavaMethod: " + swNjm);
+                                    }
+                                }
+                            }
+                            if (zf.getEntry("com/teamabnormals/blueprint/common/remolder/RemoldedResourceManager.class") != null) {
+                                byte[] rawRm = readZip(jp, "com/teamabnormals/blueprint/common/remolder/RemoldedResourceManager.class");
+                                byte[] outRm = dev.sunlit.bootagent.SunlitExtraTransformer.transformBlueprintRemolded(null, rawRm);
+                                if (outRm == null) throw new AssertionError("transformBlueprintRemolded null");
+                                var swRm = new StringWriter();
+                                verifyM.invoke(null, crCls.getConstructor(byte[].class).newInstance((Object) outRm), stubModCl, false, new PrintWriter(swRm));
+                                if (swRm.toString().contains("Error")) {
+                                    throw new AssertionError("CheckClassAdapter error on RemoldedResourceManager: " + swRm);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         System.out.println("VerifyBootAgent: ALL PASSED");
     }
 
@@ -623,6 +991,24 @@ public class VerifyBootAgent {
             return is.readAllBytes();
         }
     }
+
+    private static void verifyRelativePackPaths(Path root) {
+        for (Path file : List.of(root, root.resolve("file.json"), root.resolve("a/b/" + (char) 0xAC00 + ".png"),
+                root.resolveSibling("other").resolve("a/b/../file.json"))) {
+            Path relative = root.relativize(file);
+            var names = new ArrayList<String>();
+            for (Path name : relative) names.add(name.toString());
+            String actual = dev.sunlit.bootagent.payload.BootJarPayload.fastJoinRelativePackPath(relative);
+            if (!String.join("/", names).equals(actual)) throw new AssertionError("Resource path mismatch: " + relative);
+            var relativeNames = dev.sunlit.bootagent.payload.BootJarPayload.fastUnionDirStreamSegments(false, root, file);
+            if (!names.equals(Arrays.asList(relativeNames))) throw new AssertionError("Relative pack segments mismatch: " + file);
+            names.clear();
+            for (Path name : file) names.add(name.toString());
+            var embeddedNames = dev.sunlit.bootagent.payload.BootJarPayload.fastUnionDirStreamSegments(true, root, file);
+            if (!names.equals(Arrays.asList(embeddedNames))) throw new AssertionError("Embedded pack segments mismatch: " + file);
+        }
+    }
+
 }
 ''', encoding='utf8')
 
@@ -635,11 +1021,32 @@ extra_jars = [
         'com/mojang/logging/*/logging-*.jar',
         'org/slf4j/slf4j-api/*/slf4j-api-*.jar',
         'com/google/guava/guava/*/guava-*.jar',
+        'com/google/code/gson/gson/*/gson-*.jar',
+        'org/apache/commons/commons-lang3/*/commons-lang3-*.jar',
         'net/minecraftforge/JarJar*/*/*.jar',
     ] for p in sorted(LIBRARIES.glob(pat))[:1]
 ]
+mods_dir = INSTANCE / 'minecraft/mods'
+mf_jar = str(sorted(mods_dir.glob('modernfix-*.jar'))[0]) if mods_dir.exists() and list(mods_dir.glob('modernfix-*.jar')) else ''
+emf_jar = str(sorted(mods_dir.glob('entity_model_features-*.jar'))[0]) if mods_dir.exists() and list(mods_dir.glob('entity_model_features-*.jar')) else ''
+co_jar = str(sorted(mods_dir.glob('carryon-*.jar'))[0]) if mods_dir.exists() and list(mods_dir.glob('carryon-*.jar')) else ''
+for pat in [
+        'tanukidecor-*.jar', 'everycomp-*.jar', 'moonlight-*.jar', 'kubejs-forge-*.jar',
+        'emberbium-*.jar', 'amendments-*.jar', 'fancymenu_*.jar', 'fusion-*.jar', 'CreateSchematicChecker-*.jar',
+        'rhino-*.jar', 'blueprint-*.jar']:
+    if mods_dir.exists():
+        matches = sorted(mods_dir.glob(pat))
+        if matches:
+            extra_jars.append(str(matches[0]))
+if mf_jar and emf_jar:
+    extra_jars.extend([
+        str(p) for pat in [
+            'it/unimi/dsi/fastutil/*/fastutil-*.jar',
+            'org/apache/logging/log4j/log4j-api/*/log4j-api-*.jar',
+        ] for p in sorted(LIBRARIES.glob(pat))[:1]
+    ])
 
 verify_cp = os.pathsep.join([str(TEST_CLASSES), str(PAYLOAD_CLASSES), str(OUT_JAR)])
 subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-cp', os.pathsep.join([str(PAYLOAD_CLASSES), str(OUT_JAR)]), '-d', str(TEST_CLASSES), str(VERIFY_SRC)], check=True)
-subprocess.run([str(JDK / 'java.exe'), f'-javaagent:{OUT_JAR}', '--add-opens', 'java.base/java.lang.module=ALL-UNNAMED', '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED', '-cp', verify_cp, 'VerifyBootAgent', str(LIBRARIES), sjh_jar, fml_jar, mixin_jar, str(ASM_JAR), str(ASM_TREE_JAR), str(ASM_UTIL_JAR), str(ASM_ANALYSIS_JAR), modlauncher_jar, *extra_jars], check=True)
+subprocess.run([str(JDK / 'java.exe'), f'-javaagent:{OUT_JAR}', '--add-opens', 'java.base/java.lang.module=ALL-UNNAMED', '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED', '-cp', verify_cp, 'VerifyBootAgent', str(LIBRARIES), sjh_jar, fml_jar, mixin_jar, str(ASM_JAR), str(ASM_TREE_JAR), str(ASM_UTIL_JAR), str(ASM_ANALYSIS_JAR), modlauncher_jar, mf_jar, emf_jar, co_jar, *extra_jars], check=True)
 print('Built & verified', OUT_JAR, OUT_JAR.stat().st_size, 'bytes')

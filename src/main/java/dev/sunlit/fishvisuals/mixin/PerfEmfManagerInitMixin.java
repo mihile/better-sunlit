@@ -3,6 +3,7 @@ package dev.sunlit.fishvisuals.mixin;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.sunlit.bettersunlit.client.EmfModelPrebakePerf;
+import dev.sunlit.bettersunlit.client.EmfValidationScope;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
 import org.spongepowered.asm.mixin.Final;
@@ -72,7 +73,11 @@ public abstract class PerfEmfManagerInitMixin implements dev.sunlit.bettersunlit
     @WrapMethod(method = "setupAnimationsFromJemToModel", require = 1)
     private void sunlit$validateAnimationsSerially(
             EMFJemData jem, EMFModelPartRoot model, int variant, Operation<Void> original) {
-        // EMF's expression evaluator reads a validation flag shared by all models on this manager.
+        if (EmfValidationScope.isScoped(this)) {
+            original.call(jem, model, variant);
+            return;
+        }
+        // Keep the shared flag safe on versions without the full set of scoped readers.
         synchronized (this) {
             original.call(jem, model, variant);
         }

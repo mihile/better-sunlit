@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.module.ModuleReader;
+import java.lang.module.ModuleReference;
 import java.lang.ref.SoftReference;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
@@ -34,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -1611,7 +1613,7 @@ public final class BootJarPayload {
         final ClassLoader targetCl = cl;
         final boolean isClientDist = detectClientDist(targetCl);
         final java.util.concurrent.atomic.AtomicInteger nextIdx = new java.util.concurrent.atomic.AtomicInteger();
-        int workers = Math.min(2, Math.max(1, Runtime.getRuntime().availableProcessors() / 4));
+        int workers = 2;
         for (int w = 0; w < workers; w++) {
             final boolean warmOshi = (w == 0) && isClientDist;
             Thread t = new Thread(() -> {
@@ -1673,11 +1675,7 @@ public final class BootJarPayload {
                 && !name.startsWith("net.minecraft.server.level.")
                 && !name.startsWith("net.minecraft.server.packs.resources.ReloadableServer")
                 && !name.startsWith("net.minecraft.world.level.levelgen.")
-                && !name.startsWith("net.minecraft.world.level.chunk.")
                 && !name.startsWith("net.minecraft.world.level.biome.")
-                && !name.startsWith("net.minecraft.world.entity.ai.")
-                && !name.startsWith("net.minecraft.world.entity.monster.")
-                && !name.startsWith("net.minecraft.world.entity.animal.")
                 && !name.startsWith("net.minecraft.client.gui.screens.worldselection.")
                 && !name.startsWith("net.minecraft.client.gui.screens.multiplayer.")
                 && !name.startsWith("net.minecraft.client.gui.screens.advancements.")
@@ -2103,11 +2101,27 @@ public final class BootJarPayload {
         return new ExactByteArrayInputStream(bytes);
     }
 
-    public static byte[] fastGetClassBytes(ModuleReader reader, String className) {
+    private static volatile Map<ModuleReference, ConcurrentHashMap<String, byte[]>> prewarmedMixinBytes = Map.of();
+    private static final boolean TRACE_BOOT_MIXINS = System.getProperty("sunlit.profiler.startupDir") != null;
+    private static int prefetchedMixinCount;
+
+    public static byte[] fastGetClassBytes(ModuleReader reader, ModuleReference module, String className) {
         if (reader == null || className == null) {
             return EMPTY_BYTE_ARRAY;
         }
         String path = className.replace('.', '/').concat(".class");
+        var prefetched = prewarmedMixinBytes;
+        if (module != null && !prefetched.isEmpty()) {
+            var entries = prefetched.get(module);
+            byte[] pre = entries == null ? null : entries.remove(path);
+            if (pre != null) {
+                return pre;
+            }
+        }
+        return readClassBytesRaw(reader, path);
+    }
+
+    private static byte[] readClassBytesRaw(ModuleReader reader, String path) {
         if (reader instanceof java.util.function.Function fn) {
             try {
                 byte[] direct = (byte[]) fn.apply(path);
@@ -2198,7 +2212,7 @@ public final class BootJarPayload {
     }
 
     private static final ConcurrentHashMap<String, java.util.regex.Pattern> PATTERN_CACHE =
-            new ConcurrentHashMap<>(128);
+            new ConcurrentHashMap<>(512);
 
     public static java.util.regex.Pattern fastCompilePattern(String regex) {
         java.util.regex.Pattern cached = PATTERN_CACHE.get(regex);
@@ -2206,13 +2220,863 @@ public final class BootJarPayload {
             return cached;
         }
         java.util.regex.Pattern compiled = java.util.regex.Pattern.compile(regex);
-        if (PATTERN_CACHE.size() < 512) {
+        if (PATTERN_CACHE.size() < 2048) {
             java.util.regex.Pattern prev = PATTERN_CACHE.putIfAbsent(regex, compiled);
             if (prev != null) {
                 return prev;
             }
         }
         return compiled;
+    }
+
+    public static boolean fastStringMatches(String input, String regex) {
+        if (input == null || regex == null) {
+            // Preserve exact String.matches NullPointerException semantics.
+            input.length();
+            regex.length();
+        }
+        if ("^-?\\d+(\\.\\d+)?$".equals(regex)) {
+            return isAsciiDecimal(input);
+        }
+        if ("^(\\d|_).*".equals(regex)) {
+            return matchesDigitOrUnderscorePrefix(input);
+        }
+        if ("(var|varb)\\.\\w+".equals(regex)) {
+            return matchesEmfVarName(input);
+        }
+        if ("\\{\\s*\"parent\":\\s*\".*\"\\s*\\}".equals(regex)) {
+            return fastMatchSimpleParentJson(input);
+        }
+        if (isLiteralRegex(regex)) {
+            return input.equals(regex);
+        }
+        return fastCompilePattern(regex).matcher(input).matches();
+    }
+
+    private static boolean fastMatchSimpleParentJson(String s) {
+        int len = s.length();
+        int i = 0;
+        while (i < len && isRegexSpace(s.charAt(i))) {
+            i++;
+        }
+        if (i >= len || s.charAt(i) != '{') {
+            return false;
+        }
+        i++;
+        while (i < len && isRegexSpace(s.charAt(i))) {
+            i++;
+        }
+        if (!s.startsWith("\"parent\":", i)) {
+            return false;
+        }
+        i += 9;
+        while (i < len && isRegexSpace(s.charAt(i))) {
+            i++;
+        }
+        if (i >= len || s.charAt(i) != '"') {
+            return false;
+        }
+        int openQuote = i;
+        int j = len - 1;
+        while (j > openQuote && isRegexSpace(s.charAt(j))) {
+            j--;
+        }
+        if (j <= openQuote || s.charAt(j) != '}') {
+            return false;
+        }
+        j--;
+        while (j > openQuote && isRegexSpace(s.charAt(j))) {
+            j--;
+        }
+        if (j <= openQuote || s.charAt(j) != '"') {
+            return false;
+        }
+        for (int k = openQuote + 1; k < j; k++) {
+            char c = s.charAt(k);
+            if (c == '\n' || c == '\r' || c == '\u0085' || c == '\u2028' || c == '\u2029') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isRegexSpace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\u000B';
+    }
+
+    private static boolean matchesDigitOrUnderscorePrefix(String s) {
+        int len = s.length();
+        if (len == 0) {
+            return false;
+        }
+        char c0 = s.charAt(0);
+        if (!((c0 >= '0' && c0 <= '9') || c0 == '_')) {
+            return false;
+        }
+        // Java '.' does not match line terminators (\n, \r, \u0085, \u2028, \u2029) unless DOTALL.
+        for (int i = 1; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '\n' || c == '\r' || c == '\u0085' || c == '\u2028' || c == '\u2029') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesEmfVarName(String s) {
+        int start;
+        if (s.startsWith("var.")) {
+            start = 4;
+        } else if (s.startsWith("varb.")) {
+            start = 5;
+        } else {
+            return false;
+        }
+        int len = s.length();
+        if (start >= len) {
+            return false;
+        }
+        for (int i = start; i < len; i++) {
+            char c = s.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isAsciiDecimal(String s) {
+        int len = s.length();
+        if (len == 0) {
+            return false;
+        }
+        int i = 0;
+        if (s.charAt(0) == '-') {
+            if (len == 1) {
+                return false;
+            }
+            i = 1;
+        }
+        int intDigits = 0;
+        while (i < len) {
+            char c = s.charAt(i);
+            if (c >= '0' && c <= '9') {
+                intDigits++;
+                i++;
+            } else {
+                break;
+            }
+        }
+        if (intDigits == 0) {
+            return false;
+        }
+        if (i == len) {
+            return true;
+        }
+        if (s.charAt(i) != '.') {
+            return false;
+        }
+        i++;
+        int fracDigits = 0;
+        while (i < len) {
+            char c = s.charAt(i);
+            if (c >= '0' && c <= '9') {
+                fracDigits++;
+                i++;
+            } else {
+                return false;
+            }
+        }
+        return fracDigits > 0;
+    }
+
+    public static String fastStringReplaceAll(String input, String regex, String replacement) {
+        if (input == null || regex == null || replacement == null) {
+            input.length();
+            regex.length();
+            replacement.length();
+        }
+        if (replacement.isEmpty()) {
+            if ("\\s+".equals(regex) || "\\s".equals(regex)) {
+                return stripAsciiRegexWhitespace(input);
+            }
+            if ("[^a-z0-9/._-]".equals(regex)) {
+                return stripNonResourceLocationPathChars(input);
+            }
+        }
+        if (!regex.isEmpty() && isLiteralRegex(regex)
+                && replacement.indexOf('\\') < 0 && replacement.indexOf('$') < 0) {
+            return input.replace(regex, replacement);
+        }
+        return fastCompilePattern(regex).matcher(input).replaceAll(replacement);
+    }
+
+    /** Returns true when Moonlight's replaceFullGenericType regex cannot possibly match {@code text}. */
+    public static boolean canSkipMoonlightGenericReplace(String text, String targetKey, String modId) {
+        if (text == null || text.isEmpty() || targetKey == null || targetKey.isEmpty() || !isLiteralRegex(targetKey)) {
+            return false;
+        }
+        if (text.indexOf(targetKey) < 0) {
+            return true;
+        }
+        return modId != null && !modId.isEmpty() && isLiteralRegex(modId)
+                && (text.indexOf(':') < 0 || text.indexOf(modId) < 0);
+    }
+
+    private static final java.nio.file.LinkOption[] EMPTY_LINK_OPTIONS = new java.nio.file.LinkOption[0];
+
+    /** Avoids per-call {@code LinkOption[0]} varargs allocation in {@code UnionFileSystem.testFilter}. */
+    public static boolean fastIsDirectoryNoLinks(Path path) {
+        if (path.getFileSystem() == java.nio.file.FileSystems.getDefault()) {
+            return path.toFile().isDirectory();
+        }
+        return java.nio.file.Files.isDirectory(path, EMPTY_LINK_OPTIONS);
+    }
+
+    private static String stripNonResourceLocationPathChars(String s) {
+        int len = s.length();
+        int first = -1;
+        for (int i = 0; i < len; i++) {
+            if (!isResourceLocationPathChar(s.charAt(i))) {
+                first = i;
+                break;
+            }
+        }
+        if (first < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder(len - 1);
+        sb.append(s, 0, first);
+        for (int i = first + 1; i < len; i++) {
+            char c = s.charAt(i);
+            if (isResourceLocationPathChar(c)) {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static boolean isResourceLocationPathChar(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '/' || c == '.' || c == '_' || c == '-';
+    }
+
+    public static String fastStringReplaceFirst(String input, String regex, String replacement) {
+        if (input == null || regex == null || replacement == null) {
+            input.length();
+            regex.length();
+            replacement.length();
+        }
+        return fastCompilePattern(regex).matcher(input).replaceFirst(replacement);
+    }
+
+    public static String[] fastStringSplit(String input, String regex) {
+        return fastStringSplitLimit(input, regex, 0);
+    }
+
+    public static String[] fastStringSplitLimit(String input, String regex, int limit) {
+        if (input == null || regex == null) {
+            input.length();
+            regex.length();
+        }
+        if (limit == 0 && "(?!^)".equals(regex)) {
+            int len = input.length();
+            if (len == 0) {
+                return new String[] {""};
+            }
+            String[] out = new String[len];
+            for (int i = 0; i < len; i++) {
+                out[i] = String.valueOf(input.charAt(i));
+            }
+            return out;
+        }
+        String literal = decodeSimpleSplitLiteral(regex);
+        if (literal != null) {
+            return splitByLiteral(input, literal, limit);
+        }
+        return fastCompilePattern(regex).split(input, limit);
+    }
+
+    private static String decodeSimpleSplitLiteral(String regex) {
+        if (regex.isEmpty()) {
+            return null;
+        }
+        if ("\\.".equals(regex)) {
+            return ".";
+        }
+        if (regex.startsWith("\\[") && regex.length() > 2 && isLiteralRegex(regex.substring(2))) {
+            return "[" + regex.substring(2);
+        }
+        // Only handle unescaped literal strings without ']'/'}' surprises for safety; ']' itself is literal in Java.
+        if (isLiteralRegex(regex)) {
+            return regex;
+        }
+        return null;
+    }
+
+    private static String[] splitByLiteral(String input, String delim, int limit) {
+        int dlen = delim.length();
+        int idx = input.indexOf(delim);
+        if (idx < 0) {
+            return new String[] {input};
+        }
+        ArrayList<String> list = new ArrayList<>(8);
+        int off = 0;
+        boolean limited = limit > 0;
+        while (idx >= 0) {
+            if (!limited || list.size() < limit - 1) {
+                list.add(input.substring(off, idx));
+                off = idx + dlen;
+                idx = input.indexOf(delim, off);
+            } else {
+                list.add(input.substring(off));
+                off = input.length();
+                break;
+            }
+        }
+        if (!limited || list.size() < limit) {
+            list.add(input.substring(off));
+        }
+        int resultSize = list.size();
+        if (limit == 0) {
+            while (resultSize > 0 && list.get(resultSize - 1).isEmpty()) {
+                resultSize--;
+            }
+        }
+        String[] result = new String[resultSize];
+        for (int i = 0; i < resultSize; i++) {
+            result[i] = list.get(i);
+        }
+        return result;
+    }
+
+    public static String fastEmfProcessAnimKey(String expr, String partId, String partName) {
+        if (expr == null) {
+            expr.length();
+        }
+        String str = stripAsciiRegexWhitespace(expr.trim());
+        if (str.isEmpty()) {
+            return str;
+        }
+        if (str.indexOf("this") >= 0 && partId != null) {
+            str = replaceWordBoundaryToken(str, "this", partId);
+        }
+        if (str.indexOf("part") >= 0 && partName != null) {
+            str = replaceWordBoundaryToken(str, "part", partName);
+        }
+        return str;
+    }
+
+    /** Exact replacement for {@code (?<=\W|^)<token>(?=\W)} without Pattern/Matcher overhead. */
+    private static String replaceWordBoundaryToken(String s, String token, String replacement) {
+        int tlen = token.length();
+        int len = s.length();
+        int from = 0;
+        StringBuilder sb = null;
+        while (from <= len - tlen) {
+            int idx = s.indexOf(token, from);
+            if (idx < 0) {
+                break;
+            }
+            int end = idx + tlen;
+            boolean leftOk = idx == 0 || !isRegexWordChar(s.charAt(idx - 1));
+            boolean rightOk = end < len && !isRegexWordChar(s.charAt(end));
+            if (leftOk && rightOk) {
+                if (sb == null) {
+                    sb = new StringBuilder(len + 16);
+                }
+                sb.append(s, from, idx).append(replacement);
+                from = end;
+            } else {
+                if (sb != null) {
+                    sb.append(s, from, idx + 1);
+                }
+                from = idx + 1;
+            }
+        }
+        if (sb == null) {
+            return s;
+        }
+        sb.append(s, from, len);
+        return sb.toString();
+    }
+
+    private static boolean isRegexWordChar(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+    }
+
+    private static String stripAsciiRegexWhitespace(String s) {
+        int len = s.length();
+        int first = -1;
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == 0x0B) {
+                first = i;
+                break;
+            }
+        }
+        if (first < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder(len - 1);
+        sb.append(s, 0, first);
+        for (int i = first + 1; i < len; i++) {
+            char c = s.charAt(i);
+            if (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\f' && c != 0x0B) {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Fast ASCII decimal parser for OBJ vertex/UV coordinates, falling back to {@link Float#parseFloat}. */
+    public static float fastParseFloat(String s) {
+        if (s == null) {
+            return Float.parseFloat(null);
+        }
+        int len = s.length();
+        int start = 0;
+        while (start < len && s.charAt(start) <= ' ') {
+            start++;
+        }
+        int end = len;
+        while (end > start && s.charAt(end - 1) <= ' ') {
+            end--;
+        }
+        if (start >= end) {
+            return Float.parseFloat(s);
+        }
+        boolean neg = false;
+        char first = s.charAt(start);
+        if (first == '-') {
+            neg = true;
+            start++;
+        } else if (first == '+') {
+            start++;
+        }
+        if (start >= end) {
+            return Float.parseFloat(s);
+        }
+        long mantissa = 0L;
+        int sigDigits = 0;
+        boolean seenDot = false;
+        int fracDigits = 0;
+        boolean sawDigit = false;
+        for (int i = start; i < end; i++) {
+            char c = s.charAt(i);
+            if (c >= '0' && c <= '9') {
+                sawDigit = true;
+                int d = c - '0';
+                if (d != 0 || sigDigits > 0) {
+                    sigDigits++;
+                    if (sigDigits > 7) {
+                        // Preserve exact IEEE-754 half-to-even rounding when exceeding 7 sig digits.
+                        return Float.parseFloat(s);
+                    }
+                }
+                mantissa = mantissa * 10L + d;
+                if (seenDot) {
+                    fracDigits++;
+                }
+            } else if (c == '.' && !seenDot) {
+                seenDot = true;
+            } else {
+                return Float.parseFloat(s);
+            }
+        }
+        if (!sawDigit || fracDigits >= OBJ_POW10.length) {
+            return Float.parseFloat(s);
+        }
+        double val = (double) mantissa / OBJ_POW10[fracDigits];
+        return (float) (neg ? -val : val);
+    }
+
+    private static final double[] OBJ_POW10 = new double[] {
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10
+    };
+
+    private static boolean isLiteralRegex(String regex) {
+        for (int i = 0, n = regex.length(); i < n; i++) {
+            switch (regex.charAt(i)) {
+                case '\\':
+                case '.':
+                case '[':
+                case '(':
+                case '^':
+                case '$':
+                case '*':
+                case '+':
+                case '?':
+                case '{':
+                case '|':
+                    return false;
+                default:
+                    break;
+            }
+        }
+        return true;
+    }
+
+    private static final IdentityHashMap<Object, ConcurrentHashMap<String, List>> UNPACKAGED_RESOURCE_CACHE =
+            new IdentityHashMap<>(8);
+    private static final IdentityHashMap<Object, Set<String>> ROOT_RESOURCE_INDEX =
+            new IdentityHashMap<>(8);
+    private static final Set<String> ROOT_INDEX_INCOMPLETE = Set.of();
+    private static volatile Object lastUnpackagedLoader;
+    private static volatile ConcurrentHashMap<String, List> lastUnpackagedMap;
+
+    public static boolean isKnownMissingRootResource(Object loader, Map<?, ?> resolvedRoots, String name) {
+        if (loader == null || resolvedRoots == null || resolvedRoots.isEmpty() || name == null || name.isEmpty()) {
+            return false;
+        }
+        String normalized = name.charAt(0) == '/' ? name.substring(1) : name;
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        int slash = normalized.indexOf('/');
+        String key;
+        if (slash < 0) {
+            key = normalized;
+        } else if (normalized.startsWith("META-INF/services/") && normalized.indexOf('/', 18) < 0) {
+            key = normalized;
+        } else {
+            return false;
+        }
+        Set<String> rootSet;
+        synchronized (ROOT_RESOURCE_INDEX) {
+            rootSet = ROOT_RESOURCE_INDEX.get(loader);
+        }
+        if (rootSet == null) {
+            rootSet = buildRootResourceIndex(resolvedRoots);
+            synchronized (ROOT_RESOURCE_INDEX) {
+                Set<String> prev = ROOT_RESOURCE_INDEX.get(loader);
+                if (prev == null) {
+                    ROOT_RESOURCE_INDEX.put(loader, rootSet);
+                } else {
+                    rootSet = prev;
+                }
+            }
+        }
+        if (rootSet == ROOT_INDEX_INCOMPLETE) {
+            return false;
+        }
+        return !rootSet.contains(key);
+    }
+
+    private static Set<String> buildRootResourceIndex(Map<?, ?> resolvedRoots) {
+        try {
+            Object[] refs = resolvedRoots.values().toArray();
+            if (refs.length == 0) {
+                return ROOT_INDEX_INCOMPLETE;
+            }
+            Set<String> out = ConcurrentHashMap.newKeySet(512);
+            java.util.concurrent.atomic.AtomicBoolean incomplete = new java.util.concurrent.atomic.AtomicBoolean(false);
+            parallelForEach(Arrays.asList(refs), obj -> {
+                if (incomplete.get()) {
+                    return;
+                }
+                Optional<java.net.URI> loc;
+                if (obj instanceof java.lang.module.ModuleReference mref) {
+                    loc = mref.location();
+                } else if (obj instanceof java.lang.module.ResolvedModule rm) {
+                    loc = rm.reference().location();
+                } else {
+                    incomplete.set(true);
+                    return;
+                }
+                if (loc.isEmpty()) {
+                    incomplete.set(true);
+                    return;
+                }
+                java.net.URI uri = loc.get();
+                if ("jrt".equalsIgnoreCase(uri.getScheme())) {
+                    return;
+                }
+                try {
+                    Path root = Path.of(uri);
+                    if (Files.isDirectory(root)) {
+                        boolean hasMetaInf = false;
+                        try (var ds = Files.newDirectoryStream(root)) {
+                            for (Path p : ds) {
+                                Path fn = p.getFileName();
+                                if (fn != null) {
+                                    String s = fn.toString();
+                                    if (!s.isEmpty() && s.charAt(s.length() - 1) == '/') {
+                                        s = s.substring(0, s.length() - 1);
+                                    }
+                                    if (!s.isEmpty()) {
+                                        out.add(s);
+                                        if ("META-INF".equals(s)) {
+                                            hasMetaInf = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (hasMetaInf) {
+                            Path svcDir = root.resolve("META-INF/services");
+                            if (Files.isDirectory(svcDir)) {
+                                try (var ds = Files.newDirectoryStream(svcDir)) {
+                                    for (Path p : ds) {
+                                        Path fn = p.getFileName();
+                                        if (fn != null) {
+                                            String s = fn.toString();
+                                            if (!s.isEmpty() && s.charAt(s.length() - 1) != '/') {
+                                                out.add("META-INF/services/" + s);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if ("file".equalsIgnoreCase(uri.getScheme()) && Files.isRegularFile(root)) {
+                        try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(root.toFile())) {
+                            var entries = zf.entries();
+                            while (entries.hasMoreElements()) {
+                                String en = entries.nextElement().getName();
+                                if (en.isEmpty()) {
+                                    continue;
+                                }
+                                int sl = en.indexOf('/');
+                                if (sl < 0) {
+                                    out.add(en);
+                                } else {
+                                    out.add(en.substring(0, sl));
+                                    if (en.startsWith("META-INF/services/") && en.length() > 18 && en.indexOf('/', 18) < 0) {
+                                        out.add(en);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        incomplete.set(true);
+                    }
+                } catch (Throwable t) {
+                    incomplete.set(true);
+                }
+            });
+            return incomplete.get() ? ROOT_INDEX_INCOMPLETE : out;
+        } catch (Throwable ignored) {
+            return ROOT_INDEX_INCOMPLETE;
+        }
+    }
+
+    private static final class CachedListSnapshot {
+        final List<?> list;
+        final int size;
+        final Object first;
+        final Object last;
+        final Set<Object> set;
+
+        CachedListSnapshot(List<?> list, int size, Object first, Object last, Set<Object> set) {
+            this.list = list;
+            this.size = size;
+            this.first = first;
+            this.last = last;
+            this.set = set;
+        }
+    }
+
+    private static volatile CachedListSnapshot cachedListA;
+    private static volatile CachedListSnapshot cachedListB;
+
+    /** O(1) snapshot-backed replacement for hot repeated {@link List#contains} config checks. */
+    public static boolean fastCachedListContains(List<?> list, Object key) {
+        if (list == null) {
+            return false;
+        }
+        int size = list.size();
+        if (size == 0) {
+            return false;
+        }
+        if (size < 4 || !(list instanceof java.util.RandomAccess)) {
+            return list.contains(key);
+        }
+        Object first = list.get(0);
+        Object last = list.get(size - 1);
+        CachedListSnapshot snap = cachedListA;
+        if (snap != null && snap.list == list && snap.size == size && snap.first == first && snap.last == last) {
+            return snap.set.contains(key);
+        }
+        snap = cachedListB;
+        if (snap != null && snap.list == list && snap.size == size && snap.first == first && snap.last == last) {
+            return snap.set.contains(key);
+        }
+        Set<Object> set = new HashSet<>(Math.max(16, (size * 4) / 3 + 1));
+        for (int i = 0; i < size; i++) {
+            set.add(list.get(i));
+        }
+        CachedListSnapshot created = new CachedListSnapshot(list, size, first, last, set);
+        if (cachedListA == null || cachedListA.list == list) {
+            cachedListA = created;
+        } else {
+            cachedListB = created;
+        }
+        return set.contains(key);
+    }
+
+    private static volatile boolean rtssCheckAttempted;
+    private static volatile java.lang.reflect.Method kernelGetModuleHandle;
+    private static volatile Object kernelInstance;
+
+    /** Fast Win32 {@code Kernel32.GetModuleHandle} probe avoiding full 150-DLL version scanning when RTSS is absent. */
+    public static boolean mayHaveRtssHooksLoaded(ClassLoader callerLoader) {
+        try {
+            java.lang.reflect.Method m = kernelGetModuleHandle;
+            Object inst = kernelInstance;
+            if (m == null) {
+                if (rtssCheckAttempted) {
+                    return true;
+                }
+                rtssCheckAttempted = true;
+                ClassLoader cl = callerLoader != null ? callerLoader : Thread.currentThread().getContextClassLoader();
+                Class<?> k32 = Class.forName("com.sun.jna.platform.win32.Kernel32", false, cl);
+                inst = k32.getField("INSTANCE").get(null);
+                m = k32.getMethod("GetModuleHandle", String.class);
+                kernelInstance = inst;
+                kernelGetModuleHandle = m;
+            }
+            return m.invoke(inst, "RTSSHooks64.dll") != null || m.invoke(inst, "RTSSHooks.dll") != null;
+        } catch (Throwable ignored) {
+            return true;
+        }
+    }
+
+    private static ConcurrentHashMap<String, List> getUnpackagedResourceMap(Object loader, boolean create) {
+        if (loader == lastUnpackagedLoader) {
+            ConcurrentHashMap<String, List> fast = lastUnpackagedMap;
+            if (fast != null) {
+                return fast;
+            }
+        }
+        synchronized (UNPACKAGED_RESOURCE_CACHE) {
+            ConcurrentHashMap<String, List> map = UNPACKAGED_RESOURCE_CACHE.get(loader);
+            if (map == null && create) {
+                map = new ConcurrentHashMap<>(128);
+                UNPACKAGED_RESOURCE_CACHE.put(loader, map);
+            }
+            if (map != null) {
+                lastUnpackagedLoader = loader;
+                lastUnpackagedMap = map;
+            }
+            return map;
+        }
+    }
+
+    public static List getCachedUnpackagedResources(Object loader, String name) {
+        if (loader == null || name == null) {
+            return null;
+        }
+        ConcurrentHashMap<String, List> map = getUnpackagedResourceMap(loader, false);
+        return map != null ? map.get(name) : null;
+    }
+
+    public static List cacheUnpackagedResources(Object loader, String name, List result) {
+        if (loader == null || name == null || result == null) {
+            return result;
+        }
+        ConcurrentHashMap<String, List> map = getUnpackagedResourceMap(loader, true);
+        if (map.size() < 4096) {
+            List prev = map.putIfAbsent(name, result);
+            if (prev != null) {
+                return prev;
+            }
+        }
+        return result;
+    }
+
+    private static final byte[] PNG_SIGNATURE =
+            new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+    private static final byte[] PNG_IEND = new byte[] {
+        0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, (byte) 0xAE, 0x42, 0x60, (byte) 0x82
+    };
+
+    /** Fast PNG encoder avoiding {@code javax.imageio.ImageIO} SPI initialization on startup icons. */
+    public static boolean fastWritePng(Object imageObj, String format, java.io.OutputStream out)
+            throws IOException {
+        if ("png".equalsIgnoreCase(format) && imageObj instanceof java.awt.image.BufferedImage img && out != null) {
+            int w = img.getWidth();
+            int h = img.getHeight();
+            if (w > 0 && h > 0 && w <= 4096 && h <= 4096) {
+                int[] pixels = new int[w * h];
+                img.getRGB(0, 0, w, h, pixels, 0, w);
+                int stride = 1 + w * 4;
+                byte[] raw = new byte[h * stride];
+                int pIdx = 0;
+                int rIdx = 0;
+                for (int y = 0; y < h; y++) {
+                    raw[rIdx++] = 0;
+                    for (int x = 0; x < w; x++) {
+                        int argb = pixels[pIdx++];
+                        raw[rIdx++] = (byte) (argb >>> 16);
+                        raw[rIdx++] = (byte) (argb >>> 8);
+                        raw[rIdx++] = (byte) argb;
+                        raw[rIdx++] = (byte) (argb >>> 24);
+                    }
+                }
+                java.io.ByteArrayOutputStream compressed = new java.io.ByteArrayOutputStream(raw.length / 2 + 64);
+                java.util.zip.Deflater deflater = new java.util.zip.Deflater(1);
+                try {
+                    deflater.setInput(raw);
+                    deflater.finish();
+                    byte[] buf = new byte[4096];
+                    while (!deflater.finished()) {
+                        int n = deflater.deflate(buf);
+                        if (n > 0) {
+                            compressed.write(buf, 0, n);
+                        } else if (deflater.needsInput()) {
+                            break;
+                        }
+                    }
+                } finally {
+                    deflater.end();
+                }
+                byte[] idat = compressed.toByteArray();
+                byte[] ihdr = new byte[13];
+                putBigEndianInt(ihdr, 0, w);
+                putBigEndianInt(ihdr, 4, h);
+                ihdr[8] = 8;
+                ihdr[9] = 6;
+                out.write(PNG_SIGNATURE);
+                writePngChunk(out, 0x49484452, ihdr);
+                writePngChunk(out, 0x49444154, idat);
+                out.write(PNG_IEND);
+                return true;
+            }
+        }
+        try {
+            Class<?> ioCls = Class.forName("javax.imageio.ImageIO");
+            Class<?> riCls = Class.forName("java.awt.image.RenderedImage");
+            java.lang.reflect.Method m = ioCls.getMethod("write", riCls, String.class, java.io.OutputStream.class);
+            Object ok = m.invoke(null, imageObj, format, out);
+            return Boolean.TRUE.equals(ok);
+        } catch (Throwable t) {
+            if (t instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() instanceof IOException io) {
+                throw io;
+            }
+            throw new IOException("ImageIO fallback failed", t);
+        }
+    }
+
+    private static void writePngChunk(java.io.OutputStream out, int type, byte[] data) throws IOException {
+        byte[] header = new byte[8];
+        putBigEndianInt(header, 0, data.length);
+        putBigEndianInt(header, 4, type);
+        out.write(header);
+        out.write(data);
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(header, 4, 4);
+        crc.update(data);
+        int c = (int) crc.getValue();
+        byte[] crcBytes = new byte[4];
+        putBigEndianInt(crcBytes, 0, c);
+        out.write(crcBytes);
+    }
+
+    private static void putBigEndianInt(byte[] buf, int off, int val) {
+        buf[off] = (byte) (val >>> 24);
+        buf[off + 1] = (byte) (val >>> 16);
+        buf[off + 2] = (byte) (val >>> 8);
+        buf[off + 3] = (byte) val;
     }
 
     private static final char[] HEX_CHARS = "0123456789abcdef".toCharArray();
@@ -2395,8 +3259,8 @@ public final class BootJarPayload {
     public static void fastIdMapperAddToList(List list, int id, Object value) {
         int size = list.size();
         if (id == size) {
-            if (size >= 512 && (size & (size - 1)) == 0 && list instanceof ArrayList al) {
-                al.ensureCapacity(Math.max(size << 1, 8192));
+            if (size == 512 && list instanceof ArrayList al) {
+                al.ensureCapacity(8192);
             }
             list.add(value);
             return;
@@ -2437,7 +3301,8 @@ public final class BootJarPayload {
     }
 
     /** Defines {@code SunlitFlatStateMap} once inside Guava's {@code ImmutableMap} lookup package. */
-    public static java.lang.invoke.MethodHandle initFlatStateMapCtor(java.lang.invoke.MethodHandles.Lookup lookup) {
+    @SuppressWarnings("unchecked")
+    public static BiFunction<Object[], Object[], Object> initFlatStateMapFactory(java.lang.invoke.MethodHandles.Lookup lookup) {
         byte[] bytes = FLAT_STATE_MAP_BYTES;
         if (bytes == null || lookup == null) {
             return null;
@@ -2453,7 +3318,21 @@ public final class BootJarPayload {
             java.lang.invoke.MethodHandle raw = lookup.findConstructor(
                     flatCls,
                     java.lang.invoke.MethodType.methodType(void.class, Object[].class, Object[].class));
-            return raw.asType(java.lang.invoke.MethodType.methodType(imCls, Object[].class, Object[].class));
+            try {
+                return (BiFunction<Object[], Object[], Object>) java.lang.invoke.LambdaMetafactory.metafactory(
+                        lookup, "apply", java.lang.invoke.MethodType.methodType(BiFunction.class),
+                        java.lang.invoke.MethodType.methodType(Object.class, Object.class, Object.class),
+                        raw, raw.type()).getTarget().invokeExact();
+            } catch (java.lang.invoke.LambdaConversionException | LinkageError ignored) {
+                java.lang.invoke.MethodHandle fallback = raw.asType(raw.type().changeReturnType(Object.class));
+                return (keys, values) -> {
+                    try {
+                        return (Object) fallback.invokeExact(keys, values);
+                    } catch (Throwable e) {
+                        throw sneakyThrow(e);
+                    }
+                };
+            }
         } catch (Throwable t) {
             return null;
         }
@@ -2574,6 +3453,13 @@ public final class BootJarPayload {
                 byte[] inBuf = TL_ENTRY_IN_BUF.get();
                 try {
                     inf.reset();
+                    if (uncompressedSize > 0) {
+                        int first = eis.read(inBuf, 0, inBuf.length);
+                        if (first < 0) {
+                            return null;
+                        }
+                        inf.setInput(inBuf, 0, first);
+                    }
                     while (pos < uncompressedSize && !inf.finished()) {
                         int n = inf.inflate(out, pos, uncompressedSize - pos);
                         if (n > 0) {
@@ -2644,6 +3530,50 @@ public final class BootJarPayload {
         }
         try (InputStream in = Files.newInputStream(file)) {
             return fastReadStreamExact(in);
+        }
+    }
+
+    private static final ThreadLocal<byte[]> TL_SMALL_UTF8_BUF = ThreadLocal.withInitial(() -> new byte[8192]);
+
+    /**
+     * Fast {@code BufferedReader} for small UTF-8 resource/metadata streams ({@code <= 8 KB}): avoids
+     * allocating per-file {@code BufferedReader(8 KB char[])} and {@code StreamDecoder(8 KB byte[])}.
+     */
+    public static java.io.BufferedReader fastUtf8BufferedReader(InputStream stream) throws IOException {
+        if (stream == null) {
+            throw new NullPointerException("stream");
+        }
+        byte[] buf = TL_SMALL_UTF8_BUF.get();
+        int len = 0;
+        try {
+            while (len < buf.length) {
+                int r = stream.read(buf, len, buf.length - len);
+                if (r < 0) {
+                    String text = new String(buf, 0, len, java.nio.charset.StandardCharsets.UTF_8);
+                    stream.close();
+                    return new java.io.BufferedReader(new java.io.StringReader(text), 1);
+                }
+                len += r;
+            }
+            int extra = stream.read();
+            if (extra < 0) {
+                String text = new String(buf, 0, len, java.nio.charset.StandardCharsets.UTF_8);
+                stream.close();
+                return new java.io.BufferedReader(new java.io.StringReader(text), 1);
+            }
+            byte[] firstChunk = new byte[len + 1];
+            System.arraycopy(buf, 0, firstChunk, 0, len);
+            firstChunk[len] = (byte) extra;
+            InputStream combined = new java.io.SequenceInputStream(
+                    new java.io.ByteArrayInputStream(firstChunk), stream);
+            return new java.io.BufferedReader(
+                    new java.io.InputStreamReader(combined, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException e) {
+            try {
+                stream.close();
+            } catch (IOException ignored) {
+            }
+            throw e;
         }
     }
 
@@ -2742,5 +3672,596 @@ public final class BootJarPayload {
             res[i] = (p == null || p.isEmpty()) ? 0 : Integer.parseInt(p);
         }
         return res;
+    }
+
+    private static final ConcurrentHashMap<Object, Object> SCAN_TYPES = new ConcurrentHashMap<>(16384);
+
+    /** Thread-safe replacement for {@code ModFileScanDataCompactor.TYPES.addOrGet}. */
+    public static Object internScanType(Object type) {
+        if (type == null) {
+            return null;
+        }
+        Object prev = SCAN_TYPES.putIfAbsent(type, type);
+        return prev != null ? prev : type;
+    }
+
+    public static Function<Object, Object> internScanTypeFn() {
+        return BootJarPayload::internScanType;
+    }
+
+    public static void clearScanTypes() {
+        SCAN_TYPES.clear();
+    }
+
+    /** Executes independent per-item work in parallel across {@code ForkJoinPool.commonPool()}. */
+    public static void parallelForEach(List items, java.util.function.Consumer action) {
+        if (items == null || items.isEmpty() || action == null) {
+            return;
+        }
+        int n = items.size();
+        if (n < 16) {
+            for (int i = 0; i < n; i++) {
+                action.accept(items.get(i));
+            }
+            return;
+        }
+        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+        int workers = Math.min(n, Math.max(2, Runtime.getRuntime().availableProcessors()));
+        int chunk = Math.max(4, (n + workers - 1) / workers);
+        List<ForkJoinTask<?>> tasks = new ArrayList<>(workers);
+        for (int s = chunk; s < n; s += chunk) {
+            final int start = s;
+            final int end = Math.min(n, s + chunk);
+            tasks.add(ForkJoinPool.commonPool().submit(() -> {
+                Thread cur = Thread.currentThread();
+                ClassLoader prevCl = cur.getContextClassLoader();
+                if (prevCl != tccl) {
+                    cur.setContextClassLoader(tccl);
+                }
+                try {
+                    for (int i = start; i < end; i++) {
+                        action.accept(items.get(i));
+                    }
+                } finally {
+                    if (cur.getContextClassLoader() != prevCl) {
+                        cur.setContextClassLoader(prevCl);
+                    }
+                }
+            }));
+        }
+        int firstEnd = Math.min(n, chunk);
+        for (int i = 0; i < firstEnd; i++) {
+            action.accept(items.get(i));
+        }
+        for (int i = 0; i < tasks.size(); i++) {
+            tasks.get(i).join();
+        }
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean POST_BOOT_NET_STARTED =
+            new java.util.concurrent.atomic.AtomicBoolean();
+    private static final java.util.concurrent.atomic.AtomicBoolean POST_BOOT_RT_STARTED =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    /** Offloads post-bootstrap Forge/RenderType class init off {@code BackgroundWaiter}. */
+    public static void schedulePostBootstrapPrewarm(boolean loadRenderType) {
+        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+        if (tccl == null) {
+            return;
+        }
+        if (loadRenderType) {
+            if (!POST_BOOT_RT_STARTED.compareAndSet(false, true)) {
+                return;
+            }
+            Thread t = new Thread(() -> {
+                try {
+                    Class<?> cls = Class.forName("net.minecraft.client.renderer.RenderType", true, tccl);
+                    cls.getMethod("m_110451_").invoke(null);
+                } catch (Throwable ignored) {
+                }
+            }, "Sunlit-PostBootstrap-RT");
+            t.setDaemon(true);
+            t.setContextClassLoader(tccl);
+            t.start();
+            return;
+        }
+        if (!POST_BOOT_NET_STARTED.compareAndSet(false, true)) {
+            return;
+        }
+        Thread t = new Thread(() -> {
+            try {
+                Class<?> cls = Class.forName("net.minecraftforge.network.NetworkConstants", true, tccl);
+                cls.getMethod("init").invoke(null);
+            } catch (Throwable ignored) {
+            }
+        }, "Sunlit-PostBootstrap-Net");
+        t.setDaemon(true);
+        t.setContextClassLoader(tccl);
+        t.start();
+    }
+
+    /** Single-pass replacement for CarryOn {@code ListHandler.addWithWildcards}. */
+    public static void applyCarryOnWildcards(List<String> list, Set<String> set, Set<?> registryKeys) {
+        if (list == null || list.isEmpty() || set == null) {
+            return;
+        }
+        ArrayList<String[]> filters = null;
+        for (int i = 0, n = list.size(); i < n; i++) {
+            String curr = list.get(i);
+            if (curr == null || curr.startsWith("#")) {
+                continue;
+            }
+            if (!curr.contains("*")) {
+                set.add(curr);
+            } else {
+                if (filters == null) {
+                    filters = new ArrayList<>();
+                }
+                filters.add(curr.replace("*", ",").split(","));
+            }
+        }
+        if (filters == null || filters.isEmpty() || registryKeys == null || registryKeys.isEmpty()) {
+            return;
+        }
+        int filterCount = filters.size();
+        for (Object keyObj : registryKeys) {
+            if (keyObj == null) {
+                continue;
+            }
+            String s = keyObj.toString();
+            for (int f = 0; f < filterCount; f++) {
+                if (matchesCarryOnWildcard(s, filters.get(f))) {
+                    set.add(s);
+                    break;
+                }
+            }
+        }
+    }
+
+    private static boolean matchesCarryOnWildcard(String str, String[] keys) {
+        int pos = 0;
+        for (int i = 0, n = keys.length; i < n; i++) {
+            String k = keys[i];
+            int idx = str.indexOf(k, pos);
+            if (idx < 0) {
+                return false;
+            }
+            pos = idx + k.length();
+        }
+        return true;
+    }
+
+    /** Parallel pre-read of pending {@code MixinConfig} class bytes prior to {@code MixinProcessor.select}. */
+    public static void prewarmPendingMixinConfigs(Object processor) {
+        if (processor == null) {
+            return;
+        }
+        try {
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+            if (tccl == null) {
+                return;
+            }
+            Object pendingObj = readDeclaredFieldValue(processor.getClass(), processor, "pendingConfigs");
+            if (!(pendingObj instanceof List<?> pending) || pending.isEmpty()) {
+                return;
+            }
+            Object pkgLookupObj = findDeclaredFieldValue(tccl.getClass(), tccl, "packageLookup");
+            if (!(pkgLookupObj instanceof Map<?, ?> pkgLookup) || pkgLookup.isEmpty()) {
+                if (TRACE_BOOT_MIXINS) System.err.println("[SunlitBootAgent] Mixin prefetch: no module package lookup");
+                return;
+            }
+            boolean isClient = detectClientDist(tccl);
+            ArrayList<String> fullNames = new ArrayList<>(1024);
+            HashSet<String> seenPaths = new HashSet<>(1536);
+            Field pkgField = null;
+            Field commonField = null;
+            Field sideField = null;
+            String sideFieldName = isClient ? "mixinClassesClient" : "mixinClassesServer";
+            for (int i = 0, n = pending.size(); i < n; i++) {
+                Object cfg = pending.get(i);
+                if (cfg == null) {
+                    continue;
+                }
+                if (pkgField == null) {
+                    Class<?> cfgCls = cfg.getClass();
+                    pkgField = getDeclaredFieldQuiet(cfgCls, "mixinPackage");
+                    commonField = getDeclaredFieldQuiet(cfgCls, "mixinClasses");
+                    sideField = getDeclaredFieldQuiet(cfgCls, sideFieldName);
+                }
+                Object pkgVal = readFieldValue(pkgField, cfg);
+                if (!(pkgVal instanceof String pkg) || pkg.isEmpty()) {
+                    continue;
+                }
+                String prefix = pkg.endsWith(".") ? pkg : pkg + ".";
+                collectMixinFullNames(readFieldValue(commonField, cfg), prefix, seenPaths, fullNames);
+                collectMixinFullNames(readFieldValue(sideField, cfg), prefix, seenPaths, fullNames);
+            }
+            if (fullNames.size() < 16) {
+                if (TRACE_BOOT_MIXINS) System.err.println("[SunlitBootAgent] Mixin prefetch: " + fullNames.size() + " declared mixins");
+                return;
+            }
+            Map<ModuleReference, List<String>> pathsByModule = new HashMap<>();
+            for (String fullName : fullNames) {
+                int dot = fullName.lastIndexOf('.');
+                if (dot <= 0) {
+                    continue;
+                }
+                String pkgName = fullName.substring(0, dot);
+                Object modObj = pkgLookup.get(pkgName);
+                if (!(modObj instanceof java.lang.module.ResolvedModule rm)) {
+                    continue;
+                }
+                String path = fullName.replace('.', '/').concat(".class");
+                pathsByModule.computeIfAbsent(rm.reference(), ignored -> new ArrayList<>()).add(path);
+            }
+            List<MixinReadBatch> batches = new ArrayList<>();
+            Map<ModuleReference, ConcurrentHashMap<String, byte[]>> cache = new HashMap<>();
+            for (var module : pathsByModule.entrySet()) {
+                List<String> paths = module.getValue();
+                var entries = new ConcurrentHashMap<String, byte[]>(paths.size());
+                cache.put(module.getKey(), entries);
+                for (int from = 0; from < paths.size(); from += 32) {
+                    batches.add(new MixinReadBatch(module.getKey(), paths.subList(from, Math.min(paths.size(), from + 32)), entries));
+                }
+            }
+            parallelForEach(batches, obj -> {
+                MixinReadBatch batch = (MixinReadBatch) obj;
+                try (ModuleReader reader = batch.module().open()) {
+                    for (String path : batch.paths()) {
+                        byte[] raw = readClassBytesRaw(reader, path);
+                        if (raw != null && raw.length > 0) {
+                            batch.entries().putIfAbsent(path, raw);
+                        }
+                    }
+                } catch (Throwable ignored) {
+                    // Unread entries are handled on demand by the normal class reader.
+                }
+            });
+            if (TRACE_BOOT_MIXINS) prefetchedMixinCount = cache.values().stream().mapToInt(Map::size).sum();
+            prewarmedMixinBytes = cache;
+        } catch (Throwable error) {
+            if (TRACE_BOOT_MIXINS) System.err.println("[SunlitBootAgent] Mixin prefetch fallback: " + error);
+        }
+    }
+
+    private record MixinReadBatch(ModuleReference module, List<String> paths, ConcurrentHashMap<String, byte[]> entries) {}
+
+    public static void clearPrewarmedClassBytes() {
+        if (TRACE_BOOT_MIXINS) {
+            int untouched = prewarmedMixinBytes.values().stream().mapToInt(Map::size).sum();
+            System.err.println("[SunlitBootAgent] Mixin prefetch: used " + (prefetchedMixinCount - untouched)
+                    + " of " + prefetchedMixinCount + " classes");
+            prefetchedMixinCount = 0;
+        }
+        prewarmedMixinBytes = Map.of();
+    }
+
+    private static void collectMixinFullNames(
+            Object listObj, String prefix, Set<String> seenPaths, List<String> out) {
+        if (!(listObj instanceof List<?> list) || list.isEmpty()) {
+            return;
+        }
+        for (int i = 0, n = list.size(); i < n; i++) {
+            Object item = list.get(i);
+            if (!(item instanceof String rel) || rel.isEmpty()) {
+                continue;
+            }
+            String fullName = prefix + rel;
+            String path = fullName.replace('.', '/').concat(".class");
+            if (seenPaths.add(path)) {
+                out.add(fullName);
+            }
+        }
+    }
+
+    private static Field getDeclaredFieldQuiet(Class<?> cls, String name) {
+        try {
+            return cls.getDeclaredField(name);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Object findDeclaredFieldValue(Class<?> startCls, Object target, String name) {
+        for (Class<?> c = startCls; c != null; c = c.getSuperclass()) {
+            Field f = getDeclaredFieldQuiet(c, name);
+            if (f != null) {
+                return readFieldValue(f, target);
+            }
+        }
+        return null;
+    }
+
+    private static Object readDeclaredFieldValue(Class<?> cls, Object target, String name) {
+        return readFieldValue(getDeclaredFieldQuiet(cls, name), target);
+    }
+
+    private static Object readFieldValue(Field f, Object target) {
+        if (f == null || target == null) {
+            return null;
+        }
+        try {
+            return f.get(target);
+        } catch (IllegalAccessException e) {
+            try {
+                f.setAccessible(true);
+                return f.get(target);
+            } catch (Throwable ignored) {
+                return null;
+            }
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static final ConcurrentHashMap<Class<?>, java.lang.reflect.Method[]> RHINO_DECLARED_METHODS =
+            new ConcurrentHashMap<>(512);
+
+    /** Caches {@link Class#getDeclaredMethods()} for Rhino reflection to avoid repeated native Method cloning. */
+    public static java.lang.reflect.Method[] fastGetDeclaredMethods(Class<?> cls) {
+        java.lang.reflect.Method[] cached = RHINO_DECLARED_METHODS.get(cls);
+        if (cached != null) {
+            return cached;
+        }
+        java.lang.reflect.Method[] methods = cls.getDeclaredMethods();
+        if (RHINO_DECLARED_METHODS.size() < 4096) {
+            java.lang.reflect.Method[] prev = RHINO_DECLARED_METHODS.putIfAbsent(cls, methods);
+            if (prev != null) {
+                return prev;
+            }
+        }
+        return methods;
+    }
+
+    private static volatile java.lang.reflect.Method PAIR_FIRST_METHOD;
+    private static volatile java.lang.reflect.Method PAIR_SECOND_METHOD;
+    private static volatile boolean PAIR_REFLECTION_FAILED;
+
+    /**
+     * Fast precheck for Blueprint's {@code RemoldedResourceManager.getResourceFunction}: inspects
+     * extension buckets, predicate lists, and exact-match maps before allocating {@code ResourceLocation.toString()}
+     * and stripped {@code new ResourceLocation(...)}.
+     */
+    public static boolean canSkipRemoldedLookup(
+            java.util.HashMap<?, ?> byExt, String ns, String path) {
+        if (byExt == null || byExt.isEmpty() || ns == null || path == null || path.isEmpty()) {
+            return true;
+        }
+        if (ns.indexOf('.') >= 0) {
+            return false;
+        }
+        int dot = path.lastIndexOf('.');
+        if (dot < 0 || dot + 1 >= path.length()) {
+            return true;
+        }
+        String ext;
+        int extLength = path.length() - dot - 1;
+        if (extLength == 4 && path.endsWith(".json")) {
+            ext = "json";
+        } else if (extLength == 3 && path.endsWith(".png")) {
+            ext = "png";
+        } else {
+            ext = path.substring(dot + 1);
+        }
+        Object extObj = byExt.get(ext);
+        if (!(extObj instanceof java.util.Map<?, ?> extMap) || extMap.isEmpty()) {
+            return true;
+        }
+        if (PAIR_REFLECTION_FAILED) {
+            return false;
+        }
+        try {
+            java.lang.reflect.Method firstM = PAIR_FIRST_METHOD;
+            java.lang.reflect.Method secondM = PAIR_SECOND_METHOD;
+            String baseKey = null;
+            for (Object pair : extMap.values()) {
+                if (pair == null) {
+                    continue;
+                }
+                if (firstM == null) {
+                    Class<?> pc = pair.getClass();
+                    firstM = pc.getMethod("getFirst");
+                    secondM = pc.getMethod("getSecond");
+                    PAIR_FIRST_METHOD = firstM;
+                    PAIR_SECOND_METHOD = secondM;
+                }
+                Object second = secondM.invoke(pair);
+                if (second instanceof java.util.Collection<?> c && !c.isEmpty()) {
+                    return false;
+                }
+                Object first = firstM.invoke(pair);
+                if (first instanceof java.util.Map<?, ?> exactMap && !exactMap.isEmpty()) {
+                    if (baseKey == null) {
+                        baseKey = new StringBuilder(ns.length() + 1 + dot)
+                                .append(ns).append(':').append(path, 0, dot).toString();
+                    }
+                    if (exactMap.containsKey(baseKey)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        } catch (Throwable ignored) {
+            PAIR_REFLECTION_FAILED = true;
+            return false;
+        }
+    }
+
+    /** Joins the names of a relativized path for vanilla's slash-separated resource IDs. */
+    public static String fastJoinRelativePackPath(Path relative) {
+        if (relative.getRoot() == null) {
+            switch (relative.getClass().getName()) {
+                case "jdk.nio.zipfs.ZipPath", "sun.nio.fs.UnixPath":
+                    return relative.toString();
+                case "sun.nio.fs.WindowsPath":
+                    return relative.toString().replace('\\', '/');
+                default:
+                    break;
+            }
+        }
+        var names = relative.iterator();
+        if (!names.hasNext()) {
+            return "";
+        }
+        String first = names.next().toString();
+        if (!names.hasNext()) {
+            return first;
+        }
+        StringBuilder result = new StringBuilder(first);
+        do {
+            result.append('/').append(names.next());
+        } while (names.hasNext());
+        return result.toString();
+    }
+
+    /** Replaces {@code UnionFileSystem.lambda$newDirStream$11} Stream/Path.iterator overhead. */
+    public static String[] fastUnionDirStreamSegments(boolean embedded, Path basepath, Path entry) {
+        Path target = embedded ? entry : basepath.relativize(entry);
+        int n = target.getNameCount();
+        if (n == 0) {
+            return EMPTY_STRING_ARRAY;
+        }
+        String[] out = new String[n];
+        if ("jdk.nio.zipfs.ZipPath".equals(target.getClass().getName())
+                && splitZipPathNames(target.toString(), out)) {
+            return out;
+        }
+        for (int i = 0; i < n; i++) {
+            Path seg = target.getName(i);
+            Path fn = seg.getFileName();
+            out[i] = (fn != null ? fn : seg).toString();
+        }
+        return out;
+    }
+
+    private static boolean splitZipPathNames(String path, String[] out) {
+        int start = path.startsWith("/") ? 1 : 0;
+        for (int i = 0; i < out.length - 1; i++) {
+            int end = path.indexOf('/', start);
+            if (end <= start) {
+                return false;
+            }
+            out[i] = path.substring(start, end);
+            start = end + 1;
+        }
+        if (path.indexOf('/', start) >= 0 || (start > 0 && start == path.length())) {
+            return false;
+        }
+        out[out.length - 1] = path.substring(start);
+        return true;
+    }
+
+    /** Skips regex {@code Matcher} creation in {@code Language.loadFromJson} when string contains no {@code '%'}. */
+    public static String fastLangFormatReplace(
+            java.util.regex.Pattern pattern, CharSequence input, String replacement) {
+        String s = input.toString();
+        if (s.indexOf('%') < 0) {
+            return s;
+        }
+        return pattern.matcher(s).replaceAll(replacement);
+    }
+
+    public static java.util.Map<?, ?> newResourceHashMap(int initialCapacity) {
+        return new java.util.HashMap<>(initialCapacity);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static java.util.TreeMap buildTreeMapFromUnsorted(java.util.Map<?, ?> src) {
+        if (src == null || src.isEmpty()) {
+            return new java.util.TreeMap<>();
+        }
+        java.util.Map.Entry[] entries = src.entrySet().toArray(new java.util.Map.Entry[0]);
+        if (entries.length > 1) {
+            java.util.Comparator<Map.Entry> order = (a, b) -> ((Comparable) a.getKey()).compareTo(b.getKey());
+            if (entries.length >= 16384 && isVanillaResourceLocationArray(entries)) {
+                java.util.Arrays.parallelSort(entries, order);
+            } else {
+                java.util.Arrays.sort(entries, order);
+            }
+        }
+        return new java.util.TreeMap(new SortedArrayMapView(entries));
+    }
+
+    private static boolean isVanillaResourceLocationArray(Map.Entry<?, ?>[] entries) {
+        Object first = entries[0].getKey();
+        if (first == null || !"net.minecraft.resources.ResourceLocation".equals(first.getClass().getName())) return false;
+        for (Map.Entry<?, ?> entry : entries) {
+            Object key = entry.getKey();
+            if (key == null || key.getClass() != first.getClass()) return false;
+        }
+        return true;
+    }
+
+    private static final class SortedArrayMapView<K, V> extends java.util.AbstractMap<K, V>
+            implements java.util.SortedMap<K, V> {
+        private final java.util.Map.Entry<K, V>[] entries;
+        private final java.util.Set<java.util.Map.Entry<K, V>> entrySetView;
+
+        SortedArrayMapView(java.util.Map.Entry<K, V>[] entries) {
+            this.entries = entries;
+            this.entrySetView = new java.util.AbstractSet<>() {
+                @Override
+                public java.util.Iterator<java.util.Map.Entry<K, V>> iterator() {
+                    return new java.util.Iterator<>() {
+                        private int idx;
+
+                        @Override
+                        public boolean hasNext() {
+                            return idx < entries.length;
+                        }
+
+                        @Override
+                        public java.util.Map.Entry<K, V> next() {
+                            return entries[idx++];
+                        }
+                    };
+                }
+
+                @Override
+                public int size() {
+                    return entries.length;
+                }
+            };
+        }
+
+        @Override
+        public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+            return entrySetView;
+        }
+
+        @Override
+        public int size() {
+            return entries.length;
+        }
+
+        @Override
+        public java.util.Comparator<? super K> comparator() {
+            return null;
+        }
+
+        @Override
+        public java.util.SortedMap<K, V> subMap(K fromKey, K toKey) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public java.util.SortedMap<K, V> headMap(K toKey) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public java.util.SortedMap<K, V> tailMap(K fromKey) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public K firstKey() {
+            return entries[0].getKey();
+        }
+
+        @Override
+        public K lastKey() {
+            return entries[entries.length - 1].getKey();
+        }
     }
 }

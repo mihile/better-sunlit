@@ -242,8 +242,23 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 }
                 case MIXIN_HANDLER_CLS -> transformMixinHandler(loader, classfileBuffer);
                 case MIXIN_TRANSFORMER_CLS -> widenClass(classfileBuffer, Set.of("processor"), Set.of());
-                case MIXIN_PROCESSOR_CLS -> transformMixinProcessor(loader, classfileBuffer);
-                case MIXIN_CONFIG_CLS -> widenClass(classfileBuffer, Set.of("mixinMapping"), Set.of());
+                case MIXIN_PROCESSOR_CLS -> {
+                    ensureReadsBootPayload(module);
+                    yield transformMixinProcessor(loader, classfileBuffer);
+                }
+                case "org/spongepowered/asm/mixin/injection/struct/MemberInfo" -> {
+                    ensureReadsBootPayload(module);
+                    yield transformStringMatches(classfileBuffer);
+                }
+                case MIXIN_CONFIG_CLS -> widenClass(
+                        classfileBuffer,
+                        Set.of(
+                                "mixinMapping",
+                                "mixinPackage",
+                                "mixinClasses",
+                                "mixinClassesClient",
+                                "mixinClassesServer"),
+                        Set.of());
                 case MIXIN_CP_PASS_CLS -> widenClass(classfileBuffer, Set.of("loadable"), Set.of("registerLoadable"));
                 case MIXIN_CP_ACC_CLS -> widenClass(classfileBuffer, Set.of("accessorMixins"), Set.of("registerAccessor"));
                 case MIXIN_CP_NEST_CLS -> widenClass(classfileBuffer, Set.of("nestHosts"), Set.of("registerNestMember"));
@@ -288,8 +303,10 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                     ensureReadsBootPayload(module);
                     yield transformPathPackResources(loader, classfileBuffer);
                 }
-                case "net/minecraftforge/fml/ModWorkManager" ->
-                        transformModWorkManager(loader, classfileBuffer);
+                case "net/minecraft/server/packs/PathPackResources" -> {
+                    ensureReadsBootPayload(module);
+                    yield transformVanillaPathPackResources(classfileBuffer);
+                }
                 case "org/apache/logging/log4j/core/appender/AbstractOutputStreamAppender" ->
                         transformAbstractOutputStreamAppender(loader, classfileBuffer);
                 case "net/minecraftforge/client/model/obj/ObjModel" -> {
@@ -308,7 +325,7 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 }
                 case "cpw/mods/cl/ModuleClassLoader" -> {
                     ensureReadsBootPayload(module);
-                    yield transformModuleClassLoader(classfileBuffer);
+                    yield transformModuleClassLoader(loader, classfileBuffer);
                 }
                 case "net/minecraftforge/fml/loading/moddiscovery/ModFile" -> {
                     ensureReadsBootPayload(module);
@@ -345,6 +362,21 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 case FML_SCANNER_CLS -> {
                     ensureReadsBootPayload(module);
                     yield transformFmlScanner(loader, classfileBuffer);
+                }
+                case "net/minecraft/server/packs/resources/ResourceMetadata",
+                     "net/minecraft/server/packs/AbstractPackResources",
+                     "net/minecraft/server/packs/resources/Resource" -> {
+                    ensureReadsBootPayload(module);
+                    yield transformSmallUtf8BufferedReader(loader, classfileBuffer);
+                }
+                case "net/minecraft/locale/Language" -> {
+                    ensureReadsBootPayload(module);
+                    yield transformLanguageLoad(loader, classfileBuffer);
+                }
+                case "net/minecraft/server/packs/resources/FallbackResourceManager",
+                     "net/minecraft/server/packs/resources/MultiPackResourceManager" -> {
+                    ensureReadsBootPayload(module);
+                    yield transformResourceManagerTreeMap(loader, classfileBuffer);
                 }
                 default -> null;
             };
@@ -823,6 +855,49 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 hook.add(new InsnNode(Opcodes.POP));
                 mn.instructions.insert(hook);
                 patched = true;
+            } else if ("lambda$newDirStream$11".equals(mn.name)
+                    && "(ZLjava/nio/file/Path;Ljava/nio/file/Path;)[Ljava/lang/String;".equals(mn.desc)) {
+                InsnList body = new InsnList();
+                body.add(new VarInsnNode(Opcodes.ILOAD, 0));
+                body.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                body.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                body.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        JAR_PAYLOAD_CLS,
+                        "fastUnionDirStreamSegments",
+                        "(ZLjava/nio/file/Path;Ljava/nio/file/Path;)[Ljava/lang/String;",
+                        false));
+                body.add(new InsnNode(Opcodes.ARETURN));
+                mn.instructions = body;
+                mn.tryCatchBlocks = null;
+                mn.localVariables = null;
+                patched = true;
+            } else if ("testFilter".equals(mn.name)
+                    && "(Ljava/nio/file/Path;Ljava/nio/file/Path;)Z".equals(mn.desc)
+                    && mn.instructions != null) {
+                for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                    if (insn instanceof MethodInsnNode min
+                            && min.getOpcode() == Opcodes.INVOKESTATIC
+                            && "java/nio/file/Files".equals(min.owner)
+                            && "isDirectory".equals(min.name)
+                            && "(Ljava/nio/file/Path;[Ljava/nio/file/LinkOption;)Z".equals(min.desc)) {
+                        AbstractInsnNode a1 = prevReal(min);
+                        AbstractInsnNode a0 = a1 != null ? prevReal(a1) : null;
+                        if (a1 instanceof TypeInsnNode tin
+                                && tin.getOpcode() == Opcodes.ANEWARRAY
+                                && "java/nio/file/LinkOption".equals(tin.desc)
+                                && a0 != null
+                                && a0.getOpcode() == Opcodes.ICONST_0) {
+                            mn.instructions.remove(a0);
+                            mn.instructions.remove(a1);
+                            min.owner = JAR_PAYLOAD_CLS;
+                            min.name = "fastIsDirectoryNoLinks";
+                            min.desc = "(Ljava/nio/file/Path;)Z";
+                            patched = true;
+                            break;
+                        }
+                    }
+                }
             }
         }
         boolean hasNewInputStream = false;
@@ -2469,10 +2544,19 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
 
                 for (ListIterator<AbstractInsnNode> it = mn.instructions.iterator(); it.hasNext();) {
                     AbstractInsnNode insn = it.next();
+                    if (insn instanceof MethodInsnNode call && MIXIN_PROCESSOR_CLS.equals(call.owner)
+                            && "selectConfigs".equals(call.name) && mn.desc.equals(call.desc)) {
+                        InsnList prewarm = new InsnList();
+                        prewarm.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        prewarm.add(new MethodInsnNode(Opcodes.INVOKESTATIC, JAR_PAYLOAD_CLS,
+                                "prewarmPendingMixinConfigs", "(Ljava/lang/Object;)V", false));
+                        mn.instructions.insert(call, prewarm);
+                    }
                     if (insn.getOpcode() == Opcodes.RETURN) {
                         InsnList rebuild = new InsnList();
                         rebuild.add(new VarInsnNode(Opcodes.ALOAD, 0));
                         rebuild.add(new MethodInsnNode(Opcodes.INVOKESTATIC, MIXIN_PROCESSOR_CLS, "sunlitRebuildSnapshot", "(Lorg/spongepowered/asm/mixin/transformer/MixinProcessor;)V", false));
+                        rebuild.add(new MethodInsnNode(Opcodes.INVOKESTATIC, JAR_PAYLOAD_CLS, "clearPrewarmedClassBytes", "()V", false));
                         mn.instructions.insertBefore(insn, rebuild);
                     }
                 }
@@ -2651,6 +2735,23 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 fast.add(new InsnNode(Opcodes.POP));
                 mn.instructions.insert(fast);
                 patchedDecompose = true;
+            } else if ("decompose".equals(mn.name)
+                    && "(Ljava/lang/String;)[Ljava/lang/String;".equals(mn.desc)
+                    && mn.instructions != null) {
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (insn instanceof MethodInsnNode min
+                            && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                            && "java/lang/String".equals(min.owner)
+                            && "split".equals(min.name)
+                            && "(Ljava/lang/String;)[Ljava/lang/String;".equals(min.desc)) {
+                        min.setOpcode(Opcodes.INVOKESTATIC);
+                        min.owner = JAR_PAYLOAD_CLS;
+                        min.name = "fastStringSplit";
+                        min.desc = "(Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;";
+                        min.itf = false;
+                        patchedDecompose = true;
+                    }
+                }
             }
         }
 
@@ -2674,6 +2775,225 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         }
 
         return (patchedInit || patchedValid || patchedDecompose) ? writeNodeWithFrames(cn, loader) : null;
+    }
+
+    private static byte[] transformSmallUtf8BufferedReader(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; ) {
+                AbstractInsnNode next = insn.getNext();
+                if (insn instanceof MethodInsnNode brInit
+                        && brInit.getOpcode() == Opcodes.INVOKESPECIAL
+                        && "java/io/BufferedReader".equals(brInit.owner)
+                        && "<init>".equals(brInit.name)
+                        && "(Ljava/io/Reader;)V".equals(brInit.desc)) {
+                    AbstractInsnNode prev1 = prevReal(brInit);
+                    AbstractInsnNode prev2 = prev1 != null ? prevReal(prev1) : null;
+                    if (prev1 instanceof MethodInsnNode isrInit
+                            && isrInit.getOpcode() == Opcodes.INVOKESPECIAL
+                            && "java/io/InputStreamReader".equals(isrInit.owner)
+                            && "<init>".equals(isrInit.name)
+                            && "(Ljava/io/InputStream;Ljava/nio/charset/Charset;)V".equals(isrInit.desc)
+                            && prev2 instanceof FieldInsnNode utf8Field
+                            && utf8Field.getOpcode() == Opcodes.GETSTATIC
+                            && "java/nio/charset/StandardCharsets".equals(utf8Field.owner)
+                            && "UTF_8".equals(utf8Field.name)) {
+                        // Search backward within the same block for:
+                        // NEW BufferedReader; DUP; NEW InputStreamReader; DUP
+                        AbstractInsnNode cursor = prevReal(utf8Field);
+                        int steps = 0;
+                        AbstractInsnNode brNew = null;
+                        AbstractInsnNode brDup = null;
+                        AbstractInsnNode isrNew = null;
+                        AbstractInsnNode isrDup = null;
+                        while (cursor != null && steps++ < 20) {
+                            if (cursor instanceof JumpInsnNode || cursor instanceof LabelNode) {
+                                break;
+                            }
+                            if (cursor instanceof InsnNode d2 && d2.getOpcode() == Opcodes.DUP) {
+                                AbstractInsnNode t2 = prevReal(d2);
+                                AbstractInsnNode d1 = t2 != null ? prevReal(t2) : null;
+                                AbstractInsnNode t1 = d1 != null ? prevReal(d1) : null;
+                                if (t2 instanceof TypeInsnNode n2
+                                        && n2.getOpcode() == Opcodes.NEW
+                                        && "java/io/InputStreamReader".equals(n2.desc)
+                                        && d1 instanceof InsnNode d1i
+                                        && d1i.getOpcode() == Opcodes.DUP
+                                        && t1 instanceof TypeInsnNode n1
+                                        && n1.getOpcode() == Opcodes.NEW
+                                        && "java/io/BufferedReader".equals(n1.desc)) {
+                                    brNew = n1;
+                                    brDup = d1i;
+                                    isrNew = n2;
+                                    isrDup = d2;
+                                    break;
+                                }
+                            }
+                            cursor = prevReal(cursor);
+                        }
+                        if (brNew != null) {
+                            mn.instructions.remove(brNew);
+                            mn.instructions.remove(brDup);
+                            mn.instructions.remove(isrNew);
+                            mn.instructions.remove(isrDup);
+                            mn.instructions.remove(utf8Field);
+                            mn.instructions.remove(isrInit);
+                            brInit.setOpcode(Opcodes.INVOKESTATIC);
+                            brInit.owner = JAR_PAYLOAD_CLS;
+                            brInit.name = "fastUtf8BufferedReader";
+                            brInit.desc = "(Ljava/io/InputStream;)Ljava/io/BufferedReader;";
+                            brInit.itf = false;
+                            patched = true;
+                        }
+                    }
+                }
+                insn = next;
+            }
+        }
+        return patched ? writeNodeWithFrames(cn, loader) : null;
+    }
+
+    private static byte[] transformLanguageLoad(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"m_128108_".equals(mn.name) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; ) {
+                AbstractInsnNode next = insn.getNext();
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKESPECIAL
+                        && "java/io/InputStreamReader".equals(min.owner)
+                        && "<init>".equals(min.name)
+                        && "(Ljava/io/InputStream;Ljava/nio/charset/Charset;)V".equals(min.desc)
+                        && prevReal(min) instanceof FieldInsnNode utf8Field
+                        && utf8Field.getOpcode() == Opcodes.GETSTATIC
+                        && "java/nio/charset/StandardCharsets".equals(utf8Field.owner)
+                        && "UTF_8".equals(utf8Field.name)) {
+                    AbstractInsnNode a0 = prevReal(utf8Field);
+                    AbstractInsnNode dup = a0 != null ? prevReal(a0) : null;
+                    AbstractInsnNode newIsr = dup != null ? prevReal(dup) : null;
+                    if (dup instanceof InsnNode && dup.getOpcode() == Opcodes.DUP
+                            && newIsr instanceof TypeInsnNode tin
+                            && tin.getOpcode() == Opcodes.NEW
+                            && "java/io/InputStreamReader".equals(tin.desc)) {
+                        mn.instructions.remove(newIsr);
+                        mn.instructions.remove(dup);
+                        mn.instructions.remove(utf8Field);
+                        min.setOpcode(Opcodes.INVOKESTATIC);
+                        min.owner = JAR_PAYLOAD_CLS;
+                        min.name = "fastUtf8BufferedReader";
+                        min.desc = "(Ljava/io/InputStream;)Ljava/io/BufferedReader;";
+                        min.itf = false;
+                        patched = true;
+                    }
+                } else if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && "java/util/regex/Pattern".equals(min.owner)
+                        && "matcher".equals(min.name)
+                        && "(Ljava/lang/CharSequence;)Ljava/util/regex/Matcher;".equals(min.desc)) {
+                    AbstractInsnNode i1 = nextReal(min);
+                    AbstractInsnNode i2 = i1 != null ? nextReal(i1) : null;
+                    if (i1 instanceof LdcInsnNode
+                            && i2 instanceof MethodInsnNode replCall
+                            && replCall.getOpcode() == Opcodes.INVOKEVIRTUAL
+                            && "java/util/regex/Matcher".equals(replCall.owner)
+                            && "replaceAll".equals(replCall.name)
+                            && "(Ljava/lang/String;)Ljava/lang/String;".equals(replCall.desc)) {
+                        next = replCall.getNext();
+                        mn.instructions.remove(min);
+                        replCall.setOpcode(Opcodes.INVOKESTATIC);
+                        replCall.owner = JAR_PAYLOAD_CLS;
+                        replCall.name = "fastLangFormatReplace";
+                        replCall.desc = "(Ljava/util/regex/Pattern;Ljava/lang/CharSequence;Ljava/lang/String;)Ljava/lang/String;";
+                        replCall.itf = false;
+                        patched = true;
+                    }
+                }
+                insn = next;
+            }
+        }
+        return patched ? writeNodeWithFrames(cn, loader) : null;
+    }
+
+    private static byte[] transformResourceManagerTreeMap(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ((!"m_214159_".equals(mn.name) && !"m_214160_".equals(mn.name)) || mn.instructions == null) {
+                continue;
+            }
+            if (!"(Ljava/lang/String;Ljava/util/function/Predicate;)Ljava/util/Map;".equals(mn.desc)) {
+                continue;
+            }
+            boolean methodPatched = false;
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; ) {
+                AbstractInsnNode next = insn.getNext();
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKESTATIC
+                        && "com/google/common/collect/Maps".equals(min.owner)
+                        && "newTreeMap".equals(min.name)
+                        && "()Ljava/util/TreeMap;".equals(min.desc)) {
+                    mn.instructions.insertBefore(min, new IntInsnNode(Opcodes.SIPUSH, 256));
+                    min.owner = JAR_PAYLOAD_CLS;
+                    min.name = "newResourceHashMap";
+                    min.desc = "(I)Ljava/util/Map;";
+                    min.itf = false;
+                    methodPatched = true;
+                } else if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKESPECIAL
+                        && "java/util/TreeMap".equals(min.owner)
+                        && "<init>".equals(min.name)
+                        && "()V".equals(min.desc)) {
+                    AbstractInsnNode dup = prevReal(min);
+                    AbstractInsnNode nw = dup != null ? prevReal(dup) : null;
+                    if (dup instanceof InsnNode && dup.getOpcode() == Opcodes.DUP
+                            && nw instanceof TypeInsnNode tin
+                            && tin.getOpcode() == Opcodes.NEW
+                            && "java/util/TreeMap".equals(tin.desc)) {
+                        mn.instructions.remove(nw);
+                        mn.instructions.remove(dup);
+                        mn.instructions.insertBefore(min, new IntInsnNode(Opcodes.SIPUSH, 1024));
+                        min.setOpcode(Opcodes.INVOKESTATIC);
+                        min.owner = JAR_PAYLOAD_CLS;
+                        min.name = "newResourceHashMap";
+                        min.desc = "(I)Ljava/util/Map;";
+                        min.itf = false;
+                        methodPatched = true;
+                    }
+                } else if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && "java/util/TreeMap".equals(min.owner)
+                        && ("put".equals(min.name) || "putAll".equals(min.name))) {
+                    min.setOpcode(Opcodes.INVOKEINTERFACE);
+                    min.owner = "java/util/Map";
+                    min.itf = true;
+                }
+                insn = next;
+            }
+            if (methodPatched) {
+                for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                    if (insn.getOpcode() == Opcodes.ARETURN) {
+                        mn.instructions.insertBefore(
+                                insn,
+                                new MethodInsnNode(
+                                        Opcodes.INVOKESTATIC,
+                                        JAR_PAYLOAD_CLS,
+                                        "buildTreeMapFromUnsorted",
+                                        "(Ljava/util/Map;)Ljava/util/TreeMap;",
+                                        false));
+                    }
+                }
+                mn.localVariables = null;
+                patched = true;
+            }
+        }
+        return patched ? writeNodeWithFrames(cn, loader) : null;
     }
 
     public static byte[] transformPackCacheNode(byte[] bytes) {
@@ -3453,20 +3773,21 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
             il.add(new InsnNode(Opcodes.ARETURN));
         }
         // Batch 24: replace RegularImmutableMap entry/table allocation in sunlitBuildStateMap with zero-entry SunlitFlatStateMap.
+        String factoryDesc = "Ljava/util/function/BiFunction;";
         cn.fields.add(new FieldNode(
                 Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
-                "SUNLIT_FLAT_CTOR",
-                "Ljava/lang/invoke/MethodHandle;",
+                "SUNLIT_FLAT_FACTORY",
+                factoryDesc,
                 null,
                 null));
         MethodNode initFlatM = new MethodNode(
                 Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_SYNCHRONIZED,
-                "sunlitInitFlatCtor",
-                "()Ljava/lang/invoke/MethodHandle;",
+                "sunlitInitFlatFactory",
+                "()" + factoryDesc,
                 null,
                 null);
         initFlatM.instructions.add(new FieldInsnNode(
-                Opcodes.GETSTATIC, imMap, "SUNLIT_FLAT_CTOR", "Ljava/lang/invoke/MethodHandle;"));
+                Opcodes.GETSTATIC, imMap, "SUNLIT_FLAT_FACTORY", factoryDesc));
         initFlatM.instructions.add(new InsnNode(Opcodes.DUP));
         LabelNode flatAlreadyInit = new LabelNode();
         initFlatM.instructions.add(new JumpInsnNode(Opcodes.IFNONNULL, flatAlreadyInit));
@@ -3476,12 +3797,12 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         initFlatM.instructions.add(new MethodInsnNode(
                 Opcodes.INVOKESTATIC,
                 JAR_PAYLOAD_CLS,
-                "initFlatStateMapCtor",
-                "(Ljava/lang/invoke/MethodHandles$Lookup;)Ljava/lang/invoke/MethodHandle;",
+                "initFlatStateMapFactory",
+                "(Ljava/lang/invoke/MethodHandles$Lookup;)" + factoryDesc,
                 false));
         initFlatM.instructions.add(new InsnNode(Opcodes.DUP));
         initFlatM.instructions.add(new FieldInsnNode(
-                Opcodes.PUTSTATIC, imMap, "SUNLIT_FLAT_CTOR", "Ljava/lang/invoke/MethodHandle;"));
+                Opcodes.PUTSTATIC, imMap, "SUNLIT_FLAT_FACTORY", factoryDesc));
         initFlatM.instructions.add(flatAlreadyInit);
         initFlatM.instructions.add(new InsnNode(Opcodes.ARETURN));
         cn.methods.add(initFlatM);
@@ -3490,13 +3811,13 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         buildM.tryCatchBlocks.clear();
         buildM.localVariables.clear();
         buildM.instructions.add(new FieldInsnNode(
-                Opcodes.GETSTATIC, imMap, "SUNLIT_FLAT_CTOR", "Ljava/lang/invoke/MethodHandle;"));
+                Opcodes.GETSTATIC, imMap, "SUNLIT_FLAT_FACTORY", factoryDesc));
         buildM.instructions.add(new VarInsnNode(Opcodes.ASTORE, 3));
         buildM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 3));
         LabelNode ctorReady = new LabelNode();
         buildM.instructions.add(new JumpInsnNode(Opcodes.IFNONNULL, ctorReady));
         buildM.instructions.add(new MethodInsnNode(
-                Opcodes.INVOKESTATIC, imMap, "sunlitInitFlatCtor", "()Ljava/lang/invoke/MethodHandle;", false));
+                Opcodes.INVOKESTATIC, imMap, "sunlitInitFlatFactory", "()" + factoryDesc, false));
         buildM.instructions.add(new VarInsnNode(Opcodes.ASTORE, 3));
         buildM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 3));
         LabelNode ctorNull = new LabelNode();
@@ -3506,11 +3827,12 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         buildM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
         buildM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
         buildM.instructions.add(new MethodInsnNode(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/invoke/MethodHandle",
-                "invokeExact",
-                "([Ljava/lang/Object;[Ljava/lang/Object;)L" + imMap + ";",
-                false));
+                Opcodes.INVOKEINTERFACE,
+                "java/util/function/BiFunction",
+                "apply",
+                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+                true));
+        buildM.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, imMap));
         buildM.instructions.add(new InsnNode(Opcodes.ARETURN));
         buildM.instructions.add(ctorNull);
         buildM.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
@@ -5520,6 +5842,40 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         return patched ? writeNodeWithFrames(cn, loader) : null;
     }
 
+    public static byte[] transformVanillaPathPackResources(byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        for (MethodNode mn : cn.methods) {
+            if (!"m_247327_".equals(mn.name) || !mn.desc.equals("(Ljava/nio/file/Path;Ljava/lang/String;"
+                    + "Lnet/minecraft/server/packs/PackResources$ResourceOutput;Ljava/nio/file/Path;)V")) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions) {
+                if (!(insn instanceof FieldInsnNode joiner) || joiner.getOpcode() != Opcodes.GETSTATIC
+                        || !cn.name.equals(joiner.owner) || !"f_244478_".equals(joiner.name)
+                        || !"Lcom/google/common/base/Joiner;".equals(joiner.desc)
+                        || !(nextReal(joiner) instanceof VarInsnNode root)
+                        || root.getOpcode() != Opcodes.ALOAD || root.var != 0
+                        || !(nextReal(root) instanceof VarInsnNode file)
+                        || file.getOpcode() != Opcodes.ALOAD || file.var != 3
+                        || !(nextReal(file) instanceof MethodInsnNode relativize)
+                        || relativize.getOpcode() != Opcodes.INVOKEINTERFACE
+                        || !"java/nio/file/Path".equals(relativize.owner) || !"relativize".equals(relativize.name)
+                        || !"(Ljava/nio/file/Path;)Ljava/nio/file/Path;".equals(relativize.desc)
+                        || !(nextReal(relativize) instanceof MethodInsnNode join)
+                        || join.getOpcode() != Opcodes.INVOKEVIRTUAL
+                        || !"com/google/common/base/Joiner".equals(join.owner) || !"join".equals(join.name)
+                        || !"(Ljava/lang/Iterable;)Ljava/lang/String;".equals(join.desc)) {
+                    continue;
+                }
+                mn.instructions.remove(joiner);
+                mn.instructions.set(join, new MethodInsnNode(Opcodes.INVOKESTATIC, JAR_PAYLOAD_CLS,
+                        "fastJoinRelativePackPath", "(Ljava/nio/file/Path;)Ljava/lang/String;", false));
+                return writeNodeMaxs(cn);
+            }
+        }
+        return null;
+    }
+
     public static byte[] transformPathPackResources(ClassLoader loader, byte[] bytes) {
         ClassNode cn = readNode(bytes);
         boolean patched = false;
@@ -5565,39 +5921,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 }
                 patched = true;
                 break;
-            }
-        }
-        return patched ? writeNodeMaxs(cn) : null;
-    }
-
-    public static byte[] transformModWorkManager(ClassLoader loader, byte[] bytes) {
-        ClassNode cn = readNode(bytes);
-        boolean patched = false;
-        for (MethodNode mn : cn.methods) {
-            if ("parallelExecutor".equals(mn.name) && "()Ljava/util/concurrent/Executor;".equals(mn.desc)) {
-                for (AbstractInsnNode insn : mn.instructions) {
-                    if (insn instanceof MethodInsnNode min
-                            && "net/minecraftforge/fml/loading/FMLConfig".equals(min.owner)
-                            && "getIntConfigValue".equals(min.name)) {
-                        AbstractInsnNode next = nextReal(min);
-                        if (next instanceof VarInsnNode vin && vin.getOpcode() == Opcodes.ISTORE) {
-                            int slot = vin.var;
-                            InsnList boost = new InsnList();
-                            boost.add(new MethodInsnNode(
-                                    Opcodes.INVOKESTATIC, "java/lang/Runtime", "getRuntime", "()Ljava/lang/Runtime;", false));
-                            boost.add(new MethodInsnNode(
-                                    Opcodes.INVOKEVIRTUAL, "java/lang/Runtime", "availableProcessors", "()I", false));
-                            boost.add(new IntInsnNode(Opcodes.BIPUSH, 16));
-                            boost.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Math", "min", "(II)I", false));
-                            boost.add(new VarInsnNode(Opcodes.ILOAD, slot));
-                            boost.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Math", "max", "(II)I", false));
-                            boost.add(new VarInsnNode(Opcodes.ISTORE, slot));
-                            mn.instructions.insert(vin, boost);
-                            patched = true;
-                            break;
-                        }
-                    }
-                }
             }
         }
         return patched ? writeNodeMaxs(cn) : null;
@@ -5723,6 +6046,23 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 }
                 patched = true;
                 break;
+            }
+        }
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKESTATIC
+                        && "java/lang/Float".equals(min.owner)
+                        && "parseFloat".equals(min.name)
+                        && "(Ljava/lang/String;)F".equals(min.desc)) {
+                    min.owner = JAR_PAYLOAD_CLS;
+                    min.name = "fastParseFloat";
+                    min.itf = false;
+                    patched = true;
+                }
             }
         }
         return patched ? writeNodeWithFrames(cn, loader) : null;
@@ -6032,9 +6372,51 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
         return patched ? writeNodeMaxs(cn) : null;
     }
 
-    private static byte[] transformModuleClassLoader(byte[] bytes) {
+    private static byte[] transformStringMatches(byte[] bytes) {
         ClassNode cn = readNode(bytes);
         boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && "java/lang/String".equals(min.owner)) {
+                    if ("matches".equals(min.name) && "(Ljava/lang/String;)Z".equals(min.desc)) {
+                        min.setOpcode(Opcodes.INVOKESTATIC);
+                        min.owner = JAR_PAYLOAD_CLS;
+                        min.name = "fastStringMatches";
+                        min.desc = "(Ljava/lang/String;Ljava/lang/String;)Z";
+                        min.itf = false;
+                        patched = true;
+                    } else if ("replaceAll".equals(min.name)
+                            && "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;".equals(min.desc)) {
+                        min.setOpcode(Opcodes.INVOKESTATIC);
+                        min.owner = JAR_PAYLOAD_CLS;
+                        min.name = "fastStringReplaceAll";
+                        min.desc = "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;";
+                        min.itf = false;
+                        patched = true;
+                    }
+                }
+            }
+        }
+        return patched ? writeNodeMaxs(cn) : null;
+    }
+
+    private static byte[] transformModuleClassLoader(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        boolean needFrames = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("packageLookup".equals(fn.name)) {
+                    fn.access = makePublicAccess(fn.access);
+                    patched = true;
+                }
+            }
+        }
         for (MethodNode mn : cn.methods) {
             if ("getClassBytes".equals(mn.name)
                     && "(Ljava/lang/module/ModuleReader;Ljava/lang/module/ModuleReference;Ljava/lang/String;)[B"
@@ -6043,18 +6425,107 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 mn.tryCatchBlocks.clear();
                 mn.localVariables.clear();
                 mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
                 mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 3));
                 mn.instructions.add(new MethodInsnNode(
                         Opcodes.INVOKESTATIC,
                         JAR_PAYLOAD_CLS,
                         "fastGetClassBytes",
-                        "(Ljava/lang/module/ModuleReader;Ljava/lang/String;)[B",
+                        "(Ljava/lang/module/ModuleReader;Ljava/lang/module/ModuleReference;Ljava/lang/String;)[B",
                         false));
                 mn.instructions.add(new InsnNode(Opcodes.ARETURN));
                 patched = true;
+            } else if ("findResourceList".equals(mn.name)
+                    && "(Ljava/lang/String;)Ljava/util/List;".equals(mn.desc)
+                    && mn.instructions != null) {
+                AbstractInsnNode rootsAload = null;
+                MethodInsnNode streamCall = null;
+                AbstractInsnNode tailReturn = null;
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (rootsAload == null
+                            && insn instanceof FieldInsnNode fin
+                            && fin.getOpcode() == Opcodes.GETFIELD
+                            && "cpw/mods/cl/ModuleClassLoader".equals(fin.owner)
+                            && "resolvedRoots".equals(fin.name)
+                            && prevReal(fin) instanceof VarInsnNode vin
+                            && vin.getOpcode() == Opcodes.ALOAD
+                            && vin.var == 0) {
+                        rootsAload = vin;
+                    } else if (rootsAload != null && streamCall == null
+                            && insn instanceof MethodInsnNode min
+                            && min.getOpcode() == Opcodes.INVOKEINTERFACE
+                            && "java/util/Collection".equals(min.owner)
+                            && "stream".equals(min.name)
+                            && "()Ljava/util/stream/Stream;".equals(min.desc)) {
+                        streamCall = min;
+                    } else if (streamCall != null && insn.getOpcode() == Opcodes.ARETURN) {
+                        tailReturn = insn;
+                        break;
+                    }
+                }
+                if (rootsAload != null && streamCall != null && tailReturn != null) {
+                    streamCall.name = "parallelStream";
+                    int cachedSlot = 6;
+                    LabelNode lCheckRoot = new LabelNode();
+                    LabelNode lMissScan = new LabelNode();
+                    InsnList head = new InsnList();
+                    head.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    head.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    head.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            JAR_PAYLOAD_CLS,
+                            "getCachedUnpackagedResources",
+                            "(Ljava/lang/Object;Ljava/lang/String;)Ljava/util/List;",
+                            false));
+                    head.add(new VarInsnNode(Opcodes.ASTORE, cachedSlot));
+                    head.add(new VarInsnNode(Opcodes.ALOAD, cachedSlot));
+                    head.add(new JumpInsnNode(Opcodes.IFNULL, lCheckRoot));
+                    head.add(new VarInsnNode(Opcodes.ALOAD, cachedSlot));
+                    head.add(new InsnNode(Opcodes.ARETURN));
+                    head.add(lCheckRoot);
+                    head.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    head.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    head.add(new FieldInsnNode(
+                            Opcodes.GETFIELD, "cpw/mods/cl/ModuleClassLoader", "resolvedRoots", "Ljava/util/Map;"));
+                    head.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    head.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            JAR_PAYLOAD_CLS,
+                            "isKnownMissingRootResource",
+                            "(Ljava/lang/Object;Ljava/util/Map;Ljava/lang/String;)Z",
+                            false));
+                    head.add(new JumpInsnNode(Opcodes.IFEQ, lMissScan));
+                    head.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            "java/util/List",
+                            "of",
+                            "()Ljava/util/List;",
+                            true));
+                    head.add(new InsnNode(Opcodes.ARETURN));
+                    head.add(lMissScan);
+                    mn.instructions.insertBefore(rootsAload, head);
+
+                    InsnList tail = new InsnList();
+                    tail.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    tail.add(new InsnNode(Opcodes.SWAP));
+                    tail.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    tail.add(new InsnNode(Opcodes.SWAP));
+                    tail.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            JAR_PAYLOAD_CLS,
+                            "cacheUnpackagedResources",
+                            "(Ljava/lang/Object;Ljava/lang/String;Ljava/util/List;)Ljava/util/List;",
+                            false));
+                    mn.instructions.insertBefore(tailReturn, tail);
+                    patched = true;
+                    needFrames = true;
+                }
             }
         }
-        return patched ? writeNodeMaxs(cn) : null;
+        if (!patched) {
+            return null;
+        }
+        return needFrames ? writeNodeWithFrames(cn, loader) : writeNodeMaxs(cn);
     }
 
     private static byte[] transformModFile(byte[] bytes) {

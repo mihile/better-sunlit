@@ -48,6 +48,51 @@ public final class VoxelOptimizePerf {
         }
     }
 
+    /** Direct single-pass union from flat {@code [x0, y0, z0, x1, y1, z1]} box coordinates. */
+    public static VoxelShape orBoxes(double[] rawCoords, int count) {
+        if (rawCoords == null || count <= 0) {
+            return Shapes.m_83040_();
+        }
+        if (count > MAX_SINGLE_PASS_BOXES) {
+            return null;
+        }
+        BoxScratch s = acquireScratch();
+        try {
+            int needed = count * 6;
+            if (needed > s.boxes.length) {
+                int cap = s.boxes.length << 1;
+                while (cap < needed) {
+                    cap <<= 1;
+                }
+                s.boxes = new double[cap];
+            }
+            int valid = 0;
+            double[] dst = s.boxes;
+            for (int i = 0, p = 0; i < count; i++, p += 6) {
+                double x0 = rawCoords[p];
+                double y0 = rawCoords[p + 1];
+                double z0 = rawCoords[p + 2];
+                double x1 = rawCoords[p + 3];
+                double y1 = rawCoords[p + 4];
+                double z1 = rawCoords[p + 5];
+                if (x1 - x0 >= EPS && y1 - y0 >= EPS && z1 - z0 >= EPS) {
+                    int outP = valid * 6;
+                    dst[outP] = x0;
+                    dst[outP + 1] = y0;
+                    dst[outP + 2] = z0;
+                    dst[outP + 3] = x1;
+                    dst[outP + 4] = y1;
+                    dst[outP + 5] = z1;
+                    valid++;
+                }
+            }
+            s.boxCount = valid;
+            return buildFromScratch(s);
+        } finally {
+            s.release();
+        }
+    }
+
     public static VoxelShape orTwo(VoxelShape first, VoxelShape second) {
         if (first == null || second == null) {
             return null;
@@ -140,8 +185,45 @@ public final class VoxelOptimizePerf {
     }
 
     private static boolean collectBoxes(VoxelShape shape, BoxScratch s) {
+        int slot = (System.identityHashCode(shape) * 0x9E3779B9) >>> 27;
+        if (s.cachedShapes[slot] == shape) {
+            double[] cached = s.cachedBoxes[slot];
+            int added = cached.length / 6;
+            if (s.boxCount + added > MAX_SINGLE_PASS_BOXES) {
+                s.overflow = true;
+                return false;
+            }
+            int needed = (s.boxCount + added) * 6;
+            if (needed > s.boxes.length) {
+                int newCap = s.boxes.length << 1;
+                while (newCap < needed) {
+                    newCap <<= 1;
+                }
+                s.boxes = Arrays.copyOf(s.boxes, newCap);
+            }
+            System.arraycopy(cached, 0, s.boxes, s.boxCount * 6, cached.length);
+            s.boxCount += added;
+            return true;
+        }
+        int startBox = s.boxCount;
         shape.m_83286_(s.consumer);
+        if (!s.overflow) {
+            int added = s.boxCount - startBox;
+            if (added > 0 && added <= 64) {
+                s.cachedShapes[slot] = shape;
+                s.cachedBoxes[slot] = Arrays.copyOfRange(s.boxes, startBox * 6, s.boxCount * 6);
+            }
+        }
         return !s.overflow;
+    }
+
+    public static void clearShapeCache() {
+        BoxScratch s = SCRATCH.get();
+        Arrays.fill(s.cachedShapes, null);
+        Arrays.fill(s.cachedBoxes, null);
+        s.lastA = null;
+        s.lastB = null;
+        s.lastOut = null;
     }
 
     private static VoxelShape buildFromScratch(BoxScratch s) {
@@ -291,6 +373,8 @@ public final class VoxelOptimizePerf {
         VoxelShape lastA;
         VoxelShape lastB;
         VoxelShape lastOut;
+        final VoxelShape[] cachedShapes = new VoxelShape[32];
+        final double[][] cachedBoxes = new double[32][];
 
         final Shapes.DoubleLineConsumer consumer = (x0, y0, z0, x1, y1, z1) -> {
             if (overflow) {
