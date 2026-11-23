@@ -1,0 +1,11 @@
+{
+  "build": 2026112401,
+  "label": "2026.11.24.1",
+  "title": "기능 개선 및 오류 수정",
+  "changes": [
+    {
+      "title": "Society 시작 시 로딩 화면 오류 수정",
+      "detail": "Forge 로딩 화면 클래스가 Mixin 적용 전에 이미 로드됐다고 잘못 기록되어 Drippy Loading Screen에서 시작이 중단되는 문제를 수정했습니다."
+    }
+  ]
+}

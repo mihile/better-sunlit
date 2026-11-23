@@ -74,7 +74,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
     private static final String SCAN_CLS = "net/minecraftforge/fml/loading/moddiscovery/BackgroundScanHandler";
     private static final String MIXIN_BYTECODE_CLS = "org/spongepowered/asm/util/Bytecode";
     private static final String MIXIN_PLUGIN_CLS = "org/spongepowered/asm/launch/MixinLaunchPluginLegacy";
-    private static final String MIXIN_TRACKER_CLS = "org/spongepowered/asm/service/modlauncher/ModLauncherClassTracker";
     private static final String MIXIN_CLASS_INFO_CLS = "org/spongepowered/asm/mixin/transformer/ClassInfo";
     private static final String MIXIN_CLASS_INFO_METHOD_CLS = "org/spongepowered/asm/mixin/transformer/ClassInfo$Method";
     private static final String MIXIN_CLASS_INFO_MEMBER_CLS = "org/spongepowered/asm/mixin/transformer/ClassInfo$Member";
@@ -226,7 +225,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                     ensureReadsBootPayload(module);
                     yield transformMixinLaunchPlugin(loader, classfileBuffer);
                 }
-                case MIXIN_TRACKER_CLS -> transformMixinClassTracker(loader, classfileBuffer);
                 case MIXIN_CLASS_INFO_CLS -> {
                     ensureReadsBootPayload(module);
                     yield transformClassInfo(loader, classfileBuffer);
@@ -1608,105 +1606,6 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
             return null;
         }
         return patchedGetNode ? writeNodeWithFrames(cn, loader) : writeNodeMaxs(cn);
-    }
-
-    public static byte[] transformMixinClassTracker(ClassLoader loader, byte[] bytes) {
-        ClassNode cn = readNode(bytes);
-        boolean patchedInit = false;
-        boolean patchedHandles = false;
-        for (MethodNode mn : cn.methods) {
-            if ("<init>".equals(mn.name) && "()V".equals(mn.desc)) {
-                for (ListIterator<AbstractInsnNode> it = mn.instructions.iterator(); it.hasNext();) {
-                    AbstractInsnNode insn = it.next();
-                    if (insn instanceof TypeInsnNode tin
-                            && tin.getOpcode() == Opcodes.NEW
-                            && "java/util/HashSet".equals(tin.desc)) {
-                        AbstractInsnNode n1 = nextReal(tin);
-                        AbstractInsnNode n2 = nextReal(n1);
-                        if (n1 != null && n1.getOpcode() == Opcodes.DUP
-                                && n2 instanceof MethodInsnNode min
-                                && min.getOpcode() == Opcodes.INVOKESPECIAL
-                                && "java/util/HashSet".equals(min.owner)
-                                && "<init>".equals(min.name)) {
-                            mn.instructions.insertBefore(tin, new MethodInsnNode(
-                                    Opcodes.INVOKESTATIC,
-                                    "java/util/concurrent/ConcurrentHashMap",
-                                    "newKeySet",
-                                    "()Ljava/util/concurrent/ConcurrentHashMap$KeySetView;",
-                                    false));
-                            mn.instructions.remove(tin);
-                            mn.instructions.remove(n1);
-                            mn.instructions.remove(n2);
-                            patchedInit = true;
-                            it = mn.instructions.iterator();
-                        }
-                    }
-                }
-            } else if ("registerInvalidClass".equals(mn.name)
-                    || "isClassLoaded".equals(mn.name)
-                    || "processClass".equals(mn.name)) {
-                for (ListIterator<AbstractInsnNode> it = mn.instructions.iterator(); it.hasNext();) {
-                    AbstractInsnNode insn = it.next();
-                    if (insn.getOpcode() == Opcodes.MONITORENTER || insn.getOpcode() == Opcodes.MONITOREXIT) {
-                        it.set(new InsnNode(Opcodes.POP));
-                    }
-                }
-                if (mn.tryCatchBlocks != null) {
-                    mn.tryCatchBlocks.clear();
-                }
-            } else if ("handlesClass".equals(mn.name)
-                    && "(Lorg/objectweb/asm/Type;ZLjava/lang/String;)Ljava/util/EnumSet;".equals(mn.desc)) {
-                InsnList fast = new InsnList();
-                LabelNode notInvalid = new LabelNode();
-                LabelNode notLoading = new LabelNode();
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 1));
-                fast.add(new MethodInsnNode(
-                        Opcodes.INVOKEVIRTUAL, "org/objectweb/asm/Type", "getClassName", "()Ljava/lang/String;", false));
-                fast.add(new VarInsnNode(Opcodes.ASTORE, 4));
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
-                fast.add(new FieldInsnNode(Opcodes.GETFIELD, MIXIN_TRACKER_CLS, "invalidClasses", "Ljava/util/Set;"));
-                fast.add(new InsnNode(Opcodes.DUP));
-                fast.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/Set", "isEmpty", "()Z", true));
-                LabelNode popNotInvalid = new LabelNode();
-                fast.add(new JumpInsnNode(Opcodes.IFNE, popNotInvalid));
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 4));
-                fast.add(new MethodInsnNode(
-                        Opcodes.INVOKEINTERFACE, "java/util/Set", "contains", "(Ljava/lang/Object;)Z", true));
-                fast.add(new JumpInsnNode(Opcodes.IFEQ, notInvalid));
-                fast.add(new TypeInsnNode(Opcodes.NEW, "java/lang/NoClassDefFoundError"));
-                fast.add(new InsnNode(Opcodes.DUP));
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 4));
-                fast.add(new MethodInsnNode(
-                        Opcodes.INVOKESPECIAL, "java/lang/NoClassDefFoundError", "<init>", "(Ljava/lang/String;)V", false));
-                fast.add(new InsnNode(Opcodes.ATHROW));
-                fast.add(popNotInvalid);
-                fast.add(new InsnNode(Opcodes.POP));
-                fast.add(notInvalid);
-                fast.add(new LdcInsnNode("classloading"));
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 3));
-                fast.add(new MethodInsnNode(
-                        Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals", "(Ljava/lang/Object;)Z", false));
-                fast.add(new JumpInsnNode(Opcodes.IFEQ, notLoading));
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
-                fast.add(new FieldInsnNode(Opcodes.GETFIELD, MIXIN_TRACKER_CLS, "loadedClasses", "Ljava/util/Set;"));
-                fast.add(new VarInsnNode(Opcodes.ALOAD, 4));
-                fast.add(new MethodInsnNode(
-                        Opcodes.INVOKEINTERFACE, "java/util/Set", "add", "(Ljava/lang/Object;)Z", true));
-                fast.add(new InsnNode(Opcodes.POP));
-                fast.add(notLoading);
-                fast.add(new InsnNode(Opcodes.ACONST_NULL));
-                fast.add(new InsnNode(Opcodes.ARETURN));
-                mn.instructions = fast;
-                if (mn.tryCatchBlocks != null) {
-                    mn.tryCatchBlocks.clear();
-                }
-                if (mn.localVariables != null) {
-                    mn.localVariables.clear();
-                }
-                patchedHandles = true;
-            }
-        }
-        return (patchedInit && patchedHandles) ? writeNodeWithFrames(cn, loader) : null;
     }
 
     public static byte[] transformClassInfo(ClassLoader loader, byte[] bytes) {
