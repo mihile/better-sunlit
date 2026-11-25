@@ -92,9 +92,9 @@ public final class AnimalStatusSync {
 
     private AnimalStatusSync() {}
 
-    private static boolean acceptsVersion(String version) {
+    public static boolean acceptsVersion(String version) {
         return PROTOCOL.equals(version)
-                || NetworkRegistry.ABSENT.equals(version)
+                || NetworkRegistry.ABSENT.version().equals(version)
                 || NetworkRegistry.ACCEPTVANILLA.equals(version);
     }
 

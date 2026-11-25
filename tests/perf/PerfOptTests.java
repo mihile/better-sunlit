@@ -1,5 +1,8 @@
 package dev.sunlit.bettersunlit.tests.perf;
 
+import dev.sunlit.bettersunlit.client.SharedMobModelCompat;
+import dev.sunlit.bettersunlit.husbandry.AnimalStatusSync;
+import dev.sunlit.bettersunlit.client.AnimalCooldownRenderer;
 import com.cicada.longwings.entity.ButterflyVariant;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.HashMultimap;
@@ -327,12 +330,127 @@ public final class PerfOptTests {
         testFancyMenuPanoramaPendingFaces();
         testCaramelCompositionBridge();
         testCarryOnPoseTargets();
+        testMilkDayIndicator();
+        testSnowPigModel();
+        testSharedMobLayers();
         testIter7StartupPerfOpts();
         testIter8StartupPerfOpts();
         testSpriteTransparencyOptimization();
         testMipmapCandidateAgainstIris();
         ReviewRegressionTests.run();
         System.out.println("PerfOptTests: ALL PASSED");
+    }
+
+    private static void testMilkDayIndicator() {
+        int flags = AnimalStatusSync.FLAG_HAS_MILKED
+                | AnimalStatusSync.FLAG_HAS_FED;
+        long lastMilked = 9 * 24000L + 8000;
+        for (int day = 10; day <= 12; day++) {
+            var fed = new AnimalStatusSync.AnimalSnapshot(
+                    1, (byte) flags, 10, lastMilked, 0, 0, day, (byte) 0, (byte) -1);
+            long dayTime = (day - 1) * 24000L + 8000;
+            assertTrue(AnimalCooldownRenderer.computeMilkDaysRemaining(fed, 2, day) == 12 - day,
+                    "Two-day harvest advances at each world day boundary");
+            assertTrue((AnimalCooldownRenderer.computeMilkStage(fed, 2, dayTime, day) == 3) == (day == 12),
+                    "Special milk is ready on the second day");
+            assertTrue((AnimalCooldownRenderer.computeMilkStage(fed, 1, dayTime, day) == 3) == (day > 10),
+                    "One-day harvest becomes ready the following day");
+        }
+        var unfed = new AnimalStatusSync.AnimalSnapshot(
+                1, (byte) flags, 10, lastMilked, 0, 0, 11, (byte) 0, (byte) -1);
+        assertTrue(AnimalCooldownRenderer.computeMilkDaysRemaining(unfed, 2, 12) == 0,
+                "Hunger does not reset the milk cooldown");
+        assertTrue(AnimalCooldownRenderer.computeMilkStage(unfed, 2, 11 * 24000L, 12) == 4,
+                "Two completed days do not override the feeding requirement");
+        System.out.println("PASS: one-day and two-day milk readiness, calendar milestones, and hunger gate");
+    }
+
+    private static void testSnowPigModel() throws Exception {
+        String renderer = "com.uraneptus.snowpig.client.entity.render.SnowPigRender";
+        String mixin = "dev.sunlit.fishvisuals.mixin.SnowPigModelCompatMixin";
+        assertTrue(new EntryMixinPlugin().canApplyGate(renderer, "SnowPigModelCompatMixin"),
+                "Installed Snow Pig renderer matches the compatibility patch");
+        var ctx = net.minecraft.client.renderer.entity.EntityRendererProvider.Context.class;
+        var layer = net.minecraft.client.model.geom.ModelLayerLocation.class;
+        var factory = Class.forName(mixin).getDeclaredMethod("sunlit$bakeSnowPigLayer", ctx, layer);
+        factory.setAccessible(true);
+        var cubes = ModelPart.class.getDeclaredField("f_104212_");
+        cubes.setAccessible(true);
+        for (var id : List.of(net.minecraft.client.model.geom.ModelLayers.f_171205_,
+                net.minecraft.client.model.geom.ModelLayers.f_171160_)) {
+            var model = (ModelPart) factory.invoke(null, null, id);
+            new net.minecraft.client.model.PigModel<>(model);
+            float inflate = id == net.minecraft.client.model.geom.ModelLayers.f_171160_ ? 0.5F : 0;
+            var head = (List<?>) cubes.get(model.m_171324_("head"));
+            assertEquals(2, head.size(), "Snow Pig keeps the original head and snout");
+            var children = ModelPart.class.getDeclaredField("f_104213_");
+            children.setAccessible(true);
+            assertEquals(6, ((Map<?, ?>) children.get(model)).size(), "Snow Pig keeps the six vanilla body parts");
+            var polygons = head.get(0).getClass().getDeclaredField("f_104341_");
+            polygons.setAccessible(true);
+            float minX = Float.POSITIVE_INFINITY;
+            for (Object polygon : (Object[]) polygons.get(head.get(0))) {
+                var vertices = polygon.getClass().getDeclaredField("f_104359_");
+                vertices.setAccessible(true);
+                for (Object vertex : (Object[]) vertices.get(polygon)) {
+                    var position = vertex.getClass().getDeclaredField("f_104371_");
+                    position.setAccessible(true);
+                    minX = Math.min(minX, ((org.joml.Vector3f) position.get(vertex)).x);
+                }
+            }
+            assertEquals(-4.0F - inflate, minX, "Only the saddle inflates the head");
+        }
+        System.out.println("PASS: Snow Pig vanilla body geometry and saddle deformation");
+    }
+
+    private static void testSharedMobLayers() throws Exception {
+        var plugin = new EntryMixinPlugin();
+        String renderers = "net.minecraft.client.renderer.entity.EntityRenderers";
+        String modelSet = "net.minecraft.client.model.geom.EntityModelSet";
+        assertTrue(plugin.canApplyGate(renderers, "SharedMobRendererMixin"), "Renderer factory matches the layer guard");
+        assertTrue(plugin.canApplyGate(modelSet, "SharedMobLayerMixin"), "Layer baker matches the layer guard");
+
+        var providerFactory = readClassNode(renderers).methods.stream()
+                .filter(method -> method.name.equals("m_257087_"))
+                .findFirst().orElseThrow();
+        assertTrue(providerFactory.desc.contains("Lnet/minecraft/world/entity/EntityType;"),
+                "Factory hook can read the entity type");
+        int providerCalls = 0;
+        for (var instruction : providerFactory.instructions) {
+            if (instruction instanceof MethodInsnNode call && call.name.equals("m_174009_")
+                    && call.owner.equals("net/minecraft/client/renderer/entity/EntityRendererProvider")) providerCalls++;
+        }
+        assertEquals(1, providerCalls, "One renderer factory call is wrapped");
+
+        var sheep = new net.minecraft.client.model.geom.ModelLayerLocation(new ResourceLocation("minecraft:sheep"), "main");
+        var cases = Map.of("meadow:wooly_sheep", "sheep", "farmingforblockheads:merchant", "villager",
+                "vinery:wandering_winemaker", "wandering_trader", "quark:forgotten", "skeleton",
+                "aquaculture:bluegill", "tropical_fish_large");
+        for (var entry : cases.entrySet()) {
+            var original = new net.minecraft.client.model.geom.ModelLayerLocation(
+                    new ResourceLocation("minecraft", entry.getValue()), "main");
+            var custom = new net.minecraft.client.model.geom.ModelLayerLocation(
+                    new ResourceLocation(entry.getKey()), "main");
+            SharedMobModelCompat.duringRendererCreation(new ResourceLocation(entry.getKey()), () -> {
+                assertTrue(SharedMobModelCompat.useOriginalLayer(original), "Shared layer is isolated for " + entry.getKey());
+                assertFalse(SharedMobModelCompat.useOriginalLayer(custom), "Dedicated model is preserved for " + entry.getKey());
+                return null;
+            });
+            assertFalse(SharedMobModelCompat.useOriginalLayer(original), "No model override outside provider scope");
+        }
+        SharedMobModelCompat.duringRendererCreation(new ResourceLocation("meadow:wooly_sheep"), () -> {
+            var fur = new net.minecraft.client.model.geom.ModelLayerLocation(new ResourceLocation("minecraft:sheep"), "fur");
+            assertTrue(SharedMobModelCompat.useOriginalLayer(fur), "Sheep fur follows its body geometry");
+            assertThrows(IllegalStateException.class, () -> SharedMobModelCompat.duringRendererCreation(
+                    new ResourceLocation("minecraft:sheep"), () -> {
+                        assertFalse(SharedMobModelCompat.useOriginalLayer(sheep), "Nested vanilla factory uses Fresh Animations");
+                        throw new IllegalStateException("fixture");
+                    }));
+            assertTrue(SharedMobModelCompat.useOriginalLayer(sheep), "Outer scope is restored on exception");
+            return null;
+        });
+        assertFalse(SharedMobModelCompat.useOriginalLayer(sheep), "No renderer scope leaks after creation");
+        System.out.println("PASS: five modded renderer families isolate shared layers and preserve custom and vanilla paths");
     }
 
     private static void testCarryOnPoseTargets() throws IOException {

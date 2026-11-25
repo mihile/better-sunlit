@@ -35,6 +35,18 @@ public final class InlineLocalizationTests {
         return String.format(java.util.Locale.ROOT,template,values.toArray());
     }
     public static void main(String[] args)throws Exception {
+        var context = dev.latvian.mods.rhino.Context.enter();
+        try {
+            for (String name : List.of("fishingJei.js", "plantJei.js")) {
+                try (var input = InlineLocalizationTests.class.getClassLoader().getResourceAsStream(
+                        "assets/better_sunlit/scripts/" + name)) {
+                    check(input != null, "bundled recipe card source " + name);
+                    context.compileString(new String(input.readAllBytes(), StandardCharsets.UTF_8), name, 1, null);
+                }
+            }
+        } catch (Exception error) {
+            throw new AssertionError("Bundled recipe script cannot compile", error);
+        }
         JsonObject rules=read("assets/better_sunlit/inline/rules.json");
         JsonObject localized=new JsonObject();
         for (var entry : rules.getAsJsonObject("rules").entrySet()) {

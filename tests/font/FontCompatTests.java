@@ -37,6 +37,29 @@ public class FontCompatTests {
         check(FontControls.ZERO_WIDTH.m_83827_(true) == 0, "bold control advance");
         check(FontControls.ZERO_WIDTH.m_5645_() == 0, "control shadow offset");
 
+        // A catch-all missing provider must never displace bitmap icons or zero-width spaces.
+        com.mojang.blaze3d.font.GlyphProvider icons = new com.mojang.blaze3d.font.GlyphProvider() {
+            public it.unimi.dsi.fastutil.ints.IntSet m_6990_() {
+                return new IntOpenHashSet(new int[]{0xEA01, 0x200C});
+            }
+            public com.mojang.blaze3d.font.GlyphInfo m_214022_(int cp) {
+                return cp == 0xEA01 || cp == 0x200C ? FontControls.ZERO_WIDTH : null;
+            }
+        };
+        com.mojang.blaze3d.font.GlyphProvider missing = new com.mojang.blaze3d.font.GlyphProvider() {
+            public it.unimi.dsi.fastutil.ints.IntSet m_6990_() {
+                return it.unimi.dsi.fastutil.ints.IntSets.EMPTY_SET;
+            }
+            public com.mojang.blaze3d.font.GlyphInfo m_214022_(int cp) {
+                return net.minecraft.client.gui.font.glyphs.SpecialGlyphs.MISSING;
+            }
+        };
+        var retained = new java.util.ArrayList<com.mojang.blaze3d.font.GlyphProvider>();
+        var widths = new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<it.unimi.dsi.fastutil.ints.IntList>();
+        dev.sunlit.bettersunlit.client.FontSetPerf.reloadProviders(List.of(icons, missing), widths, retained);
+        check(retained.equals(List.of(icons)), "bitmap and spacing providers survive missing fallback");
+        check(widths.get(0).contains(0xEA01) && widths.get(0).contains(0x200C), "icon and spacing widths retained");
+
         var paint = new FontPaint();
         paint.setFontSize(16);
         var smile = emoji(0x1F600, true);

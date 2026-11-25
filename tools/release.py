@@ -265,14 +265,52 @@ def publish_side(side, changes):
          [sys.executable, '-X', 'utf8', 'tools/publish.py', '--side', side, '--changes', changes])
 
 
-def local_build(side):
+def local_build_inputs(release_path):
+    inputs = [
+        ROOT / 'build.py',
+        ROOT / 'tools' / 'build_boot.py',
+        ROOT / 'keys' / 'client-public.der',
+        release_path,
+    ]
+    for directory in (ROOT / 'src' / 'main', ROOT / 'boot-agent' / 'src'):
+        if directory.is_dir():
+            inputs.append(directory)
+            inputs.extend(directory.rglob('*'))
+    return inputs
+
+
+def is_client_build_current(release_path, data):
+    directory = ROOT / 'build' / 'client'
+    built_jar = directory / 'better-sunlit.jar'
+    report_path = directory / 'build-report.json'
+    if not built_jar.is_file() or not report_path.is_file():
+        return False
+    try:
+        report = json.loads(report_path.read_text(encoding='utf8'))
+    except (OSError, ValueError):
+        return False
+    digest = hashlib.sha256(built_jar.read_bytes()).hexdigest()
+    if (report.get('side') != 'client' or report.get('build') != data['build']
+            or report.get('label') != data['label'] or report.get('sha256') != digest):
+        return False
+    built_mtime = built_jar.stat().st_mtime_ns
+    for item in local_build_inputs(release_path):
+        if item.exists() and item.stat().st_mtime_ns > built_mtime:
+            return False
+    return True
+
+
+def local_build(side, force=False):
     if side != 'client':
         raise RuntimeError('로컬 적용은 클라이언트만 지원합니다.')
-    _, data = latest_release_meta()
-    build_both(data)
-    step('전체 검사', run, [sys.executable, '-X', 'utf8', 'tools/test.py'])
-    verify_artifacts(data)
+    release_path, data = latest_release_meta()
     built_jar = ROOT / 'build' / side / 'better-sunlit.jar'
+    if not force and is_client_build_current(release_path, data):
+        print(f'이미 최신 빌드가 있어 재빌드 없이 바로 적용합니다: {built_jar}', flush=True)
+    else:
+        build_both(data)
+        step('전체 검사', run, [sys.executable, '-X', 'utf8', 'tools/test.py'])
+        verify_artifacts(data)
     target_jar = INSTANCE / 'minecraft' / 'mods' / 'better-sunlit.jar'
     target_jar.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built_jar, target_jar)
@@ -339,6 +377,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--side', choices=[*SIDES, 'both'], required=True)
     parser.add_argument('--local-only', action='store_true')
+    parser.add_argument('--force', action='store_true', help='force rebuild even when the local build is already up to date')
     parser.add_argument('--prepare-only', action='store_true', help='build, test and sign without pushing or publishing')
     parser.add_argument('--verify-only', action='store_true', help='recheck existing published artifacts without rebuilding or publishing')
     args = parser.parse_args()
@@ -351,7 +390,7 @@ def main():
                 step(f'{side} 기존 공개 빌드 재검증', run, [sys.executable, '-X', 'utf8', 'tools/publish.py',
                     '--side', side, '--verify-only'])
         elif args.local_only:
-            local_build(args.side)
+            local_build(args.side, force=args.force)
         else:
             release(args.side, args.prepare_only)
 

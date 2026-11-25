@@ -56,8 +56,10 @@ public final class SunlitFishVisuals {
             .serverAcceptedVersions(SunlitFishVisuals::acceptsVersion)
             .simpleChannel();
 
-    private static boolean acceptsVersion(String version) {
-        return "3".equals(version) || NetworkRegistry.ABSENT.equals(version) || NetworkRegistry.ACCEPTVANILLA.equals(version);
+    public static boolean acceptsVersion(String version) {
+        return "3".equals(version)
+                || NetworkRegistry.ABSENT.version().equals(version)
+                || NetworkRegistry.ACCEPTVANILLA.equals(version);
     }
 
     public SunlitFishVisuals() {
@@ -75,6 +77,8 @@ public final class SunlitFishVisuals {
                 .addListener(dev.sunlit.bettersunlit.perf.LogBegonePerf::onConfigEvent);
         FishingSettings.load();
         dev.sunlit.bettersunlit.husbandry.AnimalStatusSync.register();
+        FishPondSync.register();
+        dev.sunlit.bettersunlit.cavern.SkullCavernElevator.register();
         LOG.info("Sunlit Fishing Visuals 1.2.4: pickup allowed when fading begins; {}",FishingSettings.current().description());
     }
 
@@ -103,8 +107,7 @@ public final class SunlitFishVisuals {
             // Aim a physical arc at nearby dry ground, without moving/replacing the reward stack.
             aimAtShore(level, item, angler);
             item.m_32010_(2);
-            CatchState state = new CatchState(item, model, level.m_46467_(),
-                    settings.timing(), settings.animationVersion());
+            CatchState state = new CatchState(item, model, level.m_46467_(), settings.timing());
             // Long command-configured animations must not outlast the original item's despawn timer.
             item.lifespan=Math.max(item.lifespan,item.m_32059_()+MAX_AIR_TICKS+state.timing.totalTicks()+6000);
             CATCHES.put(item.m_20148_(), state);
@@ -168,15 +171,14 @@ public final class SunlitFishVisuals {
         if (item.m_9236_().f_46443_ || !item.getPersistentData().m_128441_(CATCH_DATA)) return null;
         try {
             CompoundTag tag=item.getPersistentData().m_128469_(CATCH_DATA);
-            ResourceLocation model = CatchModelIds.resolve(new ResourceLocation(tag.m_128461_("model")));
-            if (model == null) {
+            ResourceLocation model = modelFor(item.m_32055_());
+            if (model == null || !model.equals(CatchModelIds.resolve(new ResourceLocation(tag.m_128461_("model"))))) {
                 item.getPersistentData().m_128473_(CATCH_DATA);
                 item.m_32010_(0);
                 return null;
             }
             CatchState state=new CatchState(item,model,tag.m_128454_("startedAt"),
-                    new FishTiming(tag.m_128451_("freshTicks"),tag.m_128451_("fadingTicks"),tag.m_128451_("stepTicks")),
-                    FishingSettings.animationVersionOrDefault(tag.m_128451_("animationVersion")));
+                    new FishTiming(tag.m_128451_("freshTicks"),tag.m_128451_("fadingTicks"),tag.m_128451_("stepTicks")));
             state.landedAt=tag.m_128454_("landedAt");state.kickAt=tag.m_128454_("kickAt");state.nextKickAt=tag.m_128454_("nextKickAt");
             state.yaw=tag.m_128457_("yaw");state.kickStrength=tag.m_128457_("kickStrength");
             state.anchor=new Vec3(tag.m_128459_("anchorX"),tag.m_128459_("anchorY"),tag.m_128459_("anchorZ"));
@@ -196,7 +198,6 @@ public final class SunlitFishVisuals {
         tag.m_128356_("startedAt",state.startedAt);tag.m_128356_("landedAt",state.landedAt);
         tag.m_128356_("kickAt",state.kickAt);tag.m_128356_("nextKickAt",state.nextKickAt);
         tag.m_128405_("freshTicks",state.timing.freshTicks());tag.m_128405_("fadingTicks",state.timing.fadingTicks());tag.m_128405_("stepTicks",state.timing.stepTicks());
-        tag.m_128405_("animationVersion", state.animationVersion);
         tag.m_128350_("yaw",state.yaw);tag.m_128350_("kickStrength",state.kickStrength);
         tag.m_128347_("anchorX",state.anchor.f_82479_);tag.m_128347_("anchorY",state.anchor.f_82480_);tag.m_128347_("anchorZ",state.anchor.f_82481_);
         // Entity metadata, never ItemStack NBT. Forge saves this with the original ItemEntity.
@@ -281,7 +282,7 @@ public final class SunlitFishVisuals {
         item.m_20256_(new Vec3(vx,height,vz));
         item.f_19812_=true;
         state.kickAt=now;state.kickStrength=strength;
-        int interval = state.animationVersion == 2 ? 16 + random.m_188503_(8) : 11 + random.m_188503_(3);
+        int interval = 16 + random.m_188503_(8);
         state.nextKickAt = now + interval + Math.round(32 * (1 - strength));
         if (vx*vx+vz*vz>0.00001) {
             float desired=(float)Math.toDegrees(Math.atan2(-vx,vz));
@@ -300,7 +301,7 @@ public final class SunlitFishVisuals {
     private static CatchPacket packet(CatchState state) {
         return new CatchPacket(state.item.m_20148_(),state.item.m_19879_(),state.model,
                 state.item.m_9236_().m_46472_().m_135782_(),state.landedAt,state.kickAt,state.yaw,state.kickStrength,
-                state.timing, state.animationVersion);
+                state.timing);
     }
     private static void broadcast(ServerLevel level, CatchState state) {
         for (ServerPlayer player : level.m_6907_()) {
@@ -313,24 +314,20 @@ public final class SunlitFishVisuals {
         final ResourceLocation model;
         final long startedAt;
         final FishTiming timing;
-        final int animationVersion;
         float yaw;
         long landedAt = -1;
         long kickAt=-1,nextKickAt;
         float kickStrength;
         Vec3 anchor;
-        CatchState(ItemEntity item, ResourceLocation model, long now, FishTiming timing, int animationVersion) {
+        CatchState(ItemEntity item, ResourceLocation model, long now, FishTiming timing) {
             this.item = item; this.model = model; this.startedAt = now;this.timing=timing;this.anchor=item.m_20182_();
-            this.animationVersion = animationVersion;
             Vec3 motion = item.m_20184_();
             this.yaw = (float)Math.toDegrees(Math.atan2(-motion.f_82479_, motion.f_82481_));
         }
     }
 
     public record CatchPacket(UUID itemUuid,int entityId,ResourceLocation model, ResourceLocation dimension,
-                              long landedAt,long kickAt,float yaw,float kickStrength,FishTiming timing, int animationVersion) {
-        // Previous builds omitted the animation byte for version 2.
-        private static final int IMPLICIT_WIRE_ANIMATION_VERSION = 2;
+                              long landedAt,long kickAt,float yaw,float kickStrength,FishTiming timing) {
 
         public static void encode(CatchPacket packet, FriendlyByteBuf out) {
             out.m_130077_(packet.itemUuid);
@@ -342,15 +339,14 @@ public final class SunlitFishVisuals {
             out.writeFloat(packet.yaw);
             out.writeFloat(packet.kickStrength);
             out.writeInt(packet.timing.freshTicks());out.writeInt(packet.timing.fadingTicks());out.writeInt(packet.timing.stepTicks());
-            if (packet.animationVersion != IMPLICIT_WIRE_ANIMATION_VERSION) {
-                out.writeByte(packet.animationVersion);
-            }
         }
         public static CatchPacket decode(FriendlyByteBuf in) {
-            return new CatchPacket(in.m_130259_(),in.readInt(),in.m_130281_(),in.m_130281_(),in.readLong(),in.readLong(),in.readFloat(),in.readFloat(),
-                    new FishTiming(in.readInt(),in.readInt(),in.readInt()),
-                    in.isReadable() ? FishingSettings.animationVersionOrDefault(in.readUnsignedByte())
-                            : IMPLICIT_WIRE_ANIMATION_VERSION);
+            CatchPacket packet = new CatchPacket(in.m_130259_(),in.readInt(),in.m_130281_(),in.m_130281_(),
+                    in.readLong(),in.readLong(),in.readFloat(),in.readFloat(),
+                    new FishTiming(in.readInt(),in.readInt(),in.readInt()));
+            // Protocol 3 used an optional trailing byte for the old animation selection.
+            if (in.isReadable()) in.readUnsignedByte();
+            return packet;
         }
         public static void handle(CatchPacket packet, Supplier<NetworkEvent.Context> supplier) {
             NetworkEvent.Context context = supplier.get();

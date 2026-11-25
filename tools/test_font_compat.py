@@ -16,6 +16,9 @@ classpath = os.pathsep.join([str(root / 'build/client/better-sunlit.jar')] +
 icu = root.parents[3] / 'libraries/com/ibm/icu/icu4j/71.1/icu4j-71.1.jar'
 assert icu.is_file(), 'Minecraft 1.20.1 ICU library is missing'
 classpath += os.pathsep + str(icu)
+# SpecialGlyphs initializes CPU native images for the provider-order regression.
+classpath += os.pathsep + str(icu.parents[5] / 'org/lwjgl/lwjgl-natives-windows/3.3.1/lwjgl-natives-windows-3.3.1.jar')
+classpath += os.pathsep + str(icu.parents[5] / 'org/lwjgl/lwjgl-glfw/3.3.1/lwjgl-glfw-3.3.1.jar')
 out = root / 'build/client/font-tests'
 out.mkdir(exist_ok=True)
 

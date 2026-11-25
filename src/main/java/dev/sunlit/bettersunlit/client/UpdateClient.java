@@ -12,7 +12,7 @@ public final class UpdateClient {
  private static final long CHECK_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
  private static boolean started, preferencesLoaded;
  private static long lastCheckStarted = System.nanoTime() - CHECK_INTERVAL_NANOS;
- private static boolean autoPopup = true;
+ private static boolean autoPopup = false;
  private static long viewedBuild = -1;
  private static Screen renderedTitle;
  static boolean auto = true;
@@ -145,7 +145,7 @@ public final class UpdateClient {
    if (Files.isRegularFile(file)) {
     Properties preferences = SignedRelease.properties(Files.readAllBytes(file));
     auto = Boolean.parseBoolean(preferences.getProperty("enabled", "true"));
-    autoPopup = Boolean.parseBoolean(preferences.getProperty("autoPopup", "true"));
+    autoPopup = Boolean.parseBoolean(preferences.getProperty("autoPopup", "false"));
    }
   } catch (Exception e) {
    SunlitFishVisuals.LOG.warn("Cannot read updater preferences", e);

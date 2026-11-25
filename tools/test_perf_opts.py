@@ -20,9 +20,9 @@ common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
 assert len(common_mixins) == 39 and "DewDropSprinklerMixin" in common_mixins, common_mixins
 assert {"PerfQuarkSharedChatMixin", "PerfJourneyMapResetMixin", "PerfQuickPackMixin", "PerfObjTokenizerMixin", "PerfCodepointMapMixin"}.issubset(client_mixins)
-assert len(client_mixins) == 143 and {
+assert len(client_mixins) == 146 and {
     "EmiItemLookupMixin", "EmiCraftingSpecAccessor", "EmiSpecRecipeFillerMixin",
-    "PerfMysticalOakTreeLoreMixin", "RottenCreaturesModelCompatMixin",
+    "PerfMysticalOakTreeLoreMixin", "RottenCreaturesModelCompatMixin", "SnowPigModelCompatMixin",
 }.issubset(client_mixins), client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
@@ -105,6 +105,8 @@ if res.returncode != 0:
 
 subprocess.run([str(JDK / 'java.exe'), '-cp', run_cp,
                 'dev.sunlit.bettersunlit.tests.perf.EntityDataOrderTest'],
+               cwd=str(INSTANCE), check=True)
+subprocess.run([str(JDK / 'java.exe'), '-cp', run_cp, 'dev.sunlit.fishvisuals.RealFishingTests'],
                cwd=str(INSTANCE), check=True)
 
 # Run native-image equivalence in a separate JVM. The fixture inserts the same

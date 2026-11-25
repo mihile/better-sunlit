@@ -49,6 +49,10 @@ public final class AnimalCooldownRenderer {
     private static final double MAX_RENDER_DIST = 16.0D;
     private static final double MAX_RENDER_DIST_SQ = MAX_RENDER_DIST * MAX_RENDER_DIST;
     private static final float ICON_HALF_SIZE = 0.22f;
+    private static final ResourceLocation WHITE_TEXTURE = new ResourceLocation("minecraft", "textures/misc/white.png");
+    private static final int DAY_FILLED = 0x62E0BD;
+    private static final int DAY_FILLED_BLOCKED = 0xB29D91;
+    private static final int DAY_EMPTY = 0x45505D;
     private static final int FULL_BRIGHT = 0x00F000F0;
 
     private static final int STAGE_GRAY = 0;
@@ -195,11 +199,15 @@ public final class AnimalCooldownRenderer {
 
             ResourceLocation iconItemId;
             int stage;
+            int cooldownDays = 1;
+            int daysRemaining = 0;
             if (mode == ToolMode.MILK_PAIL) {
                 if (entity.m_6162_() || !snap.isMilkable()) continue;
                 MilkProduceInfo info = resolveMilkInfo(entity, snap);
                 iconItemId = info.iconId();
-                stage = computeMilkStage(snap, info.cooldownDays(), dayTime, currentDay);
+                cooldownDays = info.cooldownDays();
+                daysRemaining = computeMilkDaysRemaining(snap, cooldownDays, currentDay);
+                stage = milkStage(snap, daysRemaining, dayTime, currentDay);
             } else if (mode == ToolMode.MAGIC_SHEARS) {
                 if (!snap.isHusbandry()) continue;
                 iconItemId = ICON_MAGIC_SHEARS;
@@ -230,12 +238,13 @@ public final class AnimalCooldownRenderer {
             poseStack.m_252781_(camera.m_253121_());
             Matrix4f mat = poseStack.m_85850_().m_252922_();
             Matrix3f norm = poseStack.m_85850_().m_252943_();
-            VertexConsumer vc = buffers.m_6299_(renderType);
             float s = ICON_HALF_SIZE;
-            emitVertex(vc, mat, norm, -s, -s, u1, 1.0f);
-            emitVertex(vc, mat, norm, -s, s, u1, 0.0f);
-            emitVertex(vc, mat, norm, s, s, u0, 0.0f);
-            emitVertex(vc, mat, norm, s, -s, u0, 1.0f);
+            emitQuad(buffers.m_6299_(renderType), mat, norm, -s, -s, s, s, u1, u0, 0xFFFFFF);
+            if (cooldownDays > 1) {
+                RenderType dayType = RenderType.m_110473_(WHITE_TEXTURE);
+                usedRenderTypes.add(dayType);
+                drawMilkDays(buffers.m_6299_(dayType), mat, norm, cooldownDays, daysRemaining, stage);
+            }
             poseStack.m_85849_();
         }
 
@@ -246,10 +255,33 @@ public final class AnimalCooldownRenderer {
         }
     }
 
+    private static void drawMilkDays(VertexConsumer vertices, Matrix4f mat, Matrix3f norm,
+                                     int totalDays, int daysRemaining, int stage) {
+        float span = 0.32f;
+        float gap = 0.024f;
+        float cell = (span - gap * (totalDays - 1)) / totalDays;
+        float x = -span / 2.0f;
+        int completeColor = stage == STAGE_BLOCKED ? DAY_FILLED_BLOCKED : DAY_FILLED;
+        for (int day = 0; day < totalDays; day++) {
+            int color = day < totalDays - daysRemaining ? completeColor : DAY_EMPTY;
+            emitQuad(vertices, mat, norm, x, -0.28f, x + cell, -0.24f, 0.0f, 1.0f, color);
+            x += cell + gap;
+        }
+    }
+
+    private static void emitQuad(VertexConsumer vertices, Matrix4f mat, Matrix3f norm,
+                                 float left, float bottom, float right, float top,
+                                 float uLeft, float uRight, int rgb) {
+        emitVertex(vertices, mat, norm, left, bottom, uLeft, 1.0f, rgb);
+        emitVertex(vertices, mat, norm, left, top, uLeft, 0.0f, rgb);
+        emitVertex(vertices, mat, norm, right, top, uRight, 0.0f, rgb);
+        emitVertex(vertices, mat, norm, right, bottom, uRight, 1.0f, rgb);
+    }
+
     private static void emitVertex(VertexConsumer vc, Matrix4f mat, Matrix3f norm,
-                                   float x, float y, float u, float v) {
+                                   float x, float y, float u, float v, int rgb) {
         vc.m_252986_(mat, x, y, 0.0f)
-                .m_6122_(255, 255, 255, 255)
+                .m_6122_((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255)
                 .m_7421_(u, v)
                 .m_86008_(OverlayTexture.f_118083_)
                 .m_85969_(FULL_BRIGHT)
@@ -280,21 +312,28 @@ public final class AnimalCooldownRenderer {
         return info != null ? info : new MilkProduceInfo(ICON_MILK, 1);
     }
 
+    public static int computeMilkDaysRemaining(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays, long currentDay) {
+        long lastMilked = snap.hasMilkedTag() ? snap.ageLastMilked() : currentDay - 1L;
+        if (currentDay < lastMilked) return 0;
+        return (int) Math.max(0L, lastMilked + cooldownDays - currentDay);
+    }
+
     public static int computeMilkStage(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays,
                                        long dayTime, long currentDay) {
-        long effectiveLastFed = snap.hasFedTag() ? snap.ageLastFed() : (currentDay - 1L);
-        boolean hungry = (currentDay < effectiveLastFed) || (currentDay - effectiveLastFed > 1L);
-        if (hungry) return STAGE_BLOCKED;
+        return milkStage(snap, computeMilkDaysRemaining(snap, cooldownDays, currentDay), dayTime, currentDay);
+    }
 
-        long effectiveLastMilked = snap.hasMilkedTag() ? snap.ageLastMilked() : (currentDay - 1L);
-        boolean canMilk = (currentDay < effectiveLastMilked)
-                || (currentDay >= effectiveLastMilked + cooldownDays);
-        if (canMilk) return STAGE_READY;
+    private static int milkStage(AnimalStatusSync.AnimalSnapshot snap, int daysRemaining,
+                                 long dayTime, long currentDay) {
+        // Society considers the animal fed only for the calendar day on which it ate.
+        if (!snap.hasFedTag() || currentDay != snap.ageLastFed()) return STAGE_BLOCKED;
+        if (daysRemaining == 0) return STAGE_READY;
 
-        long readyTick = (effectiveLastMilked - 1L + cooldownDays) * AnimalStatusSync.TICKS_PER_DAY;
+        long lastMilked = snap.hasMilkedTag() ? snap.ageLastMilked() : currentDay - 1L;
+        long readyTick = (currentDay - 1L + daysRemaining) * AnimalStatusSync.TICKS_PER_DAY;
         long startTick = (snap.hasMilkedTag() && snap.timeLastMilked() > 0L && snap.timeLastMilked() < readyTick)
                 ? snap.timeLastMilked()
-                : (effectiveLastMilked - 1L) * AnimalStatusSync.TICKS_PER_DAY;
+                : (lastMilked - 1L) * AnimalStatusSync.TICKS_PER_DAY;
         return stageFromTicks(dayTime, startTick, readyTick);
     }
 

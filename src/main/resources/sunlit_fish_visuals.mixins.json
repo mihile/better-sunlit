@@ -3,8 +3,31 @@
   "minVersion": "0.8",
   "package": "dev.sunlit.fishvisuals.mixin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": ["StardewRewardMixin", "DirectFishingRewardMixin", "ItemEntityMixin"],
-  "server": ["BalloonTrackingRangeMixin"],
-  "client": ["BalloonEntityRendererDistanceMixin", "ItemEntityRendererMixin", "CaughtFishModelPartMixin", "CaughtFishEmfMixin", "CaughtFishGeoModelMixin", "CaughtFishGeoTransformMixin", "ItemPickupParticleMixin", "XpToastMixin", "DisplayInfoMixin", "FontSetMixin", "StandardFontSetMixin", "PerfTextureUtilMixin"],
-  "injectors": {"defaultRequire": 1}
+  "mixins": [
+    "StardewRewardMixin",
+    "DirectFishingRewardMixin",
+    "ItemEntityMixin"
+  ],
+  "server": [
+    "BalloonTrackingRangeMixin"
+  ],
+  "client": [
+    "BalloonEntityRendererDistanceMixin",
+    "ItemEntityRendererMixin",
+    "EntityWaterStateAccessor",
+    "CaughtFishModelPartMixin",
+    "CaughtFishEmfMixin",
+    "CaughtFishGeoModelMixin",
+    "CaughtFishGeoTransformMixin",
+    "ItemPickupParticleMixin",
+    "XpToastMixin",
+    "DisplayInfoMixin",
+    "FontSetMixin",
+    "StandardFontSetMixin",
+    "PerfTextureUtilMixin",
+    "BundledClientScriptsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

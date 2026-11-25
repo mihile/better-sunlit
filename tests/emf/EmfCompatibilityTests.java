@@ -96,7 +96,22 @@ public final class EmfCompatibilityTests {
         String modelPart = "net.minecraft.client.model.geom.ModelPart";
         ClassNode part = node(resource(modelPart));
         part.access &= ~Opcodes.ACC_FINAL;
+        for (var field : part.fields) {
+            if (java.util.Set.of("f_104212_", "f_104213_").contains(field.name)) {
+                field.access = (field.access & ~(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL)) | Opcodes.ACC_PUBLIC;
+            }
+        }
         writeFixture(fixture, part);
+        for (String nested : List.of("Cube", "Polygon", "Vertex")) {
+            ClassNode type = node(resource(modelPart + "$" + nested));
+            type.access = (type.access & ~Opcodes.ACC_FINAL) | Opcodes.ACC_PUBLIC;
+            for (var field : type.fields) {
+                if (field.name.equals("f_104341_")) {
+                    field.access = (field.access & ~Opcodes.ACC_PRIVATE) | Opcodes.ACC_PUBLIC;
+                }
+            }
+            writeFixture(fixture, type);
+        }
 
         // Keep EMF's actual shared flag and expression evaluation. The standalone test
         // does not have Forge's active mod list for the two optional-mod constructor probes.
