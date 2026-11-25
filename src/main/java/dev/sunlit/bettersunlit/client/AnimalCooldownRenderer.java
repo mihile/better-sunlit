@@ -24,6 +24,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -49,7 +50,7 @@ public final class AnimalCooldownRenderer {
     private static final double MAX_RENDER_DIST = 16.0D;
     private static final double MAX_RENDER_DIST_SQ = MAX_RENDER_DIST * MAX_RENDER_DIST;
     private static final float ICON_HALF_SIZE = 0.22f;
-    private static final ResourceLocation WHITE_TEXTURE = new ResourceLocation("minecraft", "textures/misc/white.png");
+    private static final ResourceLocation WHITE_TEXTURE = new ResourceLocation(SunlitFishVisuals.ID, "dynamic/animal_icon/white");
     private static final int DAY_FILLED = 0x62E0BD;
     private static final int DAY_FILLED_BLOCKED = 0xB29D91;
     private static final int DAY_EMPTY = 0x45505D;
@@ -77,6 +78,8 @@ public final class AnimalCooldownRenderer {
     private static final Map<String, MilkProduceInfo> MILK_PRODUCE_MAP = buildMilkProduceMap();
     private static final Map<Integer, AnimalStatusSync.AnimalSnapshot> STATES = new HashMap<>();
     private static final Map<ResourceLocation, IconStrip> STRIP_CACHE = new HashMap<>();
+    private static final Set<ResourceLocation> FAILED_STRIP_LOGS = new HashSet<>();
+    private static Object whiteTextureResourceManager;
     private static ClientLevel currentLevel;
     private static int cleanupCounter;
     private static long lastServerDayTime = -1L;
@@ -138,6 +141,14 @@ public final class AnimalCooldownRenderer {
             lastServerDayTime = -1L;
             lastPacketGameTime = 0L;
         }
+    }
+
+    @SubscribeEvent
+    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        STATES.clear();
+        currentLevel = null;
+        lastServerDayTime = -1L;
+        lastPacketGameTime = 0L;
     }
 
     @SubscribeEvent
@@ -241,6 +252,7 @@ public final class AnimalCooldownRenderer {
             float s = ICON_HALF_SIZE;
             emitQuad(buffers.m_6299_(renderType), mat, norm, -s, -s, s, s, u1, u0, 0xFFFFFF);
             if (cooldownDays > 1) {
+                ensureWhiteTexture(mc);
                 RenderType dayType = RenderType.m_110473_(WHITE_TEXTURE);
                 usedRenderTypes.add(dayType);
                 drawMilkDays(buffers.m_6299_(dayType), mat, norm, cooldownDays, daysRemaining, stage);
@@ -377,6 +389,18 @@ public final class AnimalCooldownRenderer {
         return built;
     }
 
+    private static void ensureWhiteTexture(Minecraft mc) {
+        Object rm = mc.m_91098_();
+        if (whiteTextureResourceManager == rm) return;
+        NativeImage img = new NativeImage(1, 1, true);
+        img.m_84988_(0, 0, 0xFFFFFFFF);
+        DynamicTexture dyn = new DynamicTexture(img);
+        dyn.m_117960_(false, false);
+        mc.m_91097_().m_118495_(WHITE_TEXTURE, dyn);
+        FAILED_STRIP_LOGS.clear();
+        whiteTextureResourceManager = rm;
+    }
+
     private static IconStrip buildStrip(Minecraft mc, ResourceLocation itemId, TextureAtlasSprite sprite) {
         SpriteContents contents = sprite.m_245424_();
         ResourceLocation spriteName = contents.m_246162_();
@@ -388,10 +412,17 @@ public final class AnimalCooldownRenderer {
         );
 
         Optional<Resource> resOpt = mc.m_91098_().m_213713_(pngLoc);
-        if (resOpt.isEmpty()) return null;
+        if (resOpt.isEmpty()) {
+            if (FAILED_STRIP_LOGS.add(itemId)) {
+                SunlitFishVisuals.LOG.warn("AnimalCooldownRenderer: missing icon texture {} for {}", pngLoc, itemId);
+            }
+            return null;
+        }
 
         try (InputStream stream = resOpt.get().m_215507_();
              NativeImage src = NativeImage.m_85058_(stream)) {
+            w = Math.min(w, src.m_84982_());
+            h = Math.min(h, src.m_84984_());
             int minY = h;
             int maxY = -1;
             for (int y = 0; y < h; y++) {
@@ -468,6 +499,9 @@ public final class AnimalCooldownRenderer {
             mc.m_91097_().m_118495_(texLoc, dynTex);
             return new IconStrip(sprite, texLoc);
         } catch (Exception e) {
+            if (FAILED_STRIP_LOGS.add(itemId)) {
+                SunlitFishVisuals.LOG.warn("AnimalCooldownRenderer: failed building icon strip for {} ({})", itemId, pngLoc, e);
+            }
             return null;
         }
     }
