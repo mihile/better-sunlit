@@ -45,7 +45,7 @@ public final class FontSetPerf {
             return;
         }
         IntOpenHashSet allCodepoints = new IntOpenHashSet();
-        List<GlyphProvider> eagerReversed = new ArrayList<>(providers.size());
+        List<GlyphProvider> eagerProviders = new ArrayList<>(providers.size());
         Set<GlyphProvider> usedProviders = Sets.newHashSetWithExpectedSize(providers.size());
 
         for (int i = 0, n = providers.size(); i < n; i++) {
@@ -58,16 +58,16 @@ public final class FontSetPerf {
             if (supported != null && !supported.isEmpty()) {
                 allCodepoints.addAll(supported);
             }
-            eagerReversed.add(provider);
+            eagerProviders.add(provider);
         }
 
-        if (!allCodepoints.isEmpty() && !eagerReversed.isEmpty()) {
-            int eagerCount = eagerReversed.size();
+        if (!allCodepoints.isEmpty() && !eagerProviders.isEmpty()) {
+            int eagerCount = eagerProviders.size();
             IntIterator it = allCodepoints.iterator();
             while (it.hasNext()) {
                 int cp = it.nextInt();
-                for (int j = eagerCount - 1; j >= 0; j--) {
-                    GlyphProvider provider = eagerReversed.get(j);
+                for (int j = 0; j < eagerCount; j++) {
+                    GlyphProvider provider = eagerProviders.get(j);
                     GlyphInfo info = provider.m_214022_(cp);
                     if (info != null) {
                         usedProviders.add(provider);

@@ -1,7 +1,15 @@
 from pathlib import Path
 import argparse,subprocess,zipfile,hashlib,json,shutil,os,re,sys
-p=argparse.ArgumentParser();p.add_argument('--instance',type=Path,required=True);p.add_argument('--side',choices=['client','server']);p.add_argument('--build',type=int,default=2026110801);p.add_argument('--label',default='2026.11.08.1');p.add_argument('--java-home',type=Path,default=Path(os.environ.get('JAVA_HOME','C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot')));p.add_argument('--keys',type=Path,default=Path.home()/'.codex/secrets/better-sunlit');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--instance',type=Path,required=True);p.add_argument('--side',choices=['client','server']);p.add_argument('--build',type=int,default=None);p.add_argument('--label',default=None);p.add_argument('--java-home',type=Path,default=Path(os.environ.get('JAVA_HOME','C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot')));p.add_argument('--keys',type=Path,default=Path.home()/'.codex/secrets/better-sunlit');args=p.parse_args()
 ROOT=Path(__file__).resolve().parent
+if args.build is None or args.label is None:
+ _rels=[]
+ for _rf in (ROOT/'releases').glob('*.json'):
+  _d=json.loads(_rf.read_text(encoding='utf8'))
+  if 'build' in _d and 'label' in _d:_rels.append((int(_d['build']),str(_d['label'])))
+ _def_build,_def_label=max(_rels,key=lambda x:x[0]) if _rels else (2026110801,'2026.11.08.1')
+ if args.build is None:args.build=_def_build
+ if args.label is None:args.label=_def_label
 INSTANCE=args.instance.resolve();LIBRARIES=INSTANCE.parent.parent/'libraries';JDK=args.java_home/'bin'
 side=args.side or dict(line.split('=',1) for line in (ROOT/'release-channel.properties').read_text().splitlines() if '=' in line)['channel']
 BUILD=ROOT/'build'/side;CLASSES=BUILD/'classes'

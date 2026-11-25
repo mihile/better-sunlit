@@ -70,7 +70,12 @@ public final class EmfModelPrebakePerf {
         return CONTEXT.hasSpecialContext(EMFManager.getInstance());
     }
 
-    private static boolean isSpecialLayer(ModelLayerLocation loc) {
+    static boolean isSpecialLayer(ModelLayerLocation loc) {
+        // Keep these layers in the renderer's normal EMF bake context. Prebaking
+        // them also skips renderer-time animation registration when a result is reused.
+        if ("rottencreatures".equals(loc.m_171123_().m_135827_())) {
+            return true;
+        }
         String path = loc.m_171123_().m_135815_();
         return path.contains("boat")
                 || path.contains("chest")

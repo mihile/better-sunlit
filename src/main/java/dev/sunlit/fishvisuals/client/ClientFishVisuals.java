@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import dev.sunlit.fishvisuals.FishTiming;
-import dev.sunlit.fishvisuals.FishingSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -19,7 +18,6 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import org.joml.Quaternionf;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -54,27 +52,20 @@ public final class ClientFishVisuals {
         Visual visual = VISUALS.compute(packet.itemUuid(), (uuid, previous) ->
                 previous == null || !model.equals(previous.model) ? new Visual(model) : previous);
         double now=currentLevel.m_46467_();
-        if (packet.kickAt() >= 0 && packet.kickAt() != visual.kickAt) {
-            if (visual.kickAt >= 0) visual.flopSide = -visual.flopSide;
-            visual.settleFrom=visual.smoothedSettle(now);
-            double fading=packet.timing().fadingTicks();
-            double kickElapsed=packet.kickAt()-packet.landedAt()-packet.timing().freshTicks();
-            visual.settleTarget=fading<=0 ? 0 : Math.max(visual.settleFrom,
-                    Math.min(1,Math.max(0,(kickElapsed+packet.timing().stepTicks())/fading)));
-            visual.settleChangedAt=now;
+        if (packet.kickAt() >= 0 && visual.kickAt >= 0 && packet.kickAt() != visual.kickAt) {
+            visual.flopSide = -visual.flopSide;
         }
         visual.landedAt = packet.landedAt();
         visual.kickAt=packet.kickAt();
         visual.kickStrength=packet.kickStrength();
         visual.timing=packet.timing();
-        visual.animationVersion = packet.animationVersion();
         visual.entityId=packet.entityId();
         visual.receivedAt=currentLevel.m_46467_();
         if (!visual.hasYaw) {
             visual.fromYaw=packet.yaw();
             visual.hasYaw=true;
         } else visual.fromYaw=visual.smoothedYaw(now);
-        if (visual.animationVersion == 2 && visual.landedAt >= 0) {
+        if (visual.landedAt >= 0) {
             // A push may move the item diagonally without turning the whole fish with it.
             float turn = (((packet.yaw() - visual.fromYaw) % 360 + 540) % 360) - 180;
             visual.yaw = visual.fromYaw + Math.max(-12, Math.min(12, turn * 0.55f));
@@ -109,6 +100,21 @@ public final class ClientFishVisuals {
         double now = currentLevel.m_46467_() + partialTick;
         pose.m_85836_();
         try {
+            float yaw = visual.smoothedYaw(now);
+            boolean landed = visual.landedAt >= 0;
+            double elapsed = landed ? Math.max(0, now - visual.landedAt) : 0;
+            double remaining = visual.timing.totalTicks() - elapsed;
+            int side = (item.m_20148_().getLeastSignificantBits() & 1) == 0 ? 1 : -1;
+            if (CustomFishModels.has(visual.model)) {
+                FishFlopMotion flop = FishFlopMotion.sample(landed, landed ? elapsed : item.f_19797_ + partialTick,
+                        now - visual.kickAt, visual.kickAt < 0 ? 0 : visual.kickStrength, remaining,
+                        CustomFishModels.size(visual.model), landed ? side * visual.flopSide : side);
+                FishMeshBend mesh = flop == FishFlopMotion.STILL ? null
+                        : new FishMeshBend(buffers, pose.m_85850_().m_252922_(), yaw);
+                CustomFishModels.render(visual.model, yaw, pose, mesh == null ? buffers : mesh, light);
+                if (mesh != null) mesh.draw(flop);
+                return true;
+            }
             if (visual.proxy == null) {
                 EntityType<?> type = CatchModelIds.entityType(visual.model);
                 Entity proxy = type == null ? null : type.m_20615_(currentLevel);
@@ -119,33 +125,10 @@ public final class ClientFishVisuals {
                 visual.proxy = proxy;
             }
             Entity proxy = visual.proxy;
-            float yaw = visual.smoothedYaw(now);
-            boolean landed = visual.landedAt >= 0;
-            double elapsed = landed ? Math.max(0, now - visual.landedAt) : 0;
-            double remaining = visual.timing.totalTicks() - elapsed;
-            int side = (item.m_20148_().getLeastSignificantBits() & 1) == 0 ? 1 : -1;
-            // Version 1 flops the whole fish, so its individual model parts use their rest pose.
-            FishFlopMotion flop = FishFlopMotion.STILL;
-            if (visual.animationVersion == 1) {
-                if (landed) {
-                    double duration = Math.max(7, 12 * visual.kickStrength);
-                    double cycle = Math.max(0, Math.min(1, (now - visual.kickAt) / duration));
-                    double envelope = Math.max(0, Math.min(1, remaining / 6.0));
-                    double kick = Math.sin(Math.PI * 2 * cycle) * Math.max(0.45, visual.kickStrength) * envelope;
-                    double settle = visual.smoothedSettle(now);
-                    float heading = (float)Math.toRadians(yaw);
-                    // Orient the rigid version 1 wobble to the fish's heading.
-                    pose.m_252781_(new Quaternionf().rotationY(-heading)
-                            .rotateZ((float)Math.toRadians(side * kick * 38))
-                            .rotateX((float)Math.toRadians(kick * 22))
-                            .rotateZ((float)Math.toRadians(-8 * settle))
-                            .rotateX((float)Math.toRadians(-4 * settle)).rotateY(heading));
-                }
-            } else {
-                float size = Math.max(proxy.m_20205_(), proxy.m_20206_());
-                flop = FishFlopMotion.sample(landed, landed ? elapsed : item.f_19797_ + partialTick, now - visual.kickAt,
-                        visual.kickAt < 0 ? 0 : visual.kickStrength, remaining, size, landed ? side * visual.flopSide : side);
-            }
+            float size = Math.max(proxy.m_20205_(), proxy.m_20206_());
+            FishFlopMotion flop = FishFlopMotion.sample(landed, landed ? elapsed : item.f_19797_ + partialTick,
+                    now - visual.kickAt, visual.kickAt < 0 ? 0 : visual.kickStrength, remaining, size,
+                    landed ? side * visual.flopSide : side);
             proxy.m_20219_(item.m_20182_());
             // The real item still moves. Its render proxy must not advance the normal swim cycle.
             proxy.m_20256_(Vec3.f_82478_);
@@ -189,19 +172,12 @@ public final class ClientFishVisuals {
         float kickStrength;
         int flopSide = 1;
         FishTiming timing=FishTiming.DEFAULT;
-        int animationVersion = FishingSettings.DEFAULT_ANIMATION_VERSION;
         float yaw;
         float fromYaw;
         double yawChangedAt;
         boolean hasYaw;
         Entity proxy;
-        double settleFrom,settleTarget,settleChangedAt;
         final CaughtFishPose modelPose = new CaughtFishPose();
-        double smoothedSettle(double now) {
-            double progress=Math.max(0,Math.min(1,(now-settleChangedAt)/7.0));
-            progress=progress*progress*(3-2*progress);
-            return settleFrom+(settleTarget-settleFrom)*progress;
-        }
         float smoothedYaw(double now) {
             double progress=Math.max(0,Math.min(1,(now-yawChangedAt)/Math.max(7,12*kickStrength)));
             progress=progress*progress*(3-2*progress);

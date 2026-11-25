@@ -9,7 +9,7 @@ import java.util.Set;
 
 /** IDs shared by the server reward, saved presentations and the client renderer. */
 public final class CatchModelIds {
-    private static final Set<String> ITEM_ONLY = Set.of(
+    private static final Set<String> CUSTOM_MODELS = Set.of(
             "aquaculture:leech", "aquaculture:goldfish", "society:neptuna"
     );
 
@@ -25,11 +25,15 @@ public final class CatchModelIds {
 
     private CatchModelIds() {}
 
+    public static boolean isCustomModel(ResourceLocation id) {
+        return id != null && CUSTOM_MODELS.contains(id.toString());
+    }
+
     public static ResourceLocation resolve(ResourceLocation id) {
         String normalized = id.toString().replace(":raw_", ":");
         String modelId = ALIASES.getOrDefault(normalized, normalized);
-        if (ITEM_ONLY.contains(modelId)) return null;
         ResourceLocation model = new ResourceLocation(modelId);
+        if (CUSTOM_MODELS.contains(modelId)) return model;
         return entityType(model) == null ? null : model;
     }
 

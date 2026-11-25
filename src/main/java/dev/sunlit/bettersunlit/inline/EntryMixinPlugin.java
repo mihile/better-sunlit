@@ -170,6 +170,7 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
         Map.entry("dev.uncandango.alltheleaks.leaks.common.mods.forge.Issue10684","fdac9efcc8ab5d8613320992292157a5ba7261fd0b1161fba992a1ee54ddb06d"),
         Map.entry("net.minecraftforge.client.ForgeHooksClient","56a62dfb8dfcd68dfc45451b1a8c51b414f3462cb1e16b2e9171ad571d3ad955"),
         Map.entry("org.embeddedt.modernfix.dynamicresources.DynamicBakedModelProvider","a442acaf98896e5b976d6590769d5aa760d8b35c810514aadf0a5b6a6faacf04"),
+        Map.entry("net.minecraft.client.renderer.entity.EntityRenderers","e0a76d925eea3743fc9415f54ffb56f4cb2cef6500184a28a8a5d427cce2dddf"),
         Map.entry("net.minecraft.client.model.geom.EntityModelSet","5b66679a5ba96b215c131fec5bc9c7862a668188d3f9fd3465d513f21132a74f"),
         Map.entry("traben.entity_model_features.EMFManager","819d94e3fc64b04cd8cfcebb73f1b894ff836e3a97be29762a60babe7c714d40"),
         Map.entry("traben.entity_texture_features.features.ETFManager","a7523f13ca3fce508cf3721cde3737ca0f960beb7c1c63b73226af3b53041049"),
@@ -394,6 +395,11 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  && matchesLegacy("net.irisshaders.iris.gl.state.ValueUpdateNotifier","5e91d814140e4db643f9af65a7f7b6af9a62fce26666395db9f0e1558a442e93");
             case "PerfOculusSamplerUnbindMixin" -> matchesLegacy(target,"7c33c255ee78762039be84cdef06724a7b8674bc1848ea20c02b7fec06ede83e");
             case "RottenCreaturesModelCompatMixin" -> matches(target);
+            case "SharedMobRendererMixin", "SharedMobLayerMixin" -> hasWrapMethodApi()
+                    && matches("net.minecraft.client.renderer.entity.EntityRenderers")
+                    && matches("net.minecraft.client.model.geom.EntityModelSet");
+            case "SnowPigModelCompatMixin" -> matchesLegacy(target,
+                    "e7663569d2d1c6a628e7902a2d4125bca0c3d0d17a2cd0acc6308b5a3b6c48c9");
             case "PerfEmfManagerInitMixin" -> hasWrapMethodApi() && matches(target);
             case "PerfEmfValidationFlagMixin" -> emfValidationReviewed(target);
             case "LegacyEmfModelPartMixin" -> matchesLegacy(target,"8b0f4741818980e7d8704bb86f42e46c98efda1c7d103fd4ebbae41d8994ed90") && matches("com.mojang.blaze3d.vertex.PoseStack") && matches("org.embeddedt.embeddium.render.matrix_stack.CachingPoseStack");

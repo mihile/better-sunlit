@@ -21,7 +21,13 @@ base = [p for p in cp if not Path(p).name.startswith(('entity_model_features','e
 io_jar = instance.parents[1] / 'libraries/commons-io/commons-io/2.11.0/commons-io-2.11.0.jar'
 fixture = out/'animation-fixture'
 fixture.mkdir(exist_ok=True)
-runtime = [str(out),str(fixture),*cp,str(io_jar)]
+securejar = instance.parents[1] / 'libraries/cpw/mods/securejarhandler/2.1.10/securejarhandler-2.1.10.jar'
+lwjgl = instance.parents[1] / 'libraries/org/lwjgl'
+logging = instance.parents[1] / 'libraries/org/apache/logging/log4j/log4j-slf4j2-impl/2.19.0/log4j-slf4j2-impl-2.19.0.jar'
+oshi = instance.parents[1] / 'libraries/com/github/oshi/oshi-core/6.2.2/oshi-core-6.2.2.jar'
+runtime = [str(out), str(fixture), *cp, str(io_jar), str(securejar), str(logging), str(oshi),
+           *(str(lwjgl / module / '3.3.1' / f'{module}-3.3.1.jar')
+             for module in ('lwjgl-natives-windows', 'lwjgl-glfw'))]
 line = 'Class-Path: '+' '.join(Path(p).resolve().as_uri()+('/' if Path(p).is_dir() else '') for p in runtime)
 wrapped=[line[:70]];line=line[70:]
 while line:wrapped.append(' '+line[:69]);line=line[69:]

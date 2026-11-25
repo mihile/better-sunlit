@@ -16,6 +16,7 @@ PREFIX_TYPES = {
     'boot-agent/src/': {'.java'},
     'src/main/java/': {'.java'},
     'src/main/resources/': {'.json', '.mcmeta', '.toml', '.properties', '.png'},
+    'src/main/resources/assets/better_sunlit/scripts/': {'.js'},
     'tests/': {'.java', '.py'}, 'tools/': {'.java', '.py'},
     'scripts/': {'.ps1'}, 'releases/': {'.json'},
     'localization/pack-files/': {'.json'},
@@ -87,6 +88,7 @@ def check_release_jar(path):
                     'better_sunlit_entry.mixins.json', 'assets/better_sunlit/update-helper.jar',
                     'assets/better_sunlit/sunlit-boot.jar')
                 allowed = allowed or (name.startswith('assets/') and member.suffix in ('.json', '.png'))
+                allowed = allowed or (name.startswith('assets/better_sunlit/scripts/') and member.suffix == '.js')
             if kind == 'main':
                 allowed = allowed or name == 'META-INF/THIRD_PARTY_TRAIN_NAVIGATOR_LICENSES.txt'
             if kind in ('main', 'boot'):
