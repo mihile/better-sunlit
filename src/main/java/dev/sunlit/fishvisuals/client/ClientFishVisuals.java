@@ -73,6 +73,24 @@ public final class ClientFishVisuals {
             visual.yaw = packet.yaw();
         }
         visual.yawChangedAt=now;
+        Entity entity = currentLevel.m_6815_(packet.entityId());
+        if (entity != null && packet.itemUuid().equals(entity.m_20148_())) {
+            syncClientMagnetLock(entity, visual, now);
+        }
+    }
+
+    private static void syncClientMagnetLock(Entity entity, Visual visual, double now) {
+        boolean lock = visual.landedAt < 0 || (now - visual.landedAt) < visual.timing.freshTicks();
+        var data = entity.getPersistentData();
+        if (lock) {
+            if (!data.m_128441_(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT)) {
+                data.m_128379_(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT, true);
+                visual.managedMagnetLock = true;
+            }
+        } else if (visual.managedMagnetLock) {
+            data.m_128473_(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT);
+            visual.managedMagnetLock = false;
+        }
     }
 
     public static boolean hasVisual(Entity entity) {return entity!=null && VISUALS.containsKey(entity.m_20148_());}
@@ -86,6 +104,9 @@ public final class ClientFishVisuals {
             VISUALS.entrySet().removeIf(entry -> {
                 Visual visual=entry.getValue();
                 Entity entity=currentLevel.m_6815_(visual.entityId);
+                if (entity != null && entry.getKey().equals(entity.m_20148_())) {
+                    syncClientMagnetLock(entity, visual, now);
+                }
                 return now-visual.receivedAt>200 && (entity==null || !entry.getKey().equals(entity.m_20148_()));
             });
         }
@@ -98,6 +119,7 @@ public final class ClientFishVisuals {
         Visual visual = VISUALS.get(item.m_20148_());
         if (visual == null) return false;
         double now = currentLevel.m_46467_() + partialTick;
+        syncClientMagnetLock(item, visual, now);
         pose.m_85836_();
         try {
             float yaw = visual.smoothedYaw(now);
@@ -176,6 +198,7 @@ public final class ClientFishVisuals {
         float fromYaw;
         double yawChangedAt;
         boolean hasYaw;
+        boolean managedMagnetLock;
         Entity proxy;
         final CaughtFishPose modelPose = new CaughtFishPose();
         float smoothedYaw(double now) {

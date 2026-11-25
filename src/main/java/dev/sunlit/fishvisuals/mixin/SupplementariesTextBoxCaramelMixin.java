@@ -4,6 +4,7 @@ import dev.sunlit.bettersunlit.client.CaramelInputBridge;
 import moe.caramel.chat.util.Rect;
 import moe.caramel.chat.wrapper.AbstractIMEWrapper;
 import net.mehvahdjukaar.supplementaries.client.screens.widgets.MultiLineEditBoxWidget;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.font.TextFieldHelper;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,10 +22,6 @@ public abstract class SupplementariesTextBoxCaramelMixin implements CaramelInput
     @Shadow public abstract void setText(String text);
     @Shadow public abstract boolean canConsumeInput();
     @Shadow private boolean isStringValid(String text) { throw new AssertionError(); }
-    @Shadow public abstract int m_252754_();
-    @Shadow public abstract int m_252907_();
-    @Shadow public abstract int m_5711_();
-    @Shadow public abstract int m_93694_();
     @Unique private CaramelInputBridge sunlit$ime;
 
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -50,5 +47,8 @@ public abstract class SupplementariesTextBoxCaramelMixin implements CaramelInput
     @Override public void insert(String text) { pageEdit.m_95158_(text); }
     @Override public int cursor() { return pageEdit.m_95194_(); }
     @Override public int selection() { return pageEdit.m_95197_(); }
-    @Override public Rect rect() { return new Rect(m_252754_(), m_252907_(), m_5711_(), m_93694_()); }
+    @Override public Rect rect() {
+        AbstractWidget self = (AbstractWidget) (Object) this;
+        return new Rect(self.m_252754_(), self.m_252907_(), self.m_5711_(), self.m_93694_());
+    }
 }

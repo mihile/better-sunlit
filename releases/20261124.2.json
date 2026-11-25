@@ -58,6 +58,14 @@
     {
       "title": "가축 수확 아이콘 동기화 누락 및 이틀 주기 표시 수정",
       "detail": "차원 이동이나 거리 이탈 후 돌아왔을 때 서버 캐시가 남아서 우유 들통 아이콘이 뜨지 않던 동기화 누락을 수정하고, 이틀 주기 진행 칸이 존재하지 않는 white.png 대신 자체 1×1 흰색 텍스처를 사용하도록 보완했습니다."
+    },
+    {
+      "title": "리얼피싱 자석 아이템 즉시 회수 방지",
+      "detail": "SimpleMagnets 자석이나 Sophisticated Backpacks 자석 업그레이드가 켜져 있을 때 갓 낚인 물고기가 날아가거나 펄떡이기 전에 즉시 빨려 들어가던 문제를 수정했습니다. 싱싱함 구간 동안 PreventRemoteMovement 보호 및 픽업 이벤트 차단을 적용하고, 약해짐 구간이 시작되면 자동으로 해제합니다."
+    },
+    {
+      "title": "눈 돼지 모델 및 검색·텍스트 상자 한글 입력 믹신 오류 수정",
+      "detail": "실행 로그에서 적용 실패하던 눈 돼지 모델 호환 믹신(SnowPigModelCompatMixin)의 static 시그니처 불일치와, 비디오 옵션 검색창(EmbeddiumSearchCaramelMixin)·Supplementaries 다중 줄 입력창(SupplementariesTextBoxCaramelMixin)의 상위 클래스 @Shadow 참조 오류를 수정했습니다."
     }
   ]
 }

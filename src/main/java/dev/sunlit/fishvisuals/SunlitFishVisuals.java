@@ -22,6 +22,7 @@ import net.minecraftforge.event.TagsUpdatedEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
+import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.api.distmarker.Dist;
@@ -47,6 +48,7 @@ public final class SunlitFishVisuals {
     public static final String ID = "sunlit_fish_visuals";
     public static final Logger LOG = LogManager.getLogger(ID);
     public static final String CATCH_DATA = "sunlit_fishing_visual";
+    public static final String PREVENT_REMOTE_MOVEMENT = "PreventRemoteMovement";
     public static final int MAX_AIR_TICKS = 100;
     private static final Map<UUID, CatchState> CATCHES = new HashMap<>();
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
@@ -70,6 +72,7 @@ public final class SunlitFishVisuals {
         MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::joined);
         MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::left);
         MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::tracking);
+        MinecraftForge.EVENT_BUS.addListener(EventPriority.HIGHEST, SunlitFishVisuals::onItemPickup);
         MinecraftForge.EVENT_BUS.addListener(FishingSettings::register);
         MinecraftForge.EVENT_BUS.addListener(EventPriority.LOWEST,
                 dev.sunlit.bettersunlit.perf.BlockOcclusionPerf::onTagsUpdated);
@@ -106,10 +109,11 @@ public final class SunlitFishVisuals {
             // Vanilla's pull relies on pickup mid-flight; with delayed pickup it can overshoot.
             // Aim a physical arc at nearby dry ground, without moving/replacing the reward stack.
             aimAtShore(level, item, angler);
-            item.m_32010_(2);
+            item.m_32010_(5);
             CatchState state = new CatchState(item, model, level.m_46467_(), settings.timing());
             // Long command-configured animations must not outlast the original item's despawn timer.
             item.lifespan=Math.max(item.lifespan,item.m_32059_()+MAX_AIR_TICKS+state.timing.totalTicks()+6000);
+            syncMagnetLock(state, true);
             CATCHES.put(item.m_20148_(), state);
             save(state);
             broadcast(level, state);
@@ -153,6 +157,29 @@ public final class SunlitFishVisuals {
         return state!=null && (state.landedAt<0 || item.m_9236_().m_46467_()-state.landedAt<state.timing.freshTicks());
     }
 
+    /** Prevents magnets (SimpleMagnets, Sophisticated Backpacks, etc.) from snatching fish mid-flop. */
+    private static void syncMagnetLock(CatchState state, boolean lock) {
+        CompoundTag data = state.item.getPersistentData();
+        if (lock) {
+            if (!data.m_128441_(PREVENT_REMOTE_MOVEMENT)) {
+                data.m_128379_(PREVENT_REMOTE_MOVEMENT, true);
+                state.managedMagnetLock = true;
+            }
+        } else if (state.managedMagnetLock) {
+            data.m_128473_(PREVENT_REMOTE_MOVEMENT);
+            state.managedMagnetLock = false;
+        }
+    }
+
+    private static void onItemPickup(EntityItemPickupEvent event) {
+        ItemEntity item = event.getItem();
+        if (blocksPickup(item)) {
+            event.setCanceled(true);
+        } else if (isPresenting(item) && !hasRoom(event.getEntity(), item.m_32055_())) {
+            event.setCanceled(true);
+        }
+    }
+
     public static boolean hasRoom(Player player,ItemStack reward) {
         int capacity=0;
         int maximum=Math.min(player.m_150109_().m_6893_(),reward.m_41741_());
@@ -173,7 +200,9 @@ public final class SunlitFishVisuals {
             CompoundTag tag=item.getPersistentData().m_128469_(CATCH_DATA);
             ResourceLocation model = modelFor(item.m_32055_());
             if (model == null || !model.equals(CatchModelIds.resolve(new ResourceLocation(tag.m_128461_("model"))))) {
-                item.getPersistentData().m_128473_(CATCH_DATA);
+                CompoundTag data = item.getPersistentData();
+                if (tag.m_128471_("magnetLock")) data.m_128473_(PREVENT_REMOTE_MOVEMENT);
+                data.m_128473_(CATCH_DATA);
                 item.m_32010_(0);
                 return null;
             }
@@ -182,10 +211,14 @@ public final class SunlitFishVisuals {
             state.landedAt=tag.m_128454_("landedAt");state.kickAt=tag.m_128454_("kickAt");state.nextKickAt=tag.m_128454_("nextKickAt");
             state.yaw=tag.m_128457_("yaw");state.kickStrength=tag.m_128457_("kickStrength");
             state.anchor=new Vec3(tag.m_128459_("anchorX"),tag.m_128459_("anchorY"),tag.m_128459_("anchorZ"));
+            state.managedMagnetLock = tag.m_128471_("magnetLock");
             CATCHES.put(item.m_20148_(),state);
+            syncMagnetLock(state, blocksPickup(item));
             return state;
         } catch (RuntimeException ex) {
-            item.getPersistentData().m_128473_(CATCH_DATA);
+            CompoundTag data = item.getPersistentData();
+            if (data.m_128469_(CATCH_DATA).m_128471_("magnetLock")) data.m_128473_(PREVENT_REMOTE_MOVEMENT);
+            data.m_128473_(CATCH_DATA);
             item.m_32010_(0);
             LOG.warn("Invalid saved fish presentation; keeping the original reward item",ex);
             return null;
@@ -200,6 +233,7 @@ public final class SunlitFishVisuals {
         tag.m_128405_("freshTicks",state.timing.freshTicks());tag.m_128405_("fadingTicks",state.timing.fadingTicks());tag.m_128405_("stepTicks",state.timing.stepTicks());
         tag.m_128350_("yaw",state.yaw);tag.m_128350_("kickStrength",state.kickStrength);
         tag.m_128347_("anchorX",state.anchor.f_82479_);tag.m_128347_("anchorY",state.anchor.f_82480_);tag.m_128347_("anchorZ",state.anchor.f_82481_);
+        tag.m_128379_("magnetLock", state.managedMagnetLock);
         // Entity metadata, never ItemStack NBT. Forge saves this with the original ItemEntity.
         state.item.getPersistentData().m_128365_(CATCH_DATA,tag);
     }
@@ -241,7 +275,11 @@ public final class SunlitFishVisuals {
                 save(state);
                 broadcast(level, state);
             }
-            item.m_32010_(blocksPickup(item) ? 2 : 0);
+            boolean blocked = blocksPickup(item);
+            item.m_32010_(blocked ? 5 : 0);
+            boolean hadLock = state.managedMagnetLock;
+            syncMagnetLock(state, blocked);
+            if (hadLock != state.managedMagnetLock) save(state);
             if (state.landedAt >= 0) {
                 float strength=state.timing.strength(now-state.landedAt);
                 long remaining=state.timing.totalTicks()-(now-state.landedAt);
@@ -318,6 +356,7 @@ public final class SunlitFishVisuals {
         long landedAt = -1;
         long kickAt=-1,nextKickAt;
         float kickStrength;
+        boolean managedMagnetLock;
         Vec3 anchor;
         CatchState(ItemEntity item, ResourceLocation model, long now, FishTiming timing) {
             this.item = item; this.model = model; this.startedAt = now;this.timing=timing;this.anchor=item.m_20182_();

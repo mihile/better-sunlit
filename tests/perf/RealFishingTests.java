@@ -172,6 +172,8 @@ public final class RealFishingTests {
         } finally {
             buf.release();
         }
+        check("PreventRemoteMovement".equals(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT),
+                "Magnet protection key must match Forge/SimpleMagnets/SophisticatedCore convention");
         System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, and protocol 3 catch packets");
     }
 
