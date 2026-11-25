@@ -31,9 +31,11 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -45,6 +47,7 @@ import java.util.function.Supplier;
 public final class AnimalStatusSync {
     public static final long TICKS_PER_DAY = 24000L;
     private static final int SCAN_INTERVAL_TICKS = 10;
+    private static final int FULL_RESYNC_INTERVAL_TICKS = 100;
     private static final double SCAN_RADIUS = 20.0D;
 
     public static final ResourceLocation MILK_PAIL_ID = new ResourceLocation("society", "milk_pail");
@@ -86,6 +89,7 @@ public final class AnimalStatusSync {
     private static final Map<UUID, Integer> IMMEDIATE_UNTIL_TICK = new HashMap<>();
     private static final Map<UUID, Boolean> LAST_HELD_TOOL = new HashMap<>();
     private static final Map<UUID, Long> LAST_SENT_DAY_TIME = new HashMap<>();
+    private static final Map<UUID, Integer> LAST_FULL_SYNC_TICK = new HashMap<>();
     private static volatile boolean kjsLookupAttempted;
     private static volatile MethodHandle kjsRawPersistentDataHandle;
     private static boolean registered;
@@ -109,6 +113,7 @@ public final class AnimalStatusSync {
                 StatusPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerTick);
         MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onEntityInteract);
+        MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerChangedDimension);
         MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerLogout);
         MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onServerStopped);
     }
@@ -134,12 +139,20 @@ public final class AnimalStatusSync {
         }
     }
 
+    private static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        clearPlayerState(event.getEntity().m_20148_());
+    }
+
     private static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        UUID id = event.getEntity().m_20148_();
+        clearPlayerState(event.getEntity().m_20148_());
+    }
+
+    private static void clearPlayerState(UUID id) {
         SENT_BY_PLAYER.remove(id);
         IMMEDIATE_UNTIL_TICK.remove(id);
         LAST_HELD_TOOL.remove(id);
         LAST_SENT_DAY_TIME.remove(id);
+        LAST_FULL_SYNC_TICK.remove(id);
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
@@ -147,6 +160,7 @@ public final class AnimalStatusSync {
         IMMEDIATE_UNTIL_TICK.clear();
         LAST_HELD_TOOL.clear();
         LAST_SENT_DAY_TIME.clear();
+        LAST_FULL_SYNC_TICK.clear();
     }
 
     private static void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -161,6 +175,7 @@ public final class AnimalStatusSync {
             if (wasHolding) {
                 SENT_BY_PLAYER.remove(uuid);
                 LAST_SENT_DAY_TIME.remove(uuid);
+                LAST_FULL_SYNC_TICK.remove(uuid);
             }
             return;
         }
@@ -186,24 +201,35 @@ public final class AnimalStatusSync {
         });
 
         Map<Integer, AnimalSnapshot> cache = SENT_BY_PLAYER.computeIfAbsent(uuid, k -> new HashMap<>());
+        Integer lastFullSync = LAST_FULL_SYNC_TICK.get(uuid);
+        boolean fullResync = !wasHolding || lastFullSync == null
+                || player.f_19797_ - lastFullSync >= FULL_RESYNC_INTERVAL_TICKS
+                || player.f_19797_ < lastFullSync;
+        if (fullResync) {
+            LAST_FULL_SYNC_TICK.put(uuid, player.f_19797_);
+        }
+
+        Set<Integer> nearbyIds = new HashSet<>(animals.size() * 2 + 1);
         List<AnimalSnapshot> changed = new ArrayList<>();
         for (LivingEntity animal : animals) {
             AnimalSnapshot snap = captureSnapshot(animal, dayTime, currentDay);
+            nearbyIds.add(snap.entityId());
             AnimalSnapshot prev = cache.get(snap.entityId());
-            if (!snap.equals(prev)) {
+            if (fullResync || !snap.equals(prev)) {
                 cache.put(snap.entityId(), snap);
                 changed.add(snap);
             }
         }
+        // Evict out-of-range animals so walking back into a barn always re-sends fresh snapshots
+        // even if the client already dropped those entities while out of tracking range.
+        cache.keySet().retainAll(nearbyIds);
+
         Long lastSent = LAST_SENT_DAY_TIME.get(uuid);
         boolean timeJumped = lastSent == null || Math.abs(dayTime - lastSent) > 100L;
         if (!changed.isEmpty() || timeJumped) {
             LAST_SENT_DAY_TIME.put(uuid, dayTime);
             NetChannel.CHANNEL.sendTo(new StatusPacket(level.m_46472_().m_135782_(), dayTime, changed),
                     player.f_8906_.f_9742_, NetworkDirection.PLAY_TO_CLIENT);
-        }
-        if (cache.size() > 512) {
-            cache.clear();
         }
     }
 
