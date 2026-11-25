@@ -795,6 +795,7 @@
   "better_sunlit.elevator.toast_trial_enter": "Copper Dungeon (%sF)",
   "better_sunlit.elevator.toast_trial_sub": "Elevator linked · %s",
   "better_sunlit.elevator.surface_built": "An elevator station has been installed at this mine's surface entrance!",
+  "better_sunlit.elevator.relocated": "Relocated elevator out of the narrow shaft onto open ground.",
   "better_sunlit.elevator.client_required": "Install Better Sunlit on your client to use the Skull Cavern Elevator UI.",
   "better_sunlit.elevator.arrived_surface": "Arrived at Skull Cavern entrance.",
   "better_sunlit.elevator.arrived_floor": "Skull Cavern Elevator: arrived at %sF.",

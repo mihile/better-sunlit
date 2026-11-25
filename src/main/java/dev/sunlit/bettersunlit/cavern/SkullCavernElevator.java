@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -290,9 +291,11 @@ public final class SkullCavernElevator {
         Set<String> seen = SEEN_TOASTS_BY_PLAYER.computeIfAbsent(player.m_20148_(), k -> new HashSet<>());
 
         if (existingStop == null) {
+            StationPlacement placed = findUndergroundPlacementForPlayer(cavern, player, playerPos);
+            if (placed == null) return;
             SkullCavernElevatorData.MineShaft mine = resolveOrCreateActiveMine(player, cavern);
             boolean surfaceOpened = ensureSurfaceElevatorBuilt(cavern, data, mine);
-            StationPlacement placed = placeUndergroundStation(cavern, playerPos);
+            placeStationBlocks(cavern, placed.elevatorPos());
             String pioneer = player.m_7755_().getString();
             SkullCavernElevatorData.ElevatorStop created = new SkullCavernElevatorData.ElevatorStop(
                     stopKey, SkullCavernElevatorData.KIND_FLOOR, floor, placed.elevatorPos(), placed.landingPos(), pioneer);
@@ -308,7 +311,18 @@ public final class SkullCavernElevator {
             }
             syncHud(player, cavern, Boolean.TRUE.equals(LAST_TRIAL_STATE.get(player.m_20148_())));
         } else {
-            ensureStationBlocksIntact(cavern, existingStop.elevatorPos);
+            if (isShaftOrBlockedStation(cavern, existingStop.elevatorPos, existingStop.landingPos)) {
+                StationPlacement relocated = findUndergroundPlacementForPlayer(cavern, player, playerPos);
+                if (relocated != null) {
+                    relocateStop(cavern, data, existingMine, existingStop, relocated);
+                    player.m_5661_(Component.m_264642_(
+                            "better_sunlit.elevator.relocated",
+                            "Relocated elevator out of the narrow shaft onto open ground.").m_130940_(ChatFormatting.GOLD), true);
+                    syncHud(player, cavern, Boolean.TRUE.equals(LAST_TRIAL_STATE.get(player.m_20148_())));
+                }
+            } else {
+                ensureStationBlocksIntact(cavern, existingStop.elevatorPos);
+            }
             if (seen.add(stopKey)) {
                 sendToast(player, SkullCavernElevatorData.KIND_FLOOR, floor, existingStop.pioneer, false, false);
             }
@@ -318,13 +332,20 @@ public final class SkullCavernElevator {
     private static void handleTrialChamber(ServerPlayer player, ServerLevel cavern, BlockPos playerPos, int floor, BlockPos center) {
         SkullCavernElevatorData data = SkullCavernElevatorData.get(cavern);
         String stopKey = trialStopKey(center);
-        SkullCavernElevatorData.MineShaft mine = resolveOrCreateActiveMine(player, cavern);
-        SkullCavernElevatorData.ElevatorStop existingStop = mine.findStop(stopKey);
+        SkullCavernElevatorData.MineShaft existingMine = data.getById(player.getPersistentData().m_128461_(TAG_ACTIVE_MINE));
+        if (existingMine == null) {
+            BlockPos anchor = resolvePlayerSurfaceAnchor(player);
+            existingMine = data.findNearestBySurface(anchor.m_123341_(), anchor.m_123343_());
+        }
+        SkullCavernElevatorData.ElevatorStop existingStop = existingMine == null ? null : existingMine.findStop(stopKey);
         Set<String> seen = SEEN_TOASTS_BY_PLAYER.computeIfAbsent(player.m_20148_(), k -> new HashSet<>());
 
         if (existingStop == null) {
+            StationPlacement placed = findUndergroundPlacementForPlayer(cavern, player, playerPos);
+            if (placed == null) return;
+            SkullCavernElevatorData.MineShaft mine = resolveOrCreateActiveMine(player, cavern);
             boolean surfaceOpened = ensureSurfaceElevatorBuilt(cavern, data, mine);
-            StationPlacement placed = placeUndergroundStation(cavern, playerPos);
+            placeStationBlocks(cavern, placed.elevatorPos());
             String pioneer = player.m_7755_().getString();
             SkullCavernElevatorData.ElevatorStop created = new SkullCavernElevatorData.ElevatorStop(
                     stopKey, SkullCavernElevatorData.KIND_TRIAL_CHAMBER, floor, placed.elevatorPos(), placed.landingPos(), pioneer);
@@ -340,7 +361,18 @@ public final class SkullCavernElevator {
             }
             syncHud(player, cavern, true);
         } else {
-            ensureStationBlocksIntact(cavern, existingStop.elevatorPos);
+            if (isShaftOrBlockedStation(cavern, existingStop.elevatorPos, existingStop.landingPos)) {
+                StationPlacement relocated = findUndergroundPlacementForPlayer(cavern, player, playerPos);
+                if (relocated != null) {
+                    relocateStop(cavern, data, existingMine, existingStop, relocated);
+                    player.m_5661_(Component.m_264642_(
+                            "better_sunlit.elevator.relocated",
+                            "Relocated elevator out of the narrow shaft onto open ground.").m_130940_(ChatFormatting.GOLD), true);
+                    syncHud(player, cavern, true);
+                }
+            } else {
+                ensureStationBlocksIntact(cavern, existingStop.elevatorPos);
+            }
             if (seen.add(stopKey)) {
                 sendToast(player, SkullCavernElevatorData.KIND_TRIAL_CHAMBER, existingStop.floor, existingStop.pioneer, false, false);
             }
@@ -366,7 +398,9 @@ public final class SkullCavernElevator {
                 BlockPos ground = new BlockPos(x, y - 1, z);
                 BlockPos spot = new BlockPos(x, y, z);
                 if (isSafeGround(cavern, ground, cavern.m_8055_(ground))
-                        && isSafeAir(cavern, spot, cavern.m_8055_(spot))) {
+                        && isClearForStation(cavern, spot)
+                        && isClearForStation(cavern, spot.m_7494_())
+                        && !hasRopeInColumn(cavern, spot)) {
                     chosenElev = spot;
                     // Land 1 block between the elevator pillar and the surface teleporter.
                     int lx = ax + Integer.signum(off[0]);
@@ -392,36 +426,133 @@ public final class SkullCavernElevator {
 
     private record StationPlacement(BlockPos elevatorPos, BlockPos landingPos) {}
 
-    private static StationPlacement placeUndergroundStation(ServerLevel cavern, BlockPos playerPos) {
-        int px = playerPos.m_123341_();
-        int py = playerPos.m_123342_();
-        int pz = playerPos.m_123343_();
-        int[][] offsets = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {2, 0}, {-2, 0}, {0, 2}, {0, -2}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
-        BlockPos chosenElev = null;
+    /**
+     * Only allows discovering/placing an underground elevator once the player is standing on
+     * natural solid ground (not mid-air, not climbing a rope/ladder, not inside a 1x1 shaft)
+     * with an open 2-block-tall floor tile beside them that does not block any tunnel or rope.
+     */
+    private static StationPlacement findUndergroundPlacementForPlayer(ServerLevel cavern, ServerPlayer player, BlockPos playerPos) {
+        if (!player.m_20096_() || player.m_6147_()) return null;
+        if (!isValidStandingSpot(cavern, playerPos)) return null;
+        BlockPos elevPos = findOpenStationSpot(cavern, playerPos);
+        return elevPos == null ? null : new StationPlacement(elevPos, playerPos.m_7949_());
+    }
+
+    private static StationPlacement findOpenStationNear(ServerLevel cavern, BlockPos origin, int expectedFloor, int maxRadius) {
+        int ox = origin.m_123341_();
+        int oy = origin.m_123342_();
+        int oz = origin.m_123343_();
+        for (int r = 1; r <= maxRadius; r++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
+                    for (int dy = 0; dy >= -6; dy--) {
+                        BlockPos cand = new BlockPos(ox + dx, oy + dy, oz + dz);
+                        if (floorForY(cand.m_123342_()) != expectedFloor) continue;
+                        if (!isValidStandingSpot(cavern, cand)) continue;
+                        BlockPos elev = findOpenStationSpot(cavern, cand);
+                        if (elev != null) {
+                            return new StationPlacement(elev, cand);
+                        }
+                    }
+                    for (int dy = 1; dy <= 4; dy++) {
+                        BlockPos cand = new BlockPos(ox + dx, oy + dy, oz + dz);
+                        if (floorForY(cand.m_123342_()) != expectedFloor) continue;
+                        if (!isValidStandingSpot(cavern, cand)) continue;
+                        BlockPos elev = findOpenStationSpot(cavern, cand);
+                        if (elev != null) {
+                            return new StationPlacement(elev, cand);
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean isValidStandingSpot(ServerLevel cavern, BlockPos landing) {
+        BlockPos below = landing.m_7495_();
+        if (!isSafeGround(cavern, below, cavern.m_8055_(below))) return false;
+        if (!isClearForStation(cavern, landing) || !isClearForStation(cavern, landing.m_7494_())) return false;
+        if (hasRopeInColumn(cavern, landing)) return false;
+        return countOpenHorizontalNeighbors(cavern, landing, null) >= 2;
+    }
+
+    private static BlockPos findOpenStationSpot(ServerLevel cavern, BlockPos landing) {
+        int px = landing.m_123341_();
+        int py = landing.m_123342_();
+        int pz = landing.m_123343_();
+        int[][] offsets = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}, {2, 0}, {-2, 0}, {0, 2}, {0, -2}};
+        int[] dyOrder = {0, -1, 1};
         for (int[] off : offsets) {
             int x = px + off[0];
             int z = pz + off[1];
-            for (int dy = 0; dy >= -2; dy--) {
+            for (int dy : dyOrder) {
                 BlockPos spot = new BlockPos(x, py + dy, z);
                 BlockPos ground = spot.m_7495_();
-                if (isSafeGround(cavern, ground, cavern.m_8055_(ground))
-                        && isSafeAir(cavern, spot, cavern.m_8055_(spot))) {
-                    chosenElev = spot;
-                    break;
+                if (!isSafeGround(cavern, ground, cavern.m_8055_(ground))) continue;
+                if (!isClearForStation(cavern, spot) || !isClearForStation(cavern, spot.m_7494_())) continue;
+                if (hasRopeInColumn(cavern, spot)) continue;
+                // Keep at least two open horizontal exits around the landing tile (or around the pillar)
+                // so the elevator never plugs a 1-block tunnel or vertical shaft.
+                if (countOpenHorizontalNeighbors(cavern, landing, spot) < 2
+                        && countOpenHorizontalNeighbors(cavern, spot, landing) < 2) {
+                    continue;
                 }
-            }
-            if (chosenElev != null) break;
-        }
-        if (chosenElev == null) {
-            chosenElev = new BlockPos(px + 1, py, pz);
-            BlockPos ground = chosenElev.m_7495_();
-            if (!isSafeGround(cavern, ground, cavern.m_8055_(ground)) && !cavern.m_8055_(ground).m_60713_(Blocks.f_50075_)) {
-                Block stone = ForgeRegistries.BLOCKS.getValue(SKULL_STONE_ID);
-                cavern.m_46597_(ground, (stone == null || stone == Blocks.f_50016_ ? Blocks.f_50069_ : stone).m_49966_());
+                return spot;
             }
         }
-        placeStationBlocks(cavern, chosenElev);
-        return new StationPlacement(chosenElev, playerPos.m_7949_());
+        return null;
+    }
+
+    private static boolean isShaftOrBlockedStation(ServerLevel cavern, BlockPos elevPos, BlockPos landingPos) {
+        if (!cavern.m_46749_(elevPos) || !cavern.m_46749_(landingPos)) return false;
+        Block lanternBlock = ForgeRegistries.BLOCKS.getValue(LANTERN_BLOCK_ID);
+        BlockState aboveElev = cavern.m_8055_(elevPos.m_7494_());
+        boolean missingHeadroom = (lanternBlock == null || !aboveElev.m_60713_(lanternBlock))
+                && !isClearForStation(cavern, elevPos.m_7494_());
+        if (missingHeadroom) return true;
+        if (hasRopeInColumn(cavern, landingPos) || hasRopeInColumn(cavern, elevPos)) return true;
+        return countOpenHorizontalNeighbors(cavern, landingPos, elevPos) == 0;
+    }
+
+    private static void relocateStop(ServerLevel cavern, SkullCavernElevatorData data,
+                                     SkullCavernElevatorData.MineShaft mine,
+                                     SkullCavernElevatorData.ElevatorStop oldStop,
+                                     StationPlacement placed) {
+        clearOldStationBlocks(cavern, oldStop.elevatorPos, oldStop.landingPos);
+        placeStationBlocks(cavern, placed.elevatorPos());
+        SkullCavernElevatorData.ElevatorStop updated = new SkullCavernElevatorData.ElevatorStop(
+                oldStop.key, oldStop.kind, oldStop.floor, placed.elevatorPos(), placed.landingPos(), oldStop.pioneer);
+        data.addOrUpdateStop(mine, updated);
+        playDiscoveryEffects(cavern, placed.elevatorPos(), oldStop.kind == SkullCavernElevatorData.KIND_TRIAL_CHAMBER);
+    }
+
+    private static void clearOldStationBlocks(ServerLevel cavern, BlockPos oldElevPos, BlockPos oldLandingPos) {
+        if (cavern.m_46749_(oldElevPos)) {
+            Block elevBlock = ForgeRegistries.BLOCKS.getValue(ELEVATOR_BLOCK_ID);
+            Block lanternBlock = ForgeRegistries.BLOCKS.getValue(LANTERN_BLOCK_ID);
+            if (elevBlock != null && cavern.m_8055_(oldElevPos).m_60713_(elevBlock)) {
+                cavern.m_46597_(oldElevPos, Blocks.f_50016_.m_49966_());
+            }
+            BlockPos above = oldElevPos.m_7494_();
+            if (lanternBlock != null && cavern.m_8055_(above).m_60713_(lanternBlock)) {
+                cavern.m_46597_(above, Blocks.f_50016_.m_49966_());
+            }
+        }
+        // If an earlier buggy landing plugged a vertical rope shaft with skull_stone directly below a rope, unplug it.
+        if (oldLandingPos != null && cavern.m_46749_(oldLandingPos)) {
+            BlockPos below = oldLandingPos.m_7495_();
+            Block skullStone = ForgeRegistries.BLOCKS.getValue(SKULL_STONE_ID);
+            boolean ropeAbove = isClimbableOrRope(cavern.m_8055_(oldLandingPos))
+                    || isClimbableOrRope(cavern.m_8055_(oldLandingPos.m_7494_()));
+            boolean pluggedWithSkullStone = skullStone != null && cavern.m_8055_(below).m_60713_(skullStone);
+            boolean voidOrRopeBeneath = cavern.m_8055_(below.m_7495_()).m_60795_()
+                    || isClimbableOrRope(cavern.m_8055_(below.m_7495_()));
+            if (ropeAbove && pluggedWithSkullStone && voidOrRopeBeneath) {
+                cavern.m_46597_(below, Blocks.f_50016_.m_49966_());
+            }
+        }
     }
 
     private static void placeStationBlocks(ServerLevel cavern, BlockPos elevPos) {
@@ -431,8 +562,7 @@ public final class SkullCavernElevator {
             cavern.m_46597_(elevPos, elevBlock.m_49966_());
         }
         BlockPos topPos = elevPos.m_7494_();
-        if (lanternBlock != null && lanternBlock != Blocks.f_50016_
-                && (cavern.m_8055_(topPos).m_60795_() || isSafeAir(cavern, topPos, cavern.m_8055_(topPos)))) {
+        if (lanternBlock != null && lanternBlock != Blocks.f_50016_ && isClearForStation(cavern, topPos)) {
             cavern.m_46597_(topPos, lanternBlock.m_49966_());
         }
     }
@@ -542,6 +672,15 @@ public final class SkullCavernElevator {
             if (stop == null) return;
             destElev = stop.elevatorPos;
             destLand = stop.landingPos;
+            // Auto-rescue any legacy station that was saved inside a 1x1 rope shaft before landing.
+            if (isShaftOrBlockedStation(cavern, destElev, destLand)) {
+                StationPlacement rescued = findOpenStationNear(cavern, destLand, stop.floor, 8);
+                if (rescued != null) {
+                    relocateStop(cavern, data, mine, stop, rescued);
+                    destElev = rescued.elevatorPos();
+                    destLand = rescued.landingPos();
+                }
+            }
             arrivedMsg = stop.kind == SkullCavernElevatorData.KIND_TRIAL_CHAMBER
                     ? Component.m_264642_(
                     "better_sunlit.elevator.arrived_trial",
@@ -551,7 +690,9 @@ public final class SkullCavernElevator {
                     "Skull Cavern Elevator: arrived at %sF.", stop.floor).m_130940_(ChatFormatting.GOLD);
         }
 
-        ensureStationBlocksIntact(cavern, destElev);
+        if (!isShaftOrBlockedStation(cavern, destElev, destLand)) {
+            ensureStationBlocksIntact(cavern, destElev);
+        }
         ensureLandingClear(cavern, destLand);
 
         // Face toward the elevator pillar upon arrival for clear orientation.
@@ -572,14 +713,18 @@ public final class SkullCavernElevator {
 
     private static void ensureLandingClear(ServerLevel cavern, BlockPos landing) {
         BlockPos ground = landing.m_7495_();
-        if (!isSafeGround(cavern, ground, cavern.m_8055_(ground)) && !cavern.m_8055_(ground).m_60713_(Blocks.f_50075_)) {
+        BlockState groundState = cavern.m_8055_(ground);
+        // Never plug a vertical rope shaft with skull_stone underneath a climbable/rope column.
+        if (!hasRopeInColumn(cavern, landing)
+                && !isSafeGround(cavern, ground, groundState)
+                && !groundState.m_60713_(Blocks.f_50075_)) {
             Block stone = ForgeRegistries.BLOCKS.getValue(SKULL_STONE_ID);
             cavern.m_46597_(ground, (stone == null || stone == Blocks.f_50016_ ? Blocks.f_50069_ : stone).m_49966_());
         }
         for (int dy = 0; dy <= 1; dy++) {
             BlockPos p = landing.m_6630_(dy);
             BlockState s = cavern.m_8055_(p);
-            if (!isSafeAir(cavern, p, s) && !s.m_60713_(Blocks.f_50075_)) {
+            if (!isSafeAir(cavern, p, s) && !s.m_60713_(Blocks.f_50075_) && !isClimbableOrFeature(s)) {
                 cavern.m_46597_(p, Blocks.f_50016_.m_49966_());
             }
         }
@@ -635,13 +780,68 @@ public final class SkullCavernElevator {
     }
 
     private static boolean isSafeGround(ServerLevel level, BlockPos pos, BlockState state) {
-        if (state.m_60795_() || !state.m_60819_().m_76178_() || isHazard(state)) return false;
+        if (state.m_60795_() || !state.m_60819_().m_76178_() || isHazard(state) || isClimbableOrFeature(state)) return false;
         return state.m_60659_(level, pos, Direction.UP, SupportType.FULL);
     }
 
     private static boolean isSafeAir(ServerLevel level, BlockPos pos, BlockState state) {
         if (!state.m_60819_().m_76178_() || isHazard(state)) return false;
         return state.m_60812_(level, pos).m_83281_();
+    }
+
+    private static boolean isClearForStation(ServerLevel level, BlockPos pos) {
+        BlockState state = level.m_8055_(pos);
+        if (!state.m_60819_().m_76178_() || isHazard(state) || isClimbableOrFeature(state)) return false;
+        return state.m_60795_() || state.m_247087_();
+    }
+
+    private static boolean isClimbableOrRope(BlockState state) {
+        if (state.m_60795_()) return false;
+        if (state.m_204336_(BlockTags.f_13082_)) return true;
+        ResourceLocation id = ForgeRegistries.BLOCKS.getKey(state.m_60734_());
+        if (id != null) {
+            String path = id.m_135815_();
+            if (path.contains("rope") || path.contains("ladder")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isClimbableOrFeature(BlockState state) {
+        if (state.m_60795_()) return false;
+        if (isClimbableOrRope(state)) return true;
+        ResourceLocation id = ForgeRegistries.BLOCKS.getKey(state.m_60734_());
+        if (id != null) {
+            String path = id.m_135815_();
+            if (path.contains("teleporter") || path.contains("spawner") || path.contains("vault")
+                    || path.contains("chest") || path.contains("crate") || path.contains("lodestone")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasRopeInColumn(ServerLevel level, BlockPos pos) {
+        for (int dy = -2; dy <= 2; dy++) {
+            if (isClimbableOrRope(level.m_8055_(pos.m_6630_(dy)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int countOpenHorizontalNeighbors(ServerLevel level, BlockPos center, BlockPos exclude) {
+        int open = 0;
+        Direction[] dirs = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
+        for (Direction dir : dirs) {
+            BlockPos n = center.m_121945_(dir);
+            if (exclude != null && n.equals(exclude)) continue;
+            if (isClearForStation(level, n) && isClearForStation(level, n.m_7494_())) {
+                open++;
+            }
+        }
+        return open;
     }
 
     private static boolean isHazard(BlockState state) {
