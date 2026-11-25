@@ -21,7 +21,7 @@ public abstract class SnowPigModelCompatMixin {
                     + "m_174023_(Lnet/minecraft/client/model/geom/ModelLayerLocation;)"
                     + "Lnet/minecraft/client/model/geom/ModelPart;"),
             require = 2, allow = 2)
-    private static ModelPart sunlit$bakeSnowPigLayer(EntityRendererProvider.Context context, ModelLayerLocation layer) {
+    private ModelPart sunlit$bakeSnowPigLayer(EntityRendererProvider.Context context, ModelLayerLocation layer) {
         if (layer == ModelLayers.f_171205_) {
             return PigModel.m_170800_(CubeDeformation.f_171458_).m_171564_();
         }

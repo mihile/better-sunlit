@@ -1,6 +1,7 @@
 package dev.sunlit.fishvisuals.mixin;
 
 import dev.sunlit.bettersunlit.client.CaramelInputBridge;
+import me.jellysquid.mods.sodium.client.gui.widgets.AbstractWidget;
 import me.jellysquid.mods.sodium.client.util.Dim2i;
 import moe.caramel.chat.util.Rect;
 import moe.caramel.chat.wrapper.AbstractIMEWrapper;
@@ -19,7 +20,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class EmbeddiumSearchCaramelMixin implements CaramelInputBridge.Field {
     @Shadow @Final private SearchTextFieldModel model;
     @Shadow @Final protected Dim2i dim;
-    @Shadow public abstract boolean m_93696_();
     @Shadow public abstract boolean isEditable();
     @Shadow public abstract boolean isVisible();
     @Unique private CaramelInputBridge sunlit$ime;
@@ -49,7 +49,9 @@ public abstract class EmbeddiumSearchCaramelMixin implements CaramelInputBridge.
     @Unique private EmbeddiumSearchModelAccessor sunlit$model() {
         return (EmbeddiumSearchModelAccessor) model;
     }
-    @Override public boolean editable() { return m_93696_() && isVisible() && isEditable(); }
+    @Override public boolean editable() {
+        return ((AbstractWidget) (Object) this).m_93696_() && isVisible() && isEditable();
+    }
     @Override public boolean full() {
         return sunlit$ime.probeReplacement().length() > sunlit$model().sunlit$getMaxLength();
     }

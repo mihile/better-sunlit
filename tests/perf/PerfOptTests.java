@@ -373,12 +373,15 @@ public final class PerfOptTests {
         var ctx = net.minecraft.client.renderer.entity.EntityRendererProvider.Context.class;
         var layer = net.minecraft.client.model.geom.ModelLayerLocation.class;
         var factory = Class.forName(mixin).getDeclaredMethod("sunlit$bakeSnowPigLayer", ctx, layer);
+        assertTrue(!java.lang.reflect.Modifier.isStatic(factory.getModifiers()),
+                "SnowPig @Redirect on <init> must be non-static to match constructor target");
         factory.setAccessible(true);
+        var instance = new dev.sunlit.fishvisuals.mixin.SnowPigModelCompatMixin() {};
         var cubes = ModelPart.class.getDeclaredField("f_104212_");
         cubes.setAccessible(true);
         for (var id : List.of(net.minecraft.client.model.geom.ModelLayers.f_171205_,
                 net.minecraft.client.model.geom.ModelLayers.f_171160_)) {
-            var model = (ModelPart) factory.invoke(null, null, id);
+            var model = (ModelPart) factory.invoke(instance, null, id);
             new net.minecraft.client.model.PigModel<>(model);
             float inflate = id == net.minecraft.client.model.geom.ModelLayers.f_171160_ ? 0.5F : 0;
             var head = (List<?>) cubes.get(model.m_171324_("head"));
@@ -543,6 +546,49 @@ public final class PerfOptTests {
                 for (String method : entry.getValue()) {
                     assertTrue(node.methods.stream().anyMatch(m -> m.name.equals(method)),
                             "IME injection method exists: " + entry.getKey() + "." + method);
+                }
+            }
+        }
+        Map<String, String> caramelMixins = Map.of(
+                "dev.sunlit.fishvisuals.mixin.CreateClipboardCaramelMixin",
+                "com.simibubi.create.content.equipment.clipboard.ClipboardScreen",
+                "dev.sunlit.fishvisuals.mixin.EmbeddiumSearchCaramelMixin",
+                "org.embeddedt.embeddium.gui.frame.components.SearchTextFieldComponent",
+                "dev.sunlit.fishvisuals.mixin.ZetterPaintingCaramelMixin",
+                "me.dantaeusb.zetter.client.gui.PaintingScreen",
+                "dev.sunlit.fishvisuals.mixin.ExposureTextBoxCaramelMixin",
+                "io.github.mortuusars.exposure.gui.screen.element.textbox.TextBox",
+                "dev.sunlit.fishvisuals.mixin.SupplementariesTextBoxCaramelMixin",
+                "net.mehvahdjukaar.supplementaries.client.screens.widgets.MultiLineEditBoxWidget",
+                "dev.sunlit.fishvisuals.mixin.SupplementariesTextHolderCaramelMixin",
+                "net.mehvahdjukaar.supplementaries.client.screens.TextHolderEditScreen");
+        for (var entry : caramelMixins.entrySet()) {
+            ClassNode mixinNode = new ClassNode();
+            try (var ms = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                    entry.getKey().replace('.', '/') + ".class")) {
+                assertTrue(ms != null, "Caramel mixin compiled: " + entry.getKey());
+                new ClassReader(ms).accept(mixinNode, 0);
+            }
+            ClassNode targetNode = new ClassNode();
+            try (var ts = PerfOptTests.class.getClassLoader().getResourceAsStream(
+                    entry.getValue().replace('.', '/') + ".class")) {
+                assertTrue(ts != null, "Caramel target installed: " + entry.getValue());
+                new ClassReader(ts).accept(targetNode, 0);
+            }
+            for (var mixinMethod : mixinNode.methods) {
+                boolean isShadow = mixinMethod.visibleAnnotations != null && mixinMethod.visibleAnnotations.stream()
+                        .anyMatch(a -> "Lorg/spongepowered/asm/mixin/Shadow;".equals(a.desc));
+                if (isShadow) {
+                    assertTrue(targetNode.methods.stream().anyMatch(m -> m.name.equals(mixinMethod.name)),
+                            "Caramel @Shadow method declared on target: " + entry.getKey() + " -> " + entry.getValue() + "." + mixinMethod.name);
+                }
+            }
+            for (var mixinField : mixinNode.fields) {
+                boolean isShadow = mixinField.visibleAnnotations != null && mixinField.visibleAnnotations.stream()
+                        .anyMatch(a -> "Lorg/spongepowered/asm/mixin/Shadow;".equals(a.desc));
+                if (isShadow) {
+                    assertTrue(targetNode.fields.stream().anyMatch(f -> f.name.equals(mixinField.name)),
+                            "Caramel @Shadow field declared on target: " + entry.getKey() + " -> " + entry.getValue() + "." + mixinField.name);
                 }
             }
         }
