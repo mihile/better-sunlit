@@ -1,11 +1,9 @@
 """Append an authored change to the next unpublished Better Sunlit release."""
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
 import argparse
-import json
 import subprocess
 import sys
-import tempfile
 
 import release
 
@@ -53,16 +51,7 @@ def add_change(title: str, detail: str, remote_builds: dict[str, int], today: da
     if len(entries) >= 40:
         raise RuntimeError(f'{path.name}에 변경 내역이 40개 있습니다. 관련 항목을 합친 뒤 다시 실행하세요.')
     entries.append(entry)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n', dir=directory,
-                                         prefix='.release-', suffix='.tmp', delete=False) as output:
-            temporary = Path(output.name)
-            output.write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+    release.write_release_meta(path, data)
     return path, True
 
 
@@ -73,8 +62,7 @@ def main():
     args = parser.parse_args()
     with release.release_lock():
         builds = release.known_remote_builds()
-        today = datetime.now(timezone(timedelta(hours=9))).date()
-        path, added = add_change(args.title, args.detail, builds, today)
+        path, added = add_change(args.title, args.detail, builds, release.korea_today())
     relative = path.relative_to(release.ROOT)
     print(f'{relative}: {"변경 내역 추가 완료" if added else "이미 같은 변경 내역이 있습니다"}. 작업 파일과 함께 커밋하세요.')
 

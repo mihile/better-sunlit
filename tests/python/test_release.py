@@ -1,4 +1,5 @@
 """Exercise release orchestration against isolated local Git repositories."""
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest import mock
 import importlib.util
@@ -41,7 +42,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.git('config', 'user.email', 'release-test@example.invalid')
         self.write('feed/update.properties', 'client-old\n')
         self.write('release-channel.properties', 'channel=client\n')
-        self.write('shared.txt', 'base\n')
+        self.write('src/main/resources/shared.mcmeta', 'base\n')
         self.write('releases/20261114.1.json', json.dumps({
             'build': 2026111401, 'label': '2026.11.14.1', 'title': 'Title',
             'changes': [{'title': 'Feature', 'detail': 'Description'}],
@@ -120,7 +121,9 @@ class ReleaseGitTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0)
             return actual_run(command, check=check)
 
-        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026111402, 'server': 2026111401}), \
+        published_notes = self.git('show', 'client:releases/20261114.2.json')
+        with mock.patch.object(release, 'korea_today', return_value=date(2026, 11, 15)), \
+             mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026111402, 'server': 2026111401}), \
              mock.patch.object(release, 'build_both') as build, \
              mock.patch.object(release, 'verify_artifacts'), \
              mock.patch.object(release, 'run', side_effect=run_stub), \
@@ -128,7 +131,12 @@ class ReleaseGitTests(unittest.TestCase):
             release.release('both')
         build.assert_called_once()
         publish_side.assert_called_once()
-        self.assertEqual(publish_side.call_args.args, ('server', self.root/'releases/20261114.2.json'))
+        dated_path = self.root/'releases/20261115.1.json'
+        self.assertEqual(publish_side.call_args.args, ('server', dated_path))
+        self.assertEqual(self.git('show', 'server:releases/20261114.2.json'), published_notes)
+        self.assertEqual(json.loads(dated_path.read_text(encoding='utf8'))['changes'],
+                         json.loads(published_notes)['changes'])
+        self.assertEqual(build.call_args.args[0]['build'], 2026111501)
         self.assertEqual(self.git('show', 'server:src/main/resources/pack.mcmeta'), '{}')
 
     def test_client_only_sources_do_not_trigger_server(self):
@@ -144,42 +152,42 @@ class ReleaseGitTests(unittest.TestCase):
         self.assertFalse(release.needs_release('server'))
 
     def test_merge_preserves_both_changes_and_each_channel(self):
-        self.write('client-added.txt', 'client feature\n')
+        self.write('src/main/resources/client-added.mcmeta', 'client feature\n')
         self.commit('client change')
         self.git('checkout', 'server')
-        self.write('server-added.txt', 'server feature\n')
+        self.write('src/main/resources/server-added.mcmeta', 'server feature\n')
         self.commit('server change')
         self.git('checkout', 'client')
 
         release.sync_from('server')
         self.assertEqual((self.root/'feed/update.properties').read_text(), 'client-old\n')
         self.assertEqual((self.root/'release-channel.properties').read_text(), 'channel=client\n')
-        self.assertTrue((self.root/'server-added.txt').exists())
+        self.assertTrue((self.root/'src/main/resources/server-added.mcmeta').exists())
         self.git('checkout', 'server')
         release.sync_from('client')
         self.assertEqual((self.root/'feed/update.properties').read_text(), 'server-old\n')
         self.assertEqual((self.root/'release-channel.properties').read_text(), 'channel=server\n')
-        self.assertTrue((self.root/'client-added.txt').exists())
+        self.assertTrue((self.root/'src/main/resources/client-added.mcmeta').exists())
         release.assert_shared_equal('client', 'server')
 
     def test_conflicting_shared_changes_abort_without_overwriting(self):
-        self.write('shared.txt', 'client version\n')
+        self.write('src/main/resources/shared.mcmeta', 'client version\n')
         self.commit('client edit')
         self.git('checkout', 'server')
-        self.write('shared.txt', 'server version\n')
+        self.write('src/main/resources/shared.mcmeta', 'server version\n')
         self.commit('server edit')
         self.git('checkout', 'client')
-        with self.assertRaisesRegex(RuntimeError, 'shared.txt'):
+        with self.assertRaisesRegex(RuntimeError, 'src/main/resources/shared.mcmeta'):
             release.sync_from('server')
-        self.assertEqual((self.root/'shared.txt').read_text(), 'client version\n')
+        self.assertEqual((self.root/'src/main/resources/shared.mcmeta').read_text(), 'client version\n')
         self.assertEqual(self.git('status', '--porcelain'), '')
-        self.assertEqual(self.git('show', 'server:shared.txt'), 'server version')
+        self.assertEqual(self.git('show', 'server:src/main/resources/shared.mcmeta'), 'server version')
 
     def test_both_build_and_test_once_before_either_publish(self):
-        self.write('client-added.txt', 'client feature\n')
+        self.write('src/main/resources/client-added.mcmeta', 'client feature\n')
         self.commit('client change')
         self.git('checkout', 'server')
-        self.write('server-added.txt', 'server feature\n')
+        self.write('src/main/resources/server-added.mcmeta', 'server feature\n')
         self.commit('server change')
         self.git('checkout', 'client')
         events = []
@@ -199,11 +207,14 @@ class ReleaseGitTests(unittest.TestCase):
         def publish_stub(side, changes):
             self.assertEqual(events[:4], ['build', 'test', 'prepare-client', 'prepare-server'])
             self.assertEqual(self.git('branch', '--show-current'), side)
+            self.assertEqual(changes.name, '20261125.1.json')
+            self.assertEqual(json.loads(changes.read_text(encoding='utf8'))['build'], 2026112501)
             events.append('publish-' + side)
             self.write('feed/update.properties', side + '-new\n')
             self.commit('Publish ' + side)
 
-        with mock.patch.object(release, 'needs_release', return_value=True), \
+        with mock.patch.object(release, 'korea_today', return_value=date(2026, 11, 25)), \
+             mock.patch.object(release, 'needs_release', return_value=True), \
              mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026110804, 'server': 2026110804}), \
              mock.patch.object(release, 'build_both', side_effect=lambda data: events.append('build')), \
              mock.patch.object(release, 'verify_artifacts'), \
@@ -217,6 +228,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.assertEqual(self.git('show', 'server:feed/update.properties'), 'server-new')
         self.assertEqual(self.git('show', 'server:release-channel.properties'), 'channel=server')
         release.assert_shared_equal('client', 'server')
+        self.assertFalse((self.root/'releases/20261114.1.json').exists())
 
     def test_test_failure_stops_before_publication(self):
         actual_run = release.run
@@ -282,8 +294,9 @@ class ReleaseGitTests(unittest.TestCase):
                     self.fail('second lock should not be acquired')
 
     def test_release_requires_new_metadata_instead_of_copying_old_notes(self):
-        with self.assertRaisesRegex(RuntimeError, r'releases/20261114\.2\.json에 build=2026111402'):
-            release.choose_release(['client', 'server'], {'client': 2026110804, 'server': 2026111401})
+        with self.assertRaisesRegex(RuntimeError, r'add_release_change.py'):
+            release.choose_release(['client', 'server'], {'client': 2026110804, 'server': 2026111401},
+                                   date(2026, 11, 25))
         self.assertEqual(len(list((self.root/'releases').glob('*.json'))), 1)
 
     def test_rejects_duplicate_notes_and_keeps_authored_notes(self):
@@ -293,11 +306,34 @@ class ReleaseGitTests(unittest.TestCase):
         new = old.with_name('20261114.2.json')
         new.write_text(json.dumps(data), encoding='utf8')
         with self.assertRaisesRegex(RuntimeError, '변경 내역이 .* 같습니다'):
-            release.choose_release(['client'], {'client': 2026111401})
+            release.choose_release(['client'], {'client': 2026111401}, date(2026, 11, 14))
         data['changes'][0]['title'] = 'Fixed startup hang'
         new.write_text(json.dumps(data), encoding='utf8')
-        _, selected = release.choose_release(['client'], {'client': 2026111401})
+        _, selected = release.choose_release(['client'], {'client': 2026111401}, date(2026, 11, 14))
         self.assertEqual(selected, data)
+
+    def test_lagging_channel_gets_next_deployment_day_sequence(self):
+        old = self.root/'releases/20261114.1.json'
+        original = old.read_bytes()
+        path, data = release.choose_release(['client'], {'client': 2026111301, 'server': 2026112504},
+                                            date(2026, 11, 25))
+        self.assertEqual(path.name, '20261125.5.json')
+        self.assertEqual((data['build'], data['label']), (2026112505, '2026.11.25.5'))
+        self.assertEqual(old.read_bytes(), original)
+
+    def test_future_remote_build_does_not_allocate_a_lower_version(self):
+        old = self.root/'releases/20261114.1.json'
+        original = old.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, '시스템 시각'):
+            release.choose_release(['client'], {'client': 2026111301, 'server': 2026112601},
+                                   date(2026, 11, 25))
+        self.assertEqual(old.read_bytes(), original)
+        self.assertEqual(list(old.parent.glob('*.json')), [old])
+
+    def test_korean_date_changes_at_1500_utc(self):
+        with mock.patch.object(release, 'datetime') as clock:
+            clock.now.side_effect = lambda tz: datetime(2026, 11, 24, 15, tzinfo=timezone.utc).astimezone(tz)
+            self.assertEqual(release.korea_today(), date(2026, 11, 25))
 
     def test_remote_versions_include_drafts_and_tags_without_releases(self):
         pages = [[{'tag_name': 'client-build-2026.11.14.1', 'draft': True}],
