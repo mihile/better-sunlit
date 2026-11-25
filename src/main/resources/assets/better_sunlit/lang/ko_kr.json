@@ -806,6 +806,7 @@
   "better_sunlit.elevator.toast_trial_enter": "구리 던전 (%s층)",
   "better_sunlit.elevator.toast_trial_sub": "엘리베이터 등록 · %s",
   "better_sunlit.elevator.surface_built": "이 광산의 지상 입구에 엘리베이터가 설치되었습니다!",
+  "better_sunlit.elevator.relocated": "좁은 통로에 있던 엘리베이터를 안전한 개활지로 옮겼습니다.",
   "better_sunlit.elevator.client_required": "해골 광산 엘리베이터 UI를 사용하려면 클라이언트에 Better Sunlit이 필요합니다.",
   "better_sunlit.elevator.arrived_surface": "해골 광산 입구(지상)로 이동했습니다.",
   "better_sunlit.elevator.arrived_floor": "해골 광산 엘리베이터: %s층으로 이동했습니다.",
