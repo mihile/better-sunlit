@@ -1,6 +1,7 @@
 """Build, verify and publish one or both Better Sunlit channels."""
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import argparse
 import hashlib
@@ -10,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from publication_guard import check_worktree, check_git_tree
 from publish import release_feed_metadata
@@ -19,6 +21,11 @@ INSTANCE = ROOT.parents[1]
 SIDES = ('client', 'server')
 CHANNEL_FILES = ('feed/update.properties', 'release-channel.properties')
 REPOSITORY = 'mihile/better-sunlit'
+KOREA_TIME = timezone(timedelta(hours=9))
+
+
+def korea_today():
+    return datetime.now(KOREA_TIME).date()
 
 
 def run(cmd, *, check=True):
@@ -177,19 +184,28 @@ def sync_from(other):
         raise
 
 
-def choose_release(sides, remote_builds):
+def next_release_identity(day, used):
+    stamp = day.strftime('%Y%m%d')
+    base = int(stamp) * 100
+    sequence = max(1, used - base + 1)
+    if sequence > 99:
+        raise RuntimeError(f'한국 날짜 {day}로 기존 원격 빌드 {used}보다 높은 번호를 만들 수 없습니다. '
+                           '시스템 시각과 공개 릴리스 번호를 확인하세요.')
+    label = f'{day:%Y.%m.%d}.{sequence}'
+    path = ROOT / 'releases' / f'{stamp}.{sequence}.json'
+    return path, base + sequence, label
+
+
+def choose_release(sides, remote_builds, release_day):
     path, data = latest_release_meta()
+    draft_build = int(data['build'])
+    used = max(remote_builds.values())
     published = max(remote_builds[side] for side in sides)
-    if int(data['build']) <= published:
+    if draft_build <= published:
         existing = ', '.join(f'{side}={remote_builds[side]}' for side in sides)
-        stamp = str(published)
-        day, sequence = stamp[:8], int(stamp[8:]) + 1
-        label = f'{day[:4]}.{day[4:6]}.{day[6:8]}.{sequence}'
         raise RuntimeError(
             f'미게시 소스 변경은 있지만, 가장 최근 설명 releases/{path.name}의 build={data["build"]}은 '
             f'원격에 이미 등록된 번호 이하입니다 ({existing}).\n'
-            f'예: releases/{day}.{sequence}.json에 build={day}{sequence:02d}, label="{label}", '
-            '이번 변경 사항을 담은 changes가 필요합니다.\n'
             'tools/add_release_change.py에 이번 작업의 제목과 설명을 전달해 기록한 뒤 같은 BAT를 다시 실행하세요.')
     entries = data.get('changes')
     if not entries:
@@ -199,7 +215,34 @@ def choose_release(sides, remote_builds):
         if (int(previous['build']) in {remote_builds[side] for side in sides} and
                 entries == previous.get('changes', previous.get('features'))):
             raise RuntimeError(f'{path.name}의 변경 내역이 {previous_path.name}과 같습니다. 이번 변경 사항을 작성하세요.')
-    return path, data
+
+    if draft_build >= used and draft_build // 100 == int(release_day.strftime('%Y%m%d')):
+        return path, data
+
+    dated_path, build, label = next_release_identity(release_day, used)
+    if dated_path.exists():
+        raise RuntimeError(f'배포일 릴리스 설명 releases/{dated_path.name}이 이미 있습니다. 변경 내역을 확인하세요.')
+    dated = {**data, 'build': build, 'label': label}
+    write_release_meta(dated_path, dated)
+    # If the other channel already used this build, its metadata remains part of
+    # the published history. Carry the same notes forward for the pending channel.
+    if draft_build > used:
+        path.unlink()
+    print(f'배포일 버전 확정: {path.name} → {dated_path.name}', flush=True)
+    return dated_path, dated
+
+
+def write_release_meta(path, data):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', newline='\n', dir=path.parent,
+                                         prefix='.release-', suffix='.tmp', delete=False) as output:
+            temporary = Path(output.name)
+            output.write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def build_both(data):
@@ -318,6 +361,7 @@ def local_build(side, force=False):
 
 
 def release(requested, prepare_only=False):
+    release_day = korea_today()
     initial = git('branch', '--show-current')
     if initial not in SIDES:
         raise RuntimeError('client 또는 server 브랜치에서 실행하세요.')
@@ -337,7 +381,7 @@ def release(requested, prepare_only=False):
     if sides[0] != initial:
         run(['git', 'checkout', sides[0]])
         step('대상 브랜치 동기화', sync_from, initial)
-    changes, data = choose_release(sides, remote_builds)
+    changes, data = choose_release(sides, remote_builds, release_day)
     print(f"릴리스: {data['label']} (build {data['build']}) / {', '.join(sides)}", flush=True)
     save_work()
     if len(sides) == 2:

@@ -4,7 +4,7 @@
 - 브랜치는 `client`, `server`다. 각 브랜치의 `release-channel.properties`와 서명된 feed를 유지한다. 공통 로직 수정은 양쪽에 반영한다.
 - 기존 `sunlit_fish_visuals` mod ID, 낚시 설정 파일과 저장 데이터 이름을 유지한다. 이름은 Better Sunlit으로 표시한다.
 - 릴리스 설명은 `releases/<label>.json`의 `changes`에 해당 버전의 변경 사항과 버그 수정을 간결하게 기록한다. 클라이언트 Better Sunlit 화면은 최신 체인지로그를 표시하며, 같은 내용을 GitHub 릴리스에도 사용한다. 기존 `features` 형식은 과거 기록 호환용으로만 지원한다.
-- 작업을 마칠 때마다 커밋 전에 `python -X utf8 tools/add_release_change.py --title "변경 제목" --detail "사용자가 체감할 변화"`로 이번 내용을 기록하고, 반환된 릴리스 JSON을 작업 파일과 같은 커밋에 포함한다. 수정이 여러 번 쌓이면 같은 미배포 JSON의 `changes`에 누적한다. 한 채널이라도 버전을 게시하거나 태그를 등록했다면 그 JSON을 수정하지 않고 다음 버전을 사용한다. 실제 게시는 사용자가 배포 BAT를 실행할 때 진행한다.
+- 작업을 마칠 때마다 커밋 전에 `python -X utf8 tools/add_release_change.py --title "변경 제목" --detail "사용자가 체감할 변화"`로 이번 내용을 기록하고, 반환된 릴리스 JSON을 작업 파일과 같은 커밋에 포함한다. 수정은 미배포 JSON의 `changes`에 누적한다. 배포 BAT가 실행되면 한국 날짜로 버전을 확정한다. 한 채널이라도 버전을 게시하거나 태그를 등록했다면 해당 JSON을 보존한다.
 - 게시할 때 내부 빌드 번호를 증가시키고 `MAINTAINER.md`의 빌드·테스트·서명·공개 재다운로드 절차를 따른다. 다른 채널의 feed나 기존 릴리스 자산을 덮어쓰지 않는다.
 - 개인 서명 키, 인증 정보, 사용자 설정, 월드, 로그, 힙 덤프와 JFR은 커밋하지 않는다.
 - 파일은 독립 복사한다. 원본 모드팩·테스트 인스턴스 사이에 하드 링크를 만들지 않는다.
