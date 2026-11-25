@@ -66,6 +66,10 @@
     {
       "title": "눈 돼지 모델 및 검색·텍스트 상자 한글 입력 믹신 오류 수정",
       "detail": "실행 로그에서 적용 실패하던 눈 돼지 모델 호환 믹신(SnowPigModelCompatMixin)의 static 시그니처 불일치와, 비디오 옵션 검색창(EmbeddiumSearchCaramelMixin)·Supplementaries 다중 줄 입력창(SupplementariesTextBoxCaramelMixin)의 상위 클래스 @Shadow 참조 오류를 수정했습니다."
+    },
+    {
+      "title": "가축 수확 쿨타임 표시 복구",
+      "detail": "동물 상태 패킷을 클라이언트 렌더러에 직접 전달해 우유 들통·마법 가위·유리병을 들었을 때 수확 가능 여부와 쿨타임이 다시 표시되도록 수정했습니다."
     }
   ]
 }

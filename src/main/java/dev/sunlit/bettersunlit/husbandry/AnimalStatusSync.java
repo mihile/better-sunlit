@@ -1,5 +1,6 @@
 package dev.sunlit.bettersunlit.husbandry;
 
+import dev.sunlit.bettersunlit.client.AnimalCooldownRenderer;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
@@ -14,11 +15,13 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkEvent;
@@ -37,7 +40,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -84,7 +86,6 @@ public final class AnimalStatusSync {
                 .simpleChannel();
     }
 
-    private static volatile Consumer<StatusPacket> clientReceiver;
     private static final Map<UUID, Map<Integer, AnimalSnapshot>> SENT_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, Integer> IMMEDIATE_UNTIL_TICK = new HashMap<>();
     private static final Map<UUID, Boolean> LAST_HELD_TOOL = new HashMap<>();
@@ -100,10 +101,6 @@ public final class AnimalStatusSync {
         return PROTOCOL.equals(version)
                 || NetworkRegistry.ABSENT.version().equals(version)
                 || NetworkRegistry.ACCEPTVANILLA.equals(version);
-    }
-
-    public static void setClientReceiver(Consumer<StatusPacket> receiver) {
-        clientReceiver = receiver;
     }
 
     public static void register() {
@@ -418,10 +415,8 @@ public final class AnimalStatusSync {
 
         public static void handle(StatusPacket packet, Supplier<NetworkEvent.Context> supplier) {
             NetworkEvent.Context context = supplier.get();
-            Consumer<StatusPacket> receiver = clientReceiver;
-            if (receiver != null) {
-                context.enqueueWork(() -> receiver.accept(packet));
-            }
+            context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                    () -> () -> AnimalCooldownRenderer.receive(packet)));
             context.setPacketHandled(true);
         }
     }

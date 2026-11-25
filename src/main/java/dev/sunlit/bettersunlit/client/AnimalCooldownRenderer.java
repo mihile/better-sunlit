@@ -29,7 +29,6 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
@@ -86,14 +85,6 @@ public final class AnimalCooldownRenderer {
     private static long lastPacketGameTime = 0L;
 
     private AnimalCooldownRenderer() {}
-
-    @Mod.EventBusSubscriber(modid = SunlitFishVisuals.ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
-    public static final class ModBusEvents {
-        @SubscribeEvent
-        public static void onClientSetup(FMLClientSetupEvent event) {
-            AnimalStatusSync.setClientReceiver(AnimalCooldownRenderer::receive);
-        }
-    }
 
     private enum ToolMode {
         MILK_PAIL,
