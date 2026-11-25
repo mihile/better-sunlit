@@ -330,7 +330,7 @@ public final class PerfOptTests {
         testFancyMenuPanoramaPendingFaces();
         testCaramelCompositionBridge();
         testCarryOnPoseTargets();
-        testMilkDayIndicator();
+        testAnimalCooldownStages();
         testSnowPigModel();
         testSharedMobLayers();
         testIter7StartupPerfOpts();
@@ -341,28 +341,58 @@ public final class PerfOptTests {
         System.out.println("PerfOptTests: ALL PASSED");
     }
 
-    private static void testMilkDayIndicator() {
+    private static void testAnimalCooldownStages() {
         int flags = AnimalStatusSync.FLAG_HAS_MILKED
-                | AnimalStatusSync.FLAG_HAS_FED;
-        long lastMilked = 9 * 24000L + 8000;
-        for (int day = 10; day <= 12; day++) {
+                | AnimalStatusSync.FLAG_HAS_FED | AnimalStatusSync.FLAG_HAS_MAGIC;
+        long dawn = 9 * 24000L;
+        long lastHarvest = dawn + 8_000;
+        int[] offsets = {8_000, 11_999, 12_000, 23_999, 24_000, 35_999, 36_000, 47_999, 48_000};
+        int[] oneDay = {0, 0, 2, 2, 4, 4, 4, 4, 4};
+        int[] twoDays = {0, 0, 1, 1, 2, 2, 3, 3, 4};
+        for (int i = 0; i < offsets.length; i++) {
+            int day = 10 + offsets[i] / 24_000;
+            long dayTime = dawn + offsets[i];
             var fed = new AnimalStatusSync.AnimalSnapshot(
-                    1, (byte) flags, 10, lastMilked, 0, 0, day, (byte) 0, (byte) -1);
-            long dayTime = (day - 1) * 24000L + 8000;
+                    1, (byte) flags, 10, lastHarvest, 10, lastHarvest, day, (byte) 5, (byte) -1);
             assertTrue(AnimalCooldownRenderer.computeMilkDaysRemaining(fed, 2, day) == 12 - day,
                     "Two-day harvest advances at each world day boundary");
-            assertTrue((AnimalCooldownRenderer.computeMilkStage(fed, 2, dayTime, day) == 3) == (day == 12),
-                    "Special milk is ready on the second day");
-            assertTrue((AnimalCooldownRenderer.computeMilkStage(fed, 1, dayTime, day) == 3) == (day > 10),
-                    "One-day harvest becomes ready the following day");
+            assertTrue(AnimalCooldownRenderer.computeMilkStage(fed, 2, dayTime, day) == twoDays[i],
+                    "Two-day milk fills in quarters at dusk and dawn");
+            assertTrue(AnimalCooldownRenderer.computeMilkStage(fed, 1, dayTime, day) == oneDay[i],
+                    "One-day milk fills in halves at dusk and dawn");
+            assertTrue(AnimalCooldownRenderer.computeMagicStage(fed, dayTime, day) == oneDay[i],
+                    "Magic shears fill in halves at dusk and dawn");
         }
+
+        var lateHarvest = new AnimalStatusSync.AnimalSnapshot(
+                1, (byte) flags, 10, dawn + 13_000, 10, dawn + 13_000, 10, (byte) 5, (byte) -1);
+        assertTrue(AnimalCooldownRenderer.computeMilkStage(lateHarvest, 2, dawn + 20_000, 10) == 0
+                        && AnimalCooldownRenderer.computeMagicStage(lateHarvest, dawn + 20_000, 10) == 0,
+                "Harvesting at night resets progress for that night");
         var unfed = new AnimalStatusSync.AnimalSnapshot(
-                1, (byte) flags, 10, lastMilked, 0, 0, 11, (byte) 0, (byte) -1);
+                1, (byte) flags, 10, lastHarvest, 10, lastHarvest, 11, (byte) 4, (byte) -1);
         assertTrue(AnimalCooldownRenderer.computeMilkDaysRemaining(unfed, 2, 12) == 0,
                 "Hunger does not reset the milk cooldown");
-        assertTrue(AnimalCooldownRenderer.computeMilkStage(unfed, 2, 11 * 24000L, 12) == 4,
-                "Two completed days do not override the feeding requirement");
-        System.out.println("PASS: one-day and two-day milk readiness, calendar milestones, and hunger gate");
+        assertTrue(AnimalCooldownRenderer.computeMilkStage(unfed, 2, dawn + 48_000, 12) == 5,
+                "Feeding requirement still blocks milk when the cooldown is complete");
+        assertTrue(AnimalCooldownRenderer.computeMagicStage(unfed, dawn + 48_000, 12) == 5,
+                "Low affection still blocks magic shears when the cooldown is complete");
+
+        var data = new net.minecraft.nbt.CompoundTag();
+        int[] ichorTicks = {20, 11, 10, 1, 0};
+        int[] ichorStages = {0, 0, 2, 2, 4};
+        for (int count : new int[]{0, 1}) {
+            data.m_128405_("IchorCount", count);
+            for (int i = 0; i < ichorTicks.length; i++) {
+                data.m_128405_("IchorCooldown", ichorTicks[i]);
+                var snap = AnimalStatusSync.captureFromTags(1, true, true, AnimalStatusSync.MAMMUTILATION_ID,
+                        false, null, null, data, dawn, 10);
+                assertTrue(AnimalCooldownRenderer.computeIchorStage(snap.ichorState())
+                                == (count > 0 ? ichorStages[i] : 0),
+                        "Glass bottle follows the Species timer and requires an available charge");
+            }
+        }
+        System.out.println("PASS: half-day milk and shears stages, night reset, hunger, affection and native ichor cooldown");
     }
 
     private static void testSnowPigModel() throws Exception {

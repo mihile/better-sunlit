@@ -74,6 +74,11 @@ public final class AnimalStatusSync {
     public static final int FLAG_HAS_FED = 1 << 3;
     public static final int FLAG_HAS_MILKED = 1 << 4;
     public static final int FLAG_HAS_MAGIC = 1 << 5;
+    public static final byte ICHOR_HALF = 1;
+    public static final byte ICHOR_READY = 3;
+
+    // Species 3.5 starts a 20-tick timer after filling a glass bottle.
+    private static final int ICHOR_COOLDOWN_TICKS = 20;
 
     private static final int NBT_ANY_NUMERIC = 99;
     private static final String PROTOCOL = "2";
@@ -132,7 +137,10 @@ public final class AnimalStatusSync {
         EntityType<?> type = living.m_6095_();
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(type);
         if (type.m_204039_(EntityTags.HUSBANDRY) || type.m_204039_(EntityTags.MILKABLE) || MAMMUTILATION_ID.equals(typeId)) {
-            IMMEDIATE_UNTIL_TICK.put(player.m_20148_(), player.f_19797_ + 6);
+            boolean bottlingIchor = MAMMUTILATION_ID.equals(typeId)
+                    && GLASS_BOTTLE_ID.equals(ForgeRegistries.ITEMS.getKey(event.getItemStack().m_41720_()));
+            int ticks = bottlingIchor ? ICHOR_COOLDOWN_TICKS + 1 : 6;
+            IMMEDIATE_UNTIL_TICK.merge(player.m_20148_(), player.f_19797_ + ticks, Math::max);
         }
     }
 
@@ -320,8 +328,11 @@ public final class AnimalStatusSync {
             warped = savedNbt.m_128451_("Variant") == 2;
         } else if (MAMMUTILATION_ID.equals(typeId) && !isBaby && savedNbt != null) {
             int count = savedNbt.m_128451_("IchorCount");
-            int cd = savedNbt.m_128451_("IchorCooldown");
-            ichorState = (byte) ((count > 0 && cd <= 0) ? 3 : 0);
+            int remainingTicks = savedNbt.m_128451_("IchorCooldown");
+            // Keep the same packet field and ready value. Older clients treat
+            // the half state as an ordinary cooldown, as they did the empty state.
+            ichorState = count <= 0 ? 0 : remainingTicks <= 0 ? ICHOR_READY
+                    : remainingTicks <= ICHOR_COOLDOWN_TICKS / 2 ? ICHOR_HALF : 0;
         }
 
         int flags = 0;
