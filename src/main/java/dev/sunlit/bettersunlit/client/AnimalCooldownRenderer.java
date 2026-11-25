@@ -41,7 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Renders 3D overhead readiness & 1/3-step cooldown icons over animals when the player
+ * Renders overhead readiness and half-day cooldown icons over animals when the player
  * holds a resource-harvesting tool whose cooldown/state is not visually shown on the model.
  */
 @Mod.EventBusSubscriber(modid = SunlitFishVisuals.ID, value = Dist.CLIENT)
@@ -56,11 +56,11 @@ public final class AnimalCooldownRenderer {
     private static final int FULL_BRIGHT = 0x00F000F0;
 
     private static final int STAGE_GRAY = 0;
-    private static final int STAGE_ONE_THIRD = 1;
-    private static final int STAGE_TWO_THIRDS = 2;
-    private static final int STAGE_READY = 3;
-    private static final int STAGE_BLOCKED = 4;
-    private static final int FRAME_COUNT = 5;
+    private static final int STAGE_HALF = 2;
+    private static final int STAGE_READY = 4;
+    private static final int STAGE_BLOCKED = 5;
+    private static final int FRAME_COUNT = STAGE_BLOCKED + 1;
+    private static final long HALF_DAY_TICKS = AnimalStatusSync.TICKS_PER_DAY / 2;
 
     private static final ResourceLocation ICON_MILK = new ResourceLocation("society", "milk");
     private static final ResourceLocation ICON_SHEEP_MILK = new ResourceLocation("society", "sheep_milk");
@@ -202,14 +202,14 @@ public final class AnimalCooldownRenderer {
             ResourceLocation iconItemId;
             int stage;
             int cooldownDays = 1;
-            int daysRemaining = 0;
+            int milkProgress = 0;
             if (mode == ToolMode.MILK_PAIL) {
                 if (entity.m_6162_() || !snap.isMilkable()) continue;
                 MilkProduceInfo info = resolveMilkInfo(entity, snap);
                 iconItemId = info.iconId();
                 cooldownDays = info.cooldownDays();
-                daysRemaining = computeMilkDaysRemaining(snap, cooldownDays, currentDay);
-                stage = milkStage(snap, daysRemaining, dayTime, currentDay);
+                milkProgress = computeMilkProgress(snap, cooldownDays, dayTime, currentDay);
+                stage = isFed(snap, currentDay) ? milkProgress : STAGE_BLOCKED;
             } else if (mode == ToolMode.MAGIC_SHEARS) {
                 if (!snap.isHusbandry()) continue;
                 iconItemId = ICON_MAGIC_SHEARS;
@@ -217,7 +217,7 @@ public final class AnimalCooldownRenderer {
             } else {
                 if (entity.m_6162_() || snap.ichorState() < 0) continue;
                 iconItemId = ICON_ICHOR;
-                stage = snap.ichorState() >= 3 ? STAGE_READY : STAGE_GRAY;
+                stage = computeIchorStage(snap.ichorState());
             }
 
             IconStrip strip = getOrBuildStrip(mc, iconItemId);
@@ -246,7 +246,8 @@ public final class AnimalCooldownRenderer {
                 ensureWhiteTexture(mc);
                 RenderType dayType = RenderType.m_110473_(WHITE_TEXTURE);
                 usedRenderTypes.add(dayType);
-                drawMilkDays(buffers.m_6299_(dayType), mat, norm, cooldownDays, daysRemaining, stage);
+                drawMilkSteps(buffers.m_6299_(dayType), mat, norm, cooldownDays * 2, milkProgress,
+                        stage == STAGE_BLOCKED);
             }
             poseStack.m_85849_();
         }
@@ -258,15 +259,16 @@ public final class AnimalCooldownRenderer {
         }
     }
 
-    private static void drawMilkDays(VertexConsumer vertices, Matrix4f mat, Matrix3f norm,
-                                     int totalDays, int daysRemaining, int stage) {
+    private static void drawMilkSteps(VertexConsumer vertices, Matrix4f mat, Matrix3f norm,
+                                      int totalSteps, int progress, boolean blocked) {
         float span = 0.32f;
         float gap = 0.024f;
-        float cell = (span - gap * (totalDays - 1)) / totalDays;
+        float cell = (span - gap * (totalSteps - 1)) / totalSteps;
         float x = -span / 2.0f;
-        int completeColor = stage == STAGE_BLOCKED ? DAY_FILLED_BLOCKED : DAY_FILLED;
-        for (int day = 0; day < totalDays; day++) {
-            int color = day < totalDays - daysRemaining ? completeColor : DAY_EMPTY;
+        int completeColor = blocked ? DAY_FILLED_BLOCKED : DAY_FILLED;
+        int filledSteps = progress * totalSteps / STAGE_READY;
+        for (int step = 0; step < totalSteps; step++) {
+            int color = step < filledSteps ? completeColor : DAY_EMPTY;
             emitQuad(vertices, mat, norm, x, -0.28f, x + cell, -0.24f, 0.0f, 1.0f, color);
             x += cell + gap;
         }
@@ -323,21 +325,19 @@ public final class AnimalCooldownRenderer {
 
     public static int computeMilkStage(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays,
                                        long dayTime, long currentDay) {
-        return milkStage(snap, computeMilkDaysRemaining(snap, cooldownDays, currentDay), dayTime, currentDay);
+        return isFed(snap, currentDay) ? computeMilkProgress(snap, cooldownDays, dayTime, currentDay) : STAGE_BLOCKED;
     }
 
-    private static int milkStage(AnimalStatusSync.AnimalSnapshot snap, int daysRemaining,
-                                 long dayTime, long currentDay) {
+    private static boolean isFed(AnimalStatusSync.AnimalSnapshot snap, long currentDay) {
         // Society considers the animal fed only for the calendar day on which it ate.
-        if (!snap.hasFedTag() || currentDay != snap.ageLastFed()) return STAGE_BLOCKED;
-        if (daysRemaining == 0) return STAGE_READY;
+        return snap.hasFedTag() && currentDay == snap.ageLastFed();
+    }
 
-        long lastMilked = snap.hasMilkedTag() ? snap.ageLastMilked() : currentDay - 1L;
-        long readyTick = (currentDay - 1L + daysRemaining) * AnimalStatusSync.TICKS_PER_DAY;
-        long startTick = (snap.hasMilkedTag() && snap.timeLastMilked() > 0L && snap.timeLastMilked() < readyTick)
-                ? snap.timeLastMilked()
-                : (lastMilked - 1L) * AnimalStatusSync.TICKS_PER_DAY;
-        return stageFromTicks(dayTime, startTick, readyTick);
+    private static int computeMilkProgress(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays,
+                                           long dayTime, long currentDay) {
+        int daysRemaining = computeMilkDaysRemaining(snap, cooldownDays, currentDay);
+        if (daysRemaining == 0) return STAGE_READY;
+        return stageFromCalendar(cooldownDays, daysRemaining, snap.timeLastMilked(), dayTime);
     }
 
     public static int computeMagicStage(AnimalStatusSync.AnimalSnapshot snap, long dayTime, long currentDay) {
@@ -346,19 +346,23 @@ public final class AnimalCooldownRenderer {
         if (currentDay < effectiveLastMagic || currentDay > effectiveLastMagic) {
             return STAGE_READY;
         }
-        long readyTick = effectiveLastMagic * AnimalStatusSync.TICKS_PER_DAY;
-        long startTick = (snap.hasMagicTag() && snap.timeLastMagic() > 0L && snap.timeLastMagic() < readyTick)
-                ? snap.timeLastMagic()
-                : (effectiveLastMagic - 1L) * AnimalStatusSync.TICKS_PER_DAY;
-        return stageFromTicks(dayTime, startTick, readyTick);
+        return stageFromCalendar(1, 1, snap.timeLastMagic(), dayTime);
     }
 
-    private static int stageFromTicks(long dayTime, long startTick, long readyTick) {
-        long total = Math.max(1L, readyTick - startTick);
-        double ratio = Math.max(0.0D, Math.min(0.9999D, (dayTime - startTick) / (double) total));
-        if (ratio >= 2.0D / 3.0D) return STAGE_TWO_THIRDS;
-        if (ratio >= 1.0D / 3.0D) return STAGE_ONE_THIRD;
-        return STAGE_GRAY;
+    private static int stageFromCalendar(int cooldownDays, int daysRemaining, long actionTick, long dayTime) {
+        int completedHalves = (cooldownDays - daysRemaining) * 2;
+        long half = Math.floorDiv(dayTime, HALF_DAY_TICKS);
+        // A night harvest starts empty for the rest of that night. Society still
+        // makes the next harvest available at the normal calendar-day boundary.
+        if ((half & 1) != 0 && Math.floorDiv(actionTick, HALF_DAY_TICKS) != half) {
+            completedHalves++;
+        }
+        return completedHalves * STAGE_READY / (cooldownDays * 2);
+    }
+
+    public static int computeIchorStage(byte state) {
+        if (state >= AnimalStatusSync.ICHOR_READY) return STAGE_READY;
+        return state == AnimalStatusSync.ICHOR_HALF ? STAGE_HALF : STAGE_GRAY;
     }
 
     private static IconStrip getOrBuildStrip(Minecraft mc, ResourceLocation itemId) {
@@ -434,12 +438,9 @@ public final class AnimalCooldownRenderer {
             NativeImage strip = new NativeImage(w * FRAME_COUNT, h, true);
             for (int stage = 0; stage < FRAME_COUNT; stage++) {
                 int colorTopY;
-                if (stage == STAGE_READY) {
-                    colorTopY = minY;
-                } else if (stage == STAGE_TWO_THIRDS) {
-                    colorTopY = maxY - Math.max(1, (int) Math.round(visH * (2.0D / 3.0D))) + 1;
-                } else if (stage == STAGE_ONE_THIRD) {
-                    colorTopY = maxY - Math.max(1, (int) Math.round(visH / 3.0D)) + 1;
+                if (stage > STAGE_GRAY && stage <= STAGE_READY) {
+                    int rows = Math.max(1, Math.round(visH * stage / (float) STAGE_READY));
+                    colorTopY = maxY - rows + 1;
                 } else {
                     colorTopY = maxY + 1;
                 }
