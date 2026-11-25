@@ -422,7 +422,7 @@ public final class AnimalCooldownRenderer {
         try (InputStream stream = resOpt.get().m_215507_();
              NativeImage src = NativeImage.m_85058_(stream)) {
             w = Math.min(w, src.m_84982_());
-            h = Math.min(h, src.m_84984_());
+            h = Math.min(h, src.m_85084_());
             int minY = h;
             int maxY = -1;
             for (int y = 0; y < h; y++) {
