@@ -79,6 +79,83 @@ public final class RealFishingTests {
         check(northBounds.maxX - northBounds.minX == 3.0D && northBounds.maxZ - northBounds.minZ == 4.0D,
                 "Pond bounds must match 3x4 basin");
 
+        // Verify vanilla AbstractFish water physics + Fresh Animations headYaw/bodyYaw split & idle limbSpeed decay
+        var rng = new java.util.Random(42L);
+        var sw = new dev.sunlit.fishvisuals.client.FishPondVisuals.Swimmer();
+        sw.x = sw.prevX = northBounds.centerX;
+        sw.y = sw.prevY = northBounds.centerY;
+        sw.z = sw.prevZ = northBounds.centerZ;
+        sw.yaw = sw.prevYaw = sw.headYaw = sw.prevHeadYaw = 0.0F; // facing +Z
+        sw.vx = 0.0D;
+        sw.vz = sw.speed; // cruising +Z
+        sw.targetX = northBounds.centerX;
+        sw.targetY = northBounds.centerY;
+        sw.targetZ = northBounds.minZ + 0.55D; // directly behind (-Z)
+        float maxHeadBodyLag = 0.0F;
+        int firstSign = 0;
+        int headAlignTicks = -1;
+        for (int t = 0; t < 20; t++) {
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(sw, northBounds, 0.36D, 0.0D, 0.0D, rng);
+            float lag = (((sw.headYaw - sw.yaw) % 360.0F) + 540.0F) % 360.0F - 180.0F;
+            maxHeadBodyLag = Math.max(maxHeadBodyLag, Math.abs(lag));
+            if (Math.abs(lag) > 2.0F) {
+                int sign = lag > 0 ? 1 : -1;
+                if (firstSign == 0) firstSign = sign;
+                check(sign == firstSign, "180-degree turnaround must stay committed to one turn direction");
+            }
+            float desired = (float) Math.toDegrees(Math.atan2(-(sw.targetX - sw.x), sw.targetZ - sw.z));
+            float rem = Math.abs((((desired - sw.headYaw) % 360.0F) + 540.0F) % 360.0F - 180.0F);
+            if (headAlignTicks < 0 && rem < 12.0F) {
+                headAlignTicks = t + 1;
+            }
+        }
+        check(headAlignTicks > 0 && headAlignTicks <= 7,
+                "Head yaw must snap crisply on 180-degree turn (headAlignTicks=" + headAlignTicks + ")");
+        check(maxHeadBodyLag >= 20.0F && maxHeadBodyLag <= 63.0F,
+                "Head must lead bodyYaw to drive Fresh Animations head_yaw turning (maxLag=" + maxHeadBodyLag + ")");
+        // Verify resting decays movement near zero so Fresh Animations enters idle pectoral-fin hovering
+        var idle = new dev.sunlit.fishvisuals.client.FishPondVisuals.Swimmer();
+        idle.x = idle.prevX = northBounds.centerX;
+        idle.y = idle.prevY = northBounds.centerY;
+        idle.z = idle.prevZ = northBounds.centerZ;
+        idle.vx = 0.0D; idle.vz = idle.speed;
+        idle.pauseTicks = 50;
+        for (int t = 0; t < 30; t++) {
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(idle, northBounds, 0.36D, 0.0D, 0.0D, rng);
+        }
+        check(Math.hypot(idle.vx, idle.vz) < 0.002D && idle.moveFactor < 0.05F,
+                "Resting fish must decay to stillness for Fresh Animations idle fin hover (moveFactor=" + idle.moveFactor + ")");
+        // Verify wall contact can lead to calm resting near the edge instead of always bouncing into a U-turn
+        int wallRests = 0;
+        var wallRng = new java.util.Random(100L);
+        for (int trial = 0; trial < 30; trial++) {
+            var w = new dev.sunlit.fishvisuals.client.FishPondVisuals.Swimmer();
+            w.x = w.prevX = northBounds.centerX;
+            w.y = w.prevY = northBounds.centerY;
+            w.z = w.prevZ = northBounds.maxZ - 0.37D;
+            w.yaw = w.prevYaw = 0.0F;
+            w.vx = 0.0D; w.vz = w.speed;
+            w.targetX = northBounds.centerX; w.targetY = northBounds.centerY; w.targetZ = northBounds.maxZ;
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(w, northBounds, 0.36D, 0.0D, 0.0D, wallRng);
+            if (w.pauseTicks > 0) wallRests++;
+        }
+        check(wallRests >= 5 && wallRests <= 25,
+                "Reaching a wall should sometimes rest calmly by the edge rather than always turning (wallRests=" + wallRests + ")");
+        // Simulate 1000 ticks of free swimming & resting; verify strict bounds and calm resting time
+        double minX = northBounds.minX + 0.36D, maxX = northBounds.maxX - 0.36D;
+        double minZ = northBounds.minZ + 0.36D, maxZ = northBounds.maxZ - 0.36D;
+        int calmTicks = 0;
+        for (int t = 0; t < 1000; t++) {
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(sw, northBounds, 0.36D, 0.0D, 0.0D, rng);
+            if (sw.pauseTicks > 0) calmTicks++;
+            check(Double.isFinite(sw.x) && Double.isFinite(sw.y) && Double.isFinite(sw.z) && Float.isFinite(sw.yaw),
+                    "Swimmer coordinates and yaw must stay finite");
+            check(sw.x >= minX - 1e-6 && sw.x <= maxX + 1e-6 && sw.z >= minZ - 1e-6 && sw.z <= maxZ + 1e-6
+                    && sw.y >= northBounds.minY - 1e-6 && sw.y <= northBounds.maxY + 1e-6,
+                    "Swimmer must remain strictly inside pond basin bounds");
+        }
+        check(calmTicks >= 150, "Fish should spend substantial time calmly hovering/resting (calmTicks=" + calmTicks + ")");
+
         String absentVersion = net.minecraftforge.network.NetworkRegistry.ABSENT.version();
         String vanillaVersion = net.minecraftforge.network.NetworkRegistry.ACCEPTVANILLA;
         check(FishPondSync.acceptsVersion("1") && FishPondSync.acceptsVersion(absentVersion)
@@ -174,7 +251,46 @@ public final class RealFishingTests {
         }
         check("PreventRemoteMovement".equals(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT),
                 "Magnet protection key must match Forge/SimpleMagnets/SophisticatedCore convention");
-        System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, and protocol 3 catch packets");
+
+        // Verify unified /bettersunlit client+server command trees, Forge merge, and client->server passthrough
+        var serverDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+        FishingSettings.registerCommands(serverDisp);
+        var clientDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+        dev.sunlit.fishvisuals.client.FishPondVisuals.registerClientCommands(clientDisp);
+        check(serverDisp.getRoot().getChild("bettersunlit") != null
+                && serverDisp.getRoot().getChild("realfishing") == null
+                && serverDisp.getRoot().getChild("bettersunlit").getChild("realfishing") != null,
+                "Server command must be unified under /bettersunlit realfishing");
+        check(clientDisp.getRoot().getChild("bettersunlit") != null
+                && clientDisp.getRoot().getChild("fishpond") == null
+                && clientDisp.getRoot().getChild("bettersunlit").getChild("fishpond") != null,
+                "Client command must be unified under /bettersunlit fishpond");
+        // Merge both trees with Forge's CommandHelper.mergeCommandNode just like ClientCommandHandler does
+        var mergedRoot = new com.mojang.brigadier.tree.RootCommandNode<net.minecraft.commands.CommandSourceStack>();
+        var mergedServerNode = serverDisp.getRoot().getChild("bettersunlit").createBuilder().build();
+        for (var child : serverDisp.getRoot().getChild("bettersunlit").getChildren()) {
+            mergedServerNode.addChild(child);
+        }
+        mergedRoot.addChild(mergedServerNode);
+        net.minecraftforge.server.command.CommandHelper.mergeCommandNode(
+                clientDisp.getRoot(), mergedRoot, new java.util.IdentityHashMap<>(), null, ctx -> 0, p -> p);
+        var mergedBs = mergedRoot.getChild("bettersunlit");
+        check(mergedBs != null && mergedBs.getChild("fishpond") != null && mergedBs.getChild("realfishing") != null,
+                "Merged /bettersunlit root must expose both fishpond and realfishing subcommands");
+        // Verify client dispatcher rejects /bettersunlit realfishing ... with UNKNOWN_ARGUMENT/COMMAND so
+        // Forge ClientCommandHandler.runCommand forwards it cleanly to the server!
+        for (String serverSub : new String[]{"bettersunlit realfishing", "bettersunlit realfishing on", "bettersunlit realfishing 3 4 1"}) {
+            try {
+                clientDisp.execute(serverSub, null);
+                throw new AssertionError("Client dispatcher unexpectedly handled server subcommand: " + serverSub);
+            } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ex) {
+                var type = ex.getType();
+                check(type == com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand()
+                        || type == com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownArgument(),
+                        "Client dispatcher must forward '" + serverSub + "' to server, got: " + type);
+            }
+        }
+        System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, unified /bettersunlit commands, and protocol 3 catch packets");
     }
 
     private static void check(boolean condition, String message) {
