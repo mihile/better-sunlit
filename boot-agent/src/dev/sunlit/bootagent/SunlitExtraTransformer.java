@@ -72,6 +72,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "de/keksuccino/fancymenu/customization/loadingrequirement/internal/LoadingRequirementContainer";
     private static final String EMBERBIUM_MODULE_SCANNER_CLS =
             "me/jellysquid/mods/sodium/client/compatibility/checks/ModuleScanner";
+    private static final String WGL_CLS = "org/lwjgl/opengl/WGL";
+    private static final String USER32_CLS = "org/lwjgl/system/windows/User32";
     private static final String AMENDMENTS_WALL_LANTERN_CLS =
             "net/mehvahdjukaar/amendments/common/block/WallLanternBlock";
     private static final String EMF_JEM_DATA_CLS =
@@ -177,6 +179,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                  FM_LOADING_REQ_CLS,
                  MOONLIGHT_PATH_TRIE_CLS -> transformStringMatches(module, classfileBuffer);
             case EMBERBIUM_MODULE_SCANNER_CLS -> transformEmberbiumModuleScanner(module, classfileBuffer);
+            case WGL_CLS, USER32_CLS -> classBeingRedefined == null
+                    ? restoreLegacyWindowsBindings(className, classfileBuffer) : null;
             case AMENDMENTS_WALL_LANTERN_CLS -> transformWallLanternBlock(module, classfileBuffer);
             case EMF_JEM_DATA_CLS -> transformEmfJemData(module, classfileBuffer);
             case KJS_ICON_PROVIDER_CLS -> transformKubeJsIconProvider(module, classfileBuffer);
@@ -1402,6 +1406,57 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);
         return cw.toByteArray();
+    }
+
+    private static byte[] restoreLegacyWindowsBindings(String className, byte[] bytes) {
+        ClassNode binding = new ClassNode();
+        new ClassReader(bytes).accept(binding, 0);
+        boolean changed;
+        if (WGL_CLS.equals(className)) {
+            changed = addWindowsBindingOverload(binding, "wglGetCurrentContext", "()J");
+        } else {
+            changed = addWindowsBindingOverload(binding, "SetWindowPos", "(JJIIIII)Z");
+            changed |= addWindowsBindingOverload(binding, "SetWindowLongPtr", "(JIJ)J");
+        }
+        if (!changed) {
+            return null;
+        }
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        binding.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private static boolean addWindowsBindingOverload(ClassNode binding, String name, String legacyDescriptor) {
+        String currentDescriptor = "(Ljava/nio/IntBuffer;" + legacyDescriptor.substring(1);
+        int access = Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC;
+        boolean hasCurrentMethod = false;
+        for (MethodNode method : binding.methods) {
+            if (name.equals(method.name)) {
+                if (legacyDescriptor.equals(method.desc)) {
+                    return false;
+                }
+                hasCurrentMethod |= currentDescriptor.equals(method.desc) && (method.access & access) == access;
+            }
+        }
+        if (!hasCurrentMethod) {
+            return false;
+        }
+
+        // Legacy callers use the result but have no buffer for the optional GetLastError output.
+        MethodNode bridge = new MethodNode(access, name, legacyDescriptor, null, null);
+        bridge.visitCode();
+        bridge.visitInsn(Opcodes.ACONST_NULL);
+        int local = 0;
+        for (Type argument : Type.getArgumentTypes(legacyDescriptor)) {
+            bridge.visitVarInsn(argument.getOpcode(Opcodes.ILOAD), local);
+            local += argument.getSize();
+        }
+        bridge.visitMethodInsn(Opcodes.INVOKESTATIC, binding.name, name, currentDescriptor, false);
+        bridge.visitInsn(Type.getReturnType(legacyDescriptor).getOpcode(Opcodes.IRETURN));
+        bridge.visitMaxs(0, 0);
+        bridge.visitEnd();
+        binding.methods.add(bridge);
+        return true;
     }
 
     public static byte[] transformWallLanternBlock(Module module, byte[] bytes) {
