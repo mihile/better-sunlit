@@ -192,7 +192,23 @@ public final class ClientPostApplyPatches {
         return true;
     }
 
-    private static void patchBlockModelShaperStateString(ClassNode cn) {
+    /**
+     * Applies the non-OBE {@code BlockModelShaper} optimizations (ModernFix dynamic model cache
+     * fast-clear tracking and cached {@code statePropertiesToString}) so packs without OBE still
+     * receive both startup/reload optimizations.
+     */
+    public static boolean patchBlockModelShaperCore(ClassNode cn) {
+        if (cn == null) return false;
+        String desc = "(L" + BLOCK_STATE + ";)L" + BAKED_MODEL + ";";
+        MethodNode target = EntryPostApplyPatches.findMethod(cn, "m_110893_", desc);
+        if (target != null) {
+            patchBlockModelShaperCaching(cn, target);
+        }
+        boolean patchedState = patchBlockModelShaperStateString(cn);
+        return target != null || patchedState;
+    }
+
+    private static boolean patchBlockModelShaperStateString(ClassNode cn) {
         for (MethodNode mn : cn.methods) {
             if ("m_110887_".equals(mn.name) && "(Ljava/util/Map;)Ljava/lang/String;".equals(mn.desc)) {
                 InsnList code = new InsnList();
@@ -211,9 +227,10 @@ public final class ClientPostApplyPatches {
                 mn.localVariables = null;
                 mn.maxStack = 2;
                 mn.maxLocals = 1;
-                break;
+                return true;
             }
         }
+        return false;
     }
 
     private static void patchBlockModelShaperCaching(ClassNode cn, MethodNode getBlockModel) {
@@ -223,7 +240,8 @@ public final class ClientPostApplyPatches {
         boolean alreadyMarked = false;
         for (AbstractInsnNode insn = getBlockModel.instructions.getFirst(); insn != null; insn = insn.getNext()) {
             if (insn instanceof MethodInsnNode m) {
-                if (shaperPerf.equals(m.owner) && "markModelCached".equals(m.name)) {
+                if (shaperPerf.equals(m.owner)
+                        && ("markModelCached".equals(m.name) || "markCachedState".equals(m.name))) {
                     alreadyMarked = true;
                 } else if (iModelHolding.equals(m.owner) && "mfix$setModel".equals(m.name)) {
                     setModelCall = m;
@@ -1154,6 +1172,54 @@ public final class ClientPostApplyPatches {
 
         target.instructions.insertBefore(firstReal, fast);
         target.maxStack = Math.max(target.maxStack, 3);
+        return true;
+    }
+
+    /**
+     * Prepends a zero-copy off-heap fast path at the entry of Embeddium 0.3.31's
+     * {@code sodium$fillInTransparentPixelColors(NativeImage)}.
+     */
+    public static boolean patchLegacySpriteContents(ClassNode cn) {
+        if (cn == null) return false;
+        final String methodDesc = "(Lcom/mojang/blaze3d/platform/NativeImage;)V";
+        final String perfInternal = "dev/sunlit/bettersunlit/client/SpriteMipmapPerf";
+        MethodNode target = null;
+        for (MethodNode m : cn.methods) {
+            if ((m.access & Opcodes.ACC_STATIC) != 0
+                    && methodDesc.equals(m.desc)
+                    && ("sodium$fillInTransparentPixelColors".equals(m.name)
+                    || m.name.endsWith("$sodium$fillInTransparentPixelColors"))) {
+                target = m;
+                break;
+            }
+        }
+        if (target == null || target.instructions == null) {
+            return false;
+        }
+        for (AbstractInsnNode insn = target.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode m && perfInternal.equals(m.owner)
+                    && "fillTransparentPixelsFast".equals(m.name)) {
+                return true;
+            }
+        }
+        AbstractInsnNode firstReal = target.instructions.getFirst();
+        while (firstReal != null && firstReal.getOpcode() < 0) {
+            firstReal = firstReal.getNext();
+        }
+        if (firstReal == null) {
+            return false;
+        }
+        LabelNode lFallback = new LabelNode();
+        InsnList fast = new InsnList();
+        fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        fast.add(new MethodInsnNode(Opcodes.INVOKESTATIC, perfInternal, "fillTransparentPixelsFast",
+                "(Lcom/mojang/blaze3d/platform/NativeImage;)Z", false));
+        fast.add(new JumpInsnNode(Opcodes.IFEQ, lFallback));
+        fast.add(new InsnNode(Opcodes.RETURN));
+        fast.add(lFallback);
+        fast.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+        target.instructions.insertBefore(firstReal, fast);
+        target.maxStack = Math.max(target.maxStack, 2);
         return true;
     }
 }

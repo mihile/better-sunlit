@@ -167,6 +167,8 @@ public final class StartupClassPreloadPerf {
             "com.blackgear.vanillabackport.client.Rendering",
             "com.blackgear.vanillabackport.client.api.color.DryFoliageColor",
             "com.blackgear.vanillabackport.client.api.color.LeafColors",
+            "com.blackgear.vanillabackport.client.api.modules.leaf_litter.DryFoliageColor",
+            "com.blackgear.vanillabackport.client.api.modules.falling_leaves.LeafColors",
             "com.blackgear.vanillabackport.client.api.renderer.renderers.BatSpecialRenderer",
             "com.blackgear.vanillabackport.client.api.renderer.renderers.ChickenSpecialRenderer",
             "com.blackgear.vanillabackport.client.api.renderer.renderers.CowSpecialRenderer",

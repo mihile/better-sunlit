@@ -65,17 +65,28 @@ public final class KubeJsScriptPerf {
             final int s = start;
             final int e = Math.min(files.size(), start + chunkSize);
             tasks.add(ForkJoinPool.commonPool().submit(() -> {
-                Context cx = Context.enter();
-                cx.setClassShutter(shutter);
-                cx.setRemapper(remapper);
-                cx.setApplicationClassLoader(appCl);
-                for (int i = s; i < e; i++) {
-                    ScriptFile sf = files.get(i);
-                    try {
-                        String src = String.join("\n", sf.info.lines);
-                        results[i] = cx.compileString(src, sf.info.location, 1, null);
-                    } catch (Throwable err) {
-                        results[i] = err;
+                Thread thread = Thread.currentThread();
+                ClassLoader prevCl = thread.getContextClassLoader();
+                if (prevCl != appCl) {
+                    thread.setContextClassLoader(appCl);
+                }
+                try {
+                    Context cx = Context.enter();
+                    cx.setClassShutter(shutter);
+                    cx.setRemapper(remapper);
+                    cx.setApplicationClassLoader(appCl);
+                    for (int i = s; i < e; i++) {
+                        ScriptFile sf = files.get(i);
+                        try {
+                            String src = String.join("\n", sf.info.lines);
+                            results[i] = cx.compileString(src, sf.info.location, 1, null);
+                        } catch (Throwable err) {
+                            results[i] = err;
+                        }
+                    }
+                } finally {
+                    if (thread.getContextClassLoader() != prevCl) {
+                        thread.setContextClassLoader(prevCl);
                     }
                 }
             }));

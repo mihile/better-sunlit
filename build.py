@@ -97,8 +97,16 @@ if side=='client':
     availableTargets.update(n[:-6] for n in found)
     wanted.difference_update(found)
  inlineSites=[s for s in inlineSites if s['class'] in availableTargets]
+OPTIONAL_INLINE_TARGETS={
+ 'com/cupboard/compat/ClientConfigCompat',
+ 'dev/uncandango/alltheleaks/commands/ATLCommands$1',
+ 'net/tysontheember/emberstextapi/immersivemessages/MessageCommands',
+ 'org/anti_ad/mc/ipnext/specific/event/PClientEventHandler$DefaultImpls',
+ 'fr/madu59/obe/client/config/configscreen/OptimisedBlockEntitiesConfigScreen',
+}
 clientTargets={s['class'] for s in inlineSites if s['clientOnly']}
 inlineLists={'mixins':['InlineScriptSourceMixin'],'client':[]}
+optIdx=0
 for client in [False,True]:
  if client and side=='server':continue
  for interface in [False,True]:
@@ -106,11 +114,18 @@ for client in [False,True]:
     s['class'] in clientTargets if client else
     s['class'] not in clientTargets if side=='client' else s['serverPresent'] and not s['clientOnly'])})
   if not targets:continue
-  name='Inline'+('Client' if client else 'Common')+('Interface' if interface else '')+'Mixin'
-  targetText=','.join(json.dumps(t.replace('/','.')) for t in targets)
-  source='package dev.sunlit.fishvisuals.mixin;\nimport org.spongepowered.asm.mixin.*;\n@Pseudo\n@Mixin(targets={'+targetText+'},remap=false,priority=500)\npublic '+('interface ' if interface else 'abstract class ')+name+' {}\n'
-  generated=BUILD/('generated/dev/sunlit/fishvisuals/mixin/'+name+'.java');generated.parent.mkdir(parents=True,exist_ok=True);generated.write_text(source,encoding='utf8');sources.append(generated)
-  inlineLists['client' if client else 'mixins'].append(name)
+  shared=[t for t in targets if t not in OPTIONAL_INLINE_TARGETS]
+  optional=[t for t in targets if t in OPTIONAL_INLINE_TARGETS]
+  groups=[('Inline'+('Client' if client else 'Common')+('Interface' if interface else '')+'Mixin',shared)]
+  for optTarget in optional:
+   groups.append(('Inline'+('Client' if client else 'Common')+'Opt'+str(optIdx)+('Interface' if interface else '')+'Mixin',[optTarget]))
+   optIdx+=1
+  for name,groupTargets in groups:
+   if not groupTargets:continue
+   targetText=','.join(json.dumps(t.replace('/','.')) for t in groupTargets)
+   source='package dev.sunlit.fishvisuals.mixin;\nimport org.spongepowered.asm.mixin.*;\n@Pseudo\n@Mixin(targets={'+targetText+'},remap=false,priority=500)\npublic '+('interface ' if interface else 'abstract class ')+name+' {}\n'
+   generated=BUILD/('generated/dev/sunlit/fishvisuals/mixin/'+name+'.java');generated.parent.mkdir(parents=True,exist_ok=True);generated.write_text(source,encoding='utf8');sources.append(generated)
+   inlineLists['client' if client else 'mixins'].append(name)
 compileArgs=['--release','17','-proc:none','-encoding','UTF-8','-classpath',';'.join(str(s) for s in classpath),'-d',str(CLASSES)]+list(map(str,sources))
 argfile=BUILD/'javac.args';argfile.write_text('\n'.join('"'+s.replace('\\','/').replace('"','\\"')+'"' for s in compileArgs),encoding='utf8');subprocess.run([JDK/'javac.exe','-J-Dfile.encoding=UTF-8','@'+str(argfile.resolve())],check=True)
 resources=BUILD/'resources'
