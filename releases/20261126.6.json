@@ -1,0 +1,11 @@
+{
+  "build": 2026112606,
+  "label": "2026.11.26.6",
+  "title": "기능 개선 및 오류 수정",
+  "changes": [
+    {
+      "title": "명령어를 /bettersunlit 하위로 통일",
+      "detail": "기존 /realfishing과 /fishpond 명령어를 /bettersunlit realfishing 및 /bettersunlit fishpond로 통합했습니다. /bettersunlit 입력 시 현재 설정과 하위 명령어 안내를 표시하며, 서버·클라이언트 탭 자동 완성도 함께 병합됩니다."
+    }
+  ]
+}

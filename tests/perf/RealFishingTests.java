@@ -251,7 +251,46 @@ public final class RealFishingTests {
         }
         check("PreventRemoteMovement".equals(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT),
                 "Magnet protection key must match Forge/SimpleMagnets/SophisticatedCore convention");
-        System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, and protocol 3 catch packets");
+
+        // Verify unified /bettersunlit client+server command trees, Forge merge, and client->server passthrough
+        var serverDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+        FishingSettings.registerCommands(serverDisp);
+        var clientDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+        dev.sunlit.fishvisuals.client.FishPondVisuals.registerClientCommands(clientDisp);
+        check(serverDisp.getRoot().getChild("bettersunlit") != null
+                && serverDisp.getRoot().getChild("realfishing") == null
+                && serverDisp.getRoot().getChild("bettersunlit").getChild("realfishing") != null,
+                "Server command must be unified under /bettersunlit realfishing");
+        check(clientDisp.getRoot().getChild("bettersunlit") != null
+                && clientDisp.getRoot().getChild("fishpond") == null
+                && clientDisp.getRoot().getChild("bettersunlit").getChild("fishpond") != null,
+                "Client command must be unified under /bettersunlit fishpond");
+        // Merge both trees with Forge's CommandHelper.mergeCommandNode just like ClientCommandHandler does
+        var mergedRoot = new com.mojang.brigadier.tree.RootCommandNode<net.minecraft.commands.CommandSourceStack>();
+        var mergedServerNode = serverDisp.getRoot().getChild("bettersunlit").createBuilder().build();
+        for (var child : serverDisp.getRoot().getChild("bettersunlit").getChildren()) {
+            mergedServerNode.addChild(child);
+        }
+        mergedRoot.addChild(mergedServerNode);
+        net.minecraftforge.server.command.CommandHelper.mergeCommandNode(
+                clientDisp.getRoot(), mergedRoot, new java.util.IdentityHashMap<>(), null, ctx -> 0, p -> p);
+        var mergedBs = mergedRoot.getChild("bettersunlit");
+        check(mergedBs != null && mergedBs.getChild("fishpond") != null && mergedBs.getChild("realfishing") != null,
+                "Merged /bettersunlit root must expose both fishpond and realfishing subcommands");
+        // Verify client dispatcher rejects /bettersunlit realfishing ... with UNKNOWN_ARGUMENT/COMMAND so
+        // Forge ClientCommandHandler.runCommand forwards it cleanly to the server!
+        for (String serverSub : new String[]{"bettersunlit realfishing", "bettersunlit realfishing on", "bettersunlit realfishing 3 4 1"}) {
+            try {
+                clientDisp.execute(serverSub, null);
+                throw new AssertionError("Client dispatcher unexpectedly handled server subcommand: " + serverSub);
+            } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ex) {
+                var type = ex.getType();
+                check(type == com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand()
+                        || type == com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownArgument(),
+                        "Client dispatcher must forward '" + serverSub + "' to server, got: " + type);
+            }
+        }
+        System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, unified /bettersunlit commands, and protocol 3 catch packets");
     }
 
     private static void check(boolean condition, String message) {

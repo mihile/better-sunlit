@@ -3,6 +3,7 @@ package dev.sunlit.fishvisuals;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -85,22 +86,38 @@ public final class FishingSettings {
     }
 
     public static void register(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.m_82127_("realfishing")
-            .requires(source->source.m_6761_(2) || source.m_81377_().m_129792_())
-            .executes(context->{context.getSource().m_288197_(() -> Component.m_264642_(
-                    "better_sunlit.realfishing.usage",
-                    "%s | /realfishing <on|off> | /realfishing <freshSec> <fadingSec> <stepSec>",
-                    current.descriptionComponent()),false);return 1;})
-            .then(Commands.m_82127_("on").executes(context -> setEnabled(context.getSource(), true)))
-            .then(Commands.m_82127_("off").executes(context -> setEnabled(context.getSource(), false)))
-            .then(Commands.m_82129_("freshSeconds",IntegerArgumentType.integer(0,600))
-            .then(Commands.m_82129_("fadingSeconds",IntegerArgumentType.integer(0,600))
-            .then(Commands.m_82129_("stepSeconds",IntegerArgumentType.integer(1,600))
-            .executes(context->{
-                FishTiming value=new FishTiming(IntegerArgumentType.getInteger(context,"freshSeconds")*20,
-                        IntegerArgumentType.getInteger(context,"fadingSeconds")*20,
-                        IntegerArgumentType.getInteger(context,"stepSeconds")*20);
-                return update(context.getSource(), new Settings(value, current.enabled()));
-            })))));
+        registerCommands(event.getDispatcher());
+    }
+
+    public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.m_82127_("bettersunlit")
+            .requires(source -> source.m_6761_(2) || source.m_81377_().m_129792_())
+            .executes(context -> {
+                context.getSource().m_288197_(() -> Component.m_264642_(
+                        "better_sunlit.command.server_usage",
+                        "Better Sunlit | /bettersunlit realfishing <on|off|freshSec fadingSec stepSec> (%s)",
+                        current.descriptionComponent()), false);
+                return 1;
+            })
+            .then(Commands.m_82127_("realfishing")
+                .executes(context -> {
+                    context.getSource().m_288197_(() -> Component.m_264642_(
+                            "better_sunlit.realfishing.usage",
+                            "%s | /bettersunlit realfishing <on|off> | /bettersunlit realfishing <freshSec> <fadingSec> <stepSec>",
+                            current.descriptionComponent()), false);
+                    return 1;
+                })
+                .then(Commands.m_82127_("on").executes(context -> setEnabled(context.getSource(), true)))
+                .then(Commands.m_82127_("off").executes(context -> setEnabled(context.getSource(), false)))
+                .then(Commands.m_82129_("freshSeconds", IntegerArgumentType.integer(0, 600))
+                .then(Commands.m_82129_("fadingSeconds", IntegerArgumentType.integer(0, 600))
+                .then(Commands.m_82129_("stepSeconds", IntegerArgumentType.integer(1, 600))
+                .executes(context -> {
+                    FishTiming value = new FishTiming(
+                            IntegerArgumentType.getInteger(context, "freshSeconds") * 20,
+                            IntegerArgumentType.getInteger(context, "fadingSeconds") * 20,
+                            IntegerArgumentType.getInteger(context, "stepSeconds") * 20);
+                    return update(context.getSource(), new Settings(value, current.enabled()));
+                }))))));
     }
 }

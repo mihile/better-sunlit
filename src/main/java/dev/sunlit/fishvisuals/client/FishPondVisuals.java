@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.FishPondSync;
@@ -252,32 +253,44 @@ public final class FishPondVisuals {
 
     @SubscribeEvent
     public static void onRegisterClientCommands(RegisterClientCommandsEvent event) {
-        event.getDispatcher().register(Commands.m_82127_("fishpond")
+        registerClientCommands(event.getDispatcher());
+    }
+
+    public static void registerClientCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.m_82127_("bettersunlit")
                 .executes(ctx -> {
                     ctx.getSource().m_288197_(() -> Component.m_264642_(
-                            "better_sunlit.fishpond.usage",
-                            "%s | /fishpond <adaptive [scale]|swim|off>",
+                            "better_sunlit.command.usage",
+                            "Better Sunlit | %s | /bettersunlit fishpond <adaptive [scale]|swim|off> | /bettersunlit realfishing <on|off|sec...>",
                             summaryComponent(mode, adaptiveScale)), false);
                     return 1;
                 })
-                .then(Commands.m_82127_("adaptive")
-                        .executes(ctx -> applyCommandSettings(ctx.getSource(), Mode.ADAPTIVE, adaptiveScale))
-                        .then(Commands.m_82129_("scale", FloatArgumentType.floatArg(MIN_ADAPTIVE_SCALE, MAX_ADAPTIVE_SCALE))
-                                .suggests((ctx, builder) -> {
-                                    builder.suggest("0.5");
-                                    builder.suggest("0.6");
-                                    builder.suggest("0.7");
-                                    builder.suggest("0.8");
-                                    builder.suggest("0.9");
-                                    builder.suggest("1.0");
-                                    return builder.buildFuture();
-                                })
-                                .executes(ctx -> applyCommandSettings(
-                                        ctx.getSource(), Mode.ADAPTIVE, FloatArgumentType.getFloat(ctx, "scale")))))
-                .then(Commands.m_82127_("swim")
-                        .executes(ctx -> applyCommandSettings(ctx.getSource(), Mode.SWIM, adaptiveScale)))
-                .then(Commands.m_82127_("off")
-                        .executes(ctx -> applyCommandSettings(ctx.getSource(), Mode.OFF, adaptiveScale))));
+                .then(Commands.m_82127_("fishpond")
+                        .executes(ctx -> {
+                            ctx.getSource().m_288197_(() -> Component.m_264642_(
+                                    "better_sunlit.fishpond.usage",
+                                    "%s | /bettersunlit fishpond <adaptive [scale]|swim|off>",
+                                    summaryComponent(mode, adaptiveScale)), false);
+                            return 1;
+                        })
+                        .then(Commands.m_82127_("adaptive")
+                                .executes(ctx -> applyCommandSettings(ctx.getSource(), Mode.ADAPTIVE, adaptiveScale))
+                                .then(Commands.m_82129_("scale", FloatArgumentType.floatArg(MIN_ADAPTIVE_SCALE, MAX_ADAPTIVE_SCALE))
+                                        .suggests((ctx, builder) -> {
+                                            builder.suggest("0.5");
+                                            builder.suggest("0.6");
+                                            builder.suggest("0.7");
+                                            builder.suggest("0.8");
+                                            builder.suggest("0.9");
+                                            builder.suggest("1.0");
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(ctx -> applyCommandSettings(
+                                                ctx.getSource(), Mode.ADAPTIVE, FloatArgumentType.getFloat(ctx, "scale")))))
+                        .then(Commands.m_82127_("swim")
+                                .executes(ctx -> applyCommandSettings(ctx.getSource(), Mode.SWIM, adaptiveScale)))
+                        .then(Commands.m_82127_("off")
+                                .executes(ctx -> applyCommandSettings(ctx.getSource(), Mode.OFF, adaptiveScale)))));
     }
 
     @SubscribeEvent
