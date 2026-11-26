@@ -83,7 +83,7 @@ public final class IrisShaderLoadPerf {
                 }
             }, "BetterSunlit-Iris-Shaderpack");
             t.setDaemon(true);
-            t.setPriority(Thread.MIN_PRIORITY);
+            t.setPriority(Thread.NORM_PRIORITY - 1);
             loaderThread = t;
             t.start();
         }

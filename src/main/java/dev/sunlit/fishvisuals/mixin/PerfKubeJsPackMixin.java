@@ -9,6 +9,7 @@ import net.minecraft.server.packs.PackType;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -27,6 +28,9 @@ public abstract class PerfKubeJsPackMixin {
 
     @Shadow
     private Map<ResourceLocation, GeneratedData> generated;
+
+    @Unique
+    private volatile Map<ResourceLocation, GeneratedData> sunlit$readyGenerated;
 
     @Shadow
     public abstract void generate(Map<ResourceLocation, GeneratedData> map);
@@ -53,7 +57,11 @@ public abstract class PerfKubeJsPackMixin {
                     this::forgetFile,
                     this::skipFile);
             map.put(GeneratedData.INTERNAL_RELOAD.id(), GeneratedData.INTERNAL_RELOAD);
-            this.generated = Map.copyOf(map);
+            Map<ResourceLocation, GeneratedData> immutable = Map.copyOf(map);
+            this.generated = immutable;
+            this.sunlit$readyGenerated = immutable;
+        } else if (this.sunlit$readyGenerated != this.generated) {
+            this.sunlit$readyGenerated = this.generated;
         }
         cir.setReturnValue(this.generated);
     }
@@ -75,9 +83,12 @@ public abstract class PerfKubeJsPackMixin {
         if (type != this.packType) {
             return;
         }
-        Map<ResourceLocation, GeneratedData> map;
-        synchronized (this) {
-            map = this.getGenerated();
+        Map<ResourceLocation, GeneratedData> map = this.sunlit$readyGenerated;
+        if (map == null || map != this.generated) {
+            synchronized (this) {
+                map = this.getGenerated();
+                this.sunlit$readyGenerated = map;
+            }
         }
         KubeJsPackPerf.listResources(map, namespace, path, output);
     }

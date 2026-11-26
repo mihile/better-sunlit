@@ -363,10 +363,17 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 }
                 case "net/minecraft/server/packs/resources/ResourceMetadata",
                      "net/minecraft/server/packs/AbstractPackResources",
-                     "net/minecraft/server/packs/resources/Resource" -> {
+                     "net/minecraft/server/packs/resources/Resource",
+                     "net/minecraft/client/resources/model/ModelManager" -> {
                     ensureReadsBootPayload(module);
                     yield transformSmallUtf8BufferedReader(loader, classfileBuffer);
                 }
+                case "net/minecraft/client/resources/model/ModelBakery" ->
+                        transformModelBakeryPresize(loader, classfileBuffer);
+                case "net/minecraft/client/renderer/block/model/MultiVariant" ->
+                        transformMultiVariantDeps(loader, classfileBuffer);
+                case "net/minecraft/client/renderer/block/model/multipart/MultiPart" ->
+                        transformMultiPartDeps(loader, classfileBuffer);
                 case "net/minecraft/locale/Language" -> {
                     ensureReadsBootPayload(module);
                     yield transformLanguageLoad(loader, classfileBuffer);
@@ -7061,6 +7068,203 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
                 }
                 patched = true;
             }
+        }
+        return patched ? writeNodeWithFrames(cn, loader) : null;
+    }
+
+    /**
+     * Presizes {@code ModelBakery.f_119218_} ({@code Object2IntOpenHashMap}) from default 16
+     * to 65536 expected entries, avoiding ~132 MB of repeated fastutil rehash allocations during baking.
+     */
+    private static byte[] transformModelBakeryPresize(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"<init>".equals(mn.name) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKESPECIAL
+                        && "it/unimi/dsi/fastutil/objects/Object2IntOpenHashMap".equals(min.owner)
+                        && "<init>".equals(min.name)
+                        && "()V".equals(min.desc)) {
+                    mn.instructions.insertBefore(min, new LdcInsnNode(65536));
+                    min.desc = "(I)V";
+                    patched = true;
+                }
+            }
+        }
+        return patched ? writeNodeWithFrames(cn, loader) : null;
+    }
+
+    /**
+     * Replaces {@code MultiVariant.m_7970_()} ({@code getDependencies()}) stream+Collectors.toSet
+     * pipeline with direct singleton/loop collection, avoiding ~100+ MB of ReferencePipeline/HashSet churn.
+     */
+    private static byte[] transformMultiVariantDeps(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"m_7970_".equals(mn.name) || !"()Ljava/util/Collection;".equals(mn.desc)) {
+                continue;
+            }
+            InsnList code = new InsnList();
+            LabelNode notEmpty = new LabelNode();
+            LabelNode notSingle = new LabelNode();
+            LabelNode loopCond = new LabelNode();
+            LabelNode loopEnd = new LabelNode();
+            // List<Variant> list = this.m_111848_(); int size = list.size();
+            code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cn.name, "m_111848_", "()Ljava/util/List;", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+            code.add(new VarInsnNode(Opcodes.ISTORE, 2));
+            // if (size == 0) return Collections.emptyList();
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new JumpInsnNode(Opcodes.IFNE, notEmpty));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/util/Collections", "emptyList", "()Ljava/util/List;", false));
+            code.add(new InsnNode(Opcodes.ARETURN));
+            // if (size == 1) return Collections.singletonList(((Variant) list.get(0)).m_111883_());
+            code.add(notEmpty);
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new InsnNode(Opcodes.ICONST_1));
+            code.add(new JumpInsnNode(Opcodes.IF_ICMPNE, notSingle));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+            code.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraft/client/renderer/block/model/Variant"));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/block/model/Variant",
+                    "m_111883_", "()Lnet/minecraft/resources/ResourceLocation;", false));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/util/Collections", "singletonList",
+                    "(Ljava/lang/Object;)Ljava/util/List;", false));
+            code.add(new InsnNode(Opcodes.ARETURN));
+            // HashSet set = new HashSet(size * 2);
+            code.add(notSingle);
+            code.add(new TypeInsnNode(Opcodes.NEW, "java/util/HashSet"));
+            code.add(new InsnNode(Opcodes.DUP));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new InsnNode(Opcodes.ICONST_1));
+            code.add(new InsnNode(Opcodes.ISHL));
+            code.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "java/util/HashSet", "<init>", "(I)V", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, 3));
+            // for (int i = 0; i < size; i++) set.add(((Variant) list.get(i)).m_111883_());
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new VarInsnNode(Opcodes.ISTORE, 4));
+            code.add(loopCond);
+            code.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new JumpInsnNode(Opcodes.IF_ICMPGE, loopEnd));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 3));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+            code.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraft/client/renderer/block/model/Variant"));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/block/model/Variant",
+                    "m_111883_", "()Lnet/minecraft/resources/ResourceLocation;", false));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "add", "(Ljava/lang/Object;)Z", false));
+            code.add(new InsnNode(Opcodes.POP));
+            code.add(new IincInsnNode(4, 1));
+            code.add(new JumpInsnNode(Opcodes.GOTO, loopCond));
+            code.add(loopEnd);
+            code.add(new VarInsnNode(Opcodes.ALOAD, 3));
+            code.add(new InsnNode(Opcodes.ARETURN));
+            mn.instructions = code;
+            if (mn.tryCatchBlocks != null) {
+                mn.tryCatchBlocks.clear();
+            }
+            mn.localVariables = null;
+            patched = true;
+            break;
+        }
+        return patched ? writeNodeWithFrames(cn, loader) : null;
+    }
+
+    /**
+     * Replaces {@code MultiPart.m_7970_()} ({@code getDependencies()}) nested stream+flatMap+Collectors.toSet
+     * pipeline with a single HashSet and direct nested loops, avoiding ~214 MB of allocations.
+     */
+    private static byte[] transformMultiPartDeps(ClassLoader loader, byte[] bytes) {
+        ClassNode cn = readNode(bytes);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"m_7970_".equals(mn.name) || !"()Ljava/util/Collection;".equals(mn.desc)) {
+                continue;
+            }
+            InsnList code = new InsnList();
+            LabelNode outerCond = new LabelNode();
+            LabelNode outerEnd = new LabelNode();
+            LabelNode innerCond = new LabelNode();
+            LabelNode innerEnd = new LabelNode();
+            // List<Selector> selectors = this.m_111967_(); int sc = selectors.size();
+            code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cn.name, "m_111967_", "()Ljava/util/List;", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+            code.add(new VarInsnNode(Opcodes.ISTORE, 2));
+            // HashSet set = new HashSet(Math.max(8, sc * 2));
+            code.add(new TypeInsnNode(Opcodes.NEW, "java/util/HashSet"));
+            code.add(new InsnNode(Opcodes.DUP));
+            code.add(new IntInsnNode(Opcodes.BIPUSH, 8));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new InsnNode(Opcodes.ICONST_1));
+            code.add(new InsnNode(Opcodes.ISHL));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Math", "max", "(II)I", false));
+            code.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "java/util/HashSet", "<init>", "(I)V", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, 3));
+            // for (int i = 0; i < sc; i++)
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new VarInsnNode(Opcodes.ISTORE, 4));
+            code.add(outerCond);
+            code.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new JumpInsnNode(Opcodes.IF_ICMPGE, outerEnd));
+            // List<Variant> vs = ((Selector) selectors.get(i)).m_112020_().m_111848_(); int vc = vs.size();
+            code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+            code.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraft/client/renderer/block/model/multipart/Selector"));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/block/model/multipart/Selector",
+                    "m_112020_", "()Lnet/minecraft/client/renderer/block/model/MultiVariant;", false));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/block/model/MultiVariant",
+                    "m_111848_", "()Ljava/util/List;", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, 5));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+            code.add(new VarInsnNode(Opcodes.ISTORE, 6));
+            // for (int j = 0; j < vc; j++) set.add(((Variant) vs.get(j)).m_111883_());
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new VarInsnNode(Opcodes.ISTORE, 7));
+            code.add(innerCond);
+            code.add(new VarInsnNode(Opcodes.ILOAD, 7));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 6));
+            code.add(new JumpInsnNode(Opcodes.IF_ICMPGE, innerEnd));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 3));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 7));
+            code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+            code.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraft/client/renderer/block/model/Variant"));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/block/model/Variant",
+                    "m_111883_", "()Lnet/minecraft/resources/ResourceLocation;", false));
+            code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "add", "(Ljava/lang/Object;)Z", false));
+            code.add(new InsnNode(Opcodes.POP));
+            code.add(new IincInsnNode(7, 1));
+            code.add(new JumpInsnNode(Opcodes.GOTO, innerCond));
+            code.add(innerEnd);
+            code.add(new IincInsnNode(4, 1));
+            code.add(new JumpInsnNode(Opcodes.GOTO, outerCond));
+            code.add(outerEnd);
+            code.add(new VarInsnNode(Opcodes.ALOAD, 3));
+            code.add(new InsnNode(Opcodes.ARETURN));
+            mn.instructions = code;
+            if (mn.tryCatchBlocks != null) {
+                mn.tryCatchBlocks.clear();
+            }
+            mn.localVariables = null;
+            patched = true;
+            break;
         }
         return patched ? writeNodeWithFrames(cn, loader) : null;
     }

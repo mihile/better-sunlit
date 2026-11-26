@@ -1,6 +1,12 @@
 package dev.sunlit.bettersunlit.client;
 
+import net.minecraft.world.level.block.state.properties.Property;
+
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -107,5 +113,62 @@ public final class BlockModelShaperPerf {
 
     public static void resetForTest() {
         consumeNeedsClear();
+    }
+
+    private static final ThreadLocal<StringBuilder> TL_STATE_SB =
+            ThreadLocal.withInitial(() -> new StringBuilder(64));
+    private static final ConcurrentHashMap<Property<?>, IdentityHashMap<Object, String>> PROP_PAIR_CACHE =
+            new ConcurrentHashMap<>(512);
+
+    /**
+     * Fast replacement for {@code BlockModelShaper.m_110887_(Map)} ({@code statePropertiesToString})
+     * using cached {@code "prop=value"} pairs, zero-allocation fast paths for 0/1 properties,
+     * and a reusable ThreadLocal {@link StringBuilder}.
+     */
+    public static String fastStatePropertiesToString(Map<Property<?>, Comparable<?>> map) {
+        if (map == null || map.isEmpty()) {
+            return "";
+        }
+        int size = map.size();
+        if (size == 1) {
+            Map.Entry<Property<?>, Comparable<?>> entry = map.entrySet().iterator().next();
+            return cachedPropPair(entry.getKey(), entry.getValue());
+        }
+        StringBuilder sb = TL_STATE_SB.get();
+        sb.setLength(0);
+        boolean first = true;
+        for (Map.Entry<Property<?>, Comparable<?>> entry : map.entrySet()) {
+            if (!first) {
+                sb.append(',');
+            } else {
+                first = false;
+            }
+            sb.append(cachedPropPair(entry.getKey(), entry.getValue()));
+        }
+        return sb.toString();
+    }
+
+    private static String cachedPropPair(Property<?> prop, Comparable<?> value) {
+        IdentityHashMap<Object, String> byVal = PROP_PAIR_CACHE.get(prop);
+        if (byVal == null) {
+            Collection<? extends Comparable<?>> vals = prop.m_6908_();
+            IdentityHashMap<Object, String> built = new IdentityHashMap<>(Math.max(4, vals.size() * 2));
+            String prefix = prop.m_61708_() + "=";
+            for (Comparable<?> v : vals) {
+                built.put(v, prefix + getPropValueName(prop, v));
+            }
+            IdentityHashMap<Object, String> prev = PROP_PAIR_CACHE.putIfAbsent(prop, built);
+            byVal = prev != null ? prev : built;
+        }
+        String cached = byVal.get(value);
+        if (cached != null) {
+            return cached;
+        }
+        return prop.m_61708_() + "=" + getPropValueName(prop, value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> String getPropValueName(Property<T> prop, Comparable<?> value) {
+        return prop.m_6940_((T) value);
     }
 }
