@@ -188,7 +188,32 @@ public final class ClientPostApplyPatches {
         target.maxLocals = Math.max(target.maxLocals, cirVar + 1);
 
         patchBlockModelShaperCaching(cn, target);
+        patchBlockModelShaperStateString(cn);
         return true;
+    }
+
+    private static void patchBlockModelShaperStateString(ClassNode cn) {
+        for (MethodNode mn : cn.methods) {
+            if ("m_110887_".equals(mn.name) && "(Ljava/util/Map;)Ljava/lang/String;".equals(mn.desc)) {
+                InsnList code = new InsnList();
+                code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                code.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        "dev/sunlit/bettersunlit/client/BlockModelShaperPerf",
+                        "fastStatePropertiesToString",
+                        "(Ljava/util/Map;)Ljava/lang/String;",
+                        false));
+                code.add(new InsnNode(Opcodes.ARETURN));
+                mn.instructions = code;
+                if (mn.tryCatchBlocks != null) {
+                    mn.tryCatchBlocks.clear();
+                }
+                mn.localVariables = null;
+                mn.maxStack = 2;
+                mn.maxLocals = 1;
+                break;
+            }
+        }
     }
 
     private static void patchBlockModelShaperCaching(ClassNode cn, MethodNode getBlockModel) {

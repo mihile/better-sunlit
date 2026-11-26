@@ -11,10 +11,12 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import traben.entity_model_features.EMF;
 import traben.entity_model_features.EMFManager;
 import traben.entity_model_features.models.EMFModel_ID;
 import traben.entity_model_features.models.jem_objects.EMFJemData;
@@ -60,6 +62,9 @@ public abstract class PerfEmfManagerInitMixin implements dev.sunlit.bettersunlit
     @Final
     public List<Exception> loadingExceptions;
 
+    @Unique
+    private final Set<ModelLayerLocation> sunlit$noJemLayers = ConcurrentHashMap.newKeySet();
+
     @Inject(method = "<init>", at = @At("RETURN"))
     private void sunlit$initConcurrentCollections(CallbackInfo ci) {
         this.modelsAnnounced = ConcurrentHashMap.newKeySet();
@@ -92,6 +97,28 @@ public abstract class PerfEmfManagerInitMixin implements dev.sunlit.bettersunlit
         if (prebaked != null && !EmfModelPrebakePerf.hasSpecialContext()) {
             EMFManager.lastCreatedRootModelPart = (prebaked instanceof EMFModelPartRoot root) ? root : null;
             cir.setReturnValue(prebaked);
+            return;
+        }
+        if (!EMF.isLoadingPhase
+                && layer != null
+                && !EmfModelPrebakePerf.hasSpecialContext()
+                && this.sunlit$noJemLayers.contains(layer)) {
+            EMFManager.lastCreatedRootModelPart = null;
+            cir.setReturnValue(vanillaModelPart);
+        }
+    }
+
+    @Inject(method = "injectIntoModelRootGetter", at = @At("RETURN"))
+    private void sunlit$cacheNoJemLayer(
+            ModelLayerLocation layer,
+            ModelPart vanillaModelPart,
+            CallbackInfoReturnable<ModelPart> cir) {
+        if (!EMF.isLoadingPhase
+                && layer != null
+                && cir.getReturnValue() == vanillaModelPart
+                && !EmfModelPrebakePerf.hasSpecialContext()
+                && EMF.config().getConfig().allowedCEM.isOn()) {
+            this.sunlit$noJemLayers.add(layer);
         }
     }
 }

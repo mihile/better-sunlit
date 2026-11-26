@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Parallelizes per-sprite mipmap generation and accelerates mipmap downsampling and Embeddium
@@ -23,8 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class SpriteMipmapPerf {
     private static final boolean LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
-    private static final ThreadLocal<int[]> TL_SRC = ThreadLocal.withInitial(() -> new int[4096]);
-    private static final ThreadLocal<int[]> TL_DST = ThreadLocal.withInitial(() -> new int[1024]);
+    private static final ThreadLocal<int[]> TL_SRC = ThreadLocal.withInitial(() -> new int[16384]);
+    private static final ThreadLocal<int[]> TL_DST = ThreadLocal.withInitial(() -> new int[4096]);
     private static final float[] SRGB_TO_LINEAR = new float[256];
     private static final float[] SRGB_TO_LINEAR_QUARTER = new float[256];
     private static final float[] SRGB_TO_LINEAR_255 = new float[256];
@@ -246,25 +247,34 @@ public final class SpriteMipmapPerf {
                     closeAllocated(out, images.length, level);
                     return null;
                 }
-                if (!srcValid) {
+                if (LITTLE_ENDIAN) {
                     long srcPtr = ((PerfNativeImageAccessor) (Object) prev).sunlit$getPixels();
                     if (srcPtr == 0L) {
                         closeAllocated(out, images.length, level);
                         return null;
                     }
-                    int srcCount = prevW * prevH;
-                    srcBuf = borrowIntBuffer(TL_SRC, srcCount);
-                    MemoryUtil.memIntBuffer(srcPtr, srcCount).get(srcBuf, 0, srcCount);
+                    downsampleQuadOffHeapLE(srcPtr, prevW, dstPtr, dstW, dstH);
+                } else {
+                    if (!srcValid) {
+                        long srcPtr = ((PerfNativeImageAccessor) (Object) prev).sunlit$getPixels();
+                        if (srcPtr == 0L) {
+                            closeAllocated(out, images.length, level);
+                            return null;
+                        }
+                        int srcCount = prevW * prevH;
+                        srcBuf = borrowIntBuffer(TL_SRC, srcCount);
+                        MemoryUtil.memIntBuffer(srcPtr, srcCount).get(srcBuf, 0, srcCount);
+                    }
+                    int dstCount = dstW * dstH;
+                    dstBuf = borrowIntBuffer(TL_DST, dstCount);
+                    downsampleQuad(srcBuf, prevW, dstBuf, dstW, dstH);
+                    MemoryUtil.memIntBuffer(dstPtr, dstCount).put(dstBuf, 0, dstCount);
+                    // Reuse the newly written mip buffer directly as source for the next level.
+                    int[] swap = srcBuf;
+                    srcBuf = dstBuf;
+                    dstBuf = swap;
+                    srcValid = true;
                 }
-                int dstCount = dstW * dstH;
-                dstBuf = borrowIntBuffer(TL_DST, dstCount);
-                downsampleQuad(srcBuf, prevW, dstBuf, dstW, dstH);
-                MemoryUtil.memIntBuffer(dstPtr, dstCount).put(dstBuf, 0, dstCount);
-                // Reuse the newly written mip buffer directly as source for the next level.
-                int[] swap = srcBuf;
-                srcBuf = dstBuf;
-                dstBuf = swap;
-                srcValid = true;
             } else {
                 srcValid = false;
             }
@@ -278,6 +288,44 @@ public final class SpriteMipmapPerf {
         for (int i = preservedCount; i <= lastAllocated; i++) {
             if (out[i] != null) {
                 out[i].close();
+            }
+        }
+    }
+
+    private static void downsampleQuadOffHeapLE(long srcPtr, int srcW, long dstPtr, int dstW, int dstH) {
+        final float[] qLut = SRGB_TO_LINEAR_QUARTER;
+        final long srcRowBytes = (long) srcW << 2;
+        final long srcRow2Bytes = srcRowBytes << 1;
+        final long dstRowBytes = (long) dstW << 2;
+        long sRow0 = srcPtr;
+        long dRow = dstPtr;
+        for (int y = 0; y < dstH; y++, sRow0 += srcRow2Bytes, dRow += dstRowBytes) {
+            long s0 = sRow0;
+            long s1 = sRow0 + srcRowBytes;
+            long d = dRow;
+            for (int x = 0; x < dstW; x++, s0 += 8L, s1 += 8L, d += 4L) {
+                long p01 = MemoryUtil.memGetLong(s0);
+                long p23 = MemoryUtil.memGetLong(s1);
+                int c0 = (int) p01;
+                int c1 = (int) (p01 >>> 32);
+                int c2 = (int) p23;
+                int c3 = (int) (p23 >>> 32);
+                int outColor;
+                if (c0 == c1 && c2 == c3 && c0 == c2) {
+                    outColor = c0;
+                } else if (((c0 & c1 & c2 & c3) >>> 24) == 255) {
+                    float r = qLut[c0 & 0xFF] + qLut[c1 & 0xFF] + qLut[c2 & 0xFF] + qLut[c3 & 0xFF];
+                    float g = qLut[(c0 >>> 8) & 0xFF] + qLut[(c1 >>> 8) & 0xFF]
+                            + qLut[(c2 >>> 8) & 0xFF] + qLut[(c3 >>> 8) & 0xFF];
+                    float b = qLut[(c0 >>> 16) & 0xFF] + qLut[(c1 >>> 16) & 0xFF]
+                            + qLut[(c2 >>> 16) & 0xFF] + qLut[(c3 >>> 16) & 0xFF];
+                    outColor = linearToSrgbFast(r, g, b, 255);
+                } else {
+                    outColor = weightedAverageColor(
+                            weightedAverageColor(c0, c1),
+                            weightedAverageColor(c2, c3));
+                }
+                MemoryUtil.memPutInt(d, outColor);
             }
         }
     }
@@ -732,22 +780,23 @@ public final class SpriteMipmapPerf {
             return;
         }
         TextureAtlasSprite[] arr = sprites.values().toArray(new TextureAtlasSprite[0]);
-        int workers = Math.min(Math.max(2, Runtime.getRuntime().availableProcessors()), 12);
-        int batch = Math.max(16, (arr.length + workers - 1) / workers);
-        List<ForkJoinTask<?>> tasks = new ArrayList<>(workers);
-        for (int start = batch; start < arr.length; start += batch) {
-            final int s = start;
-            final int e = Math.min(arr.length, start + batch);
-            tasks.add(ForkJoinPool.commonPool().submit(() -> {
-                for (int i = s; i < e; i++) {
+        int workers = Math.min(Math.max(2, Runtime.getRuntime().availableProcessors()), 16);
+        AtomicInteger next = new AtomicInteger(0);
+        final int chunk = 4;
+        Runnable workLoop = () -> {
+            int start;
+            while ((start = next.getAndAdd(chunk)) < arr.length) {
+                int end = Math.min(arr.length, start + chunk);
+                for (int i = start; i < end; i++) {
                     arr[i].m_245424_().m_246368_(mipLevel);
                 }
-            }));
+            }
+        };
+        List<ForkJoinTask<?>> tasks = new ArrayList<>(workers - 1);
+        for (int w = 1; w < workers; w++) {
+            tasks.add(ForkJoinPool.commonPool().submit(workLoop));
         }
-        int firstEnd = Math.min(arr.length, batch);
-        for (int i = 0; i < firstEnd; i++) {
-            arr[i].m_245424_().m_246368_(mipLevel);
-        }
+        workLoop.run();
         for (ForkJoinTask<?> task : tasks) {
             task.join();
         }

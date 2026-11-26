@@ -15,9 +15,12 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.NonWritableChannelException;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
@@ -180,65 +183,147 @@ public final class BootJarPayload {
 
     public static List<Path> filterServiceJars(Path modsDir) {
         List<Path> candidates = new ArrayList<>();
-        try (Stream<Path> walk = Files.walk(modsDir, 1)) {
-            for (Object item : walk.toArray()) {
-                Path p = (Path) item;
-                if (Files.isRegularFile(p) && p.toString().endsWith(".jar")) {
-                    try {
-                        if (Files.size(p) > 0L) {
-                            candidates.add(p);
-                        }
-                    } catch (Throwable ignored) {
+        long[] sizes = new long[512];
+        long[] mtimes = new long[512];
+        String[] names = new String[512];
+        int count = 0;
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(modsDir)) {
+            for (Path p : ds) {
+                Path fn = p.getFileName();
+                if (fn == null) {
+                    continue;
+                }
+                String name = fn.toString();
+                if (!name.endsWith(".jar")) {
+                    continue;
+                }
+                try {
+                    BasicFileAttributes attrs = Files.readAttributes(p, BasicFileAttributes.class);
+                    if (!attrs.isRegularFile()) {
+                        continue;
                     }
+                    long sz = attrs.size();
+                    if (sz <= 0L) {
+                        continue;
+                    }
+                    if (count == sizes.length) {
+                        int next = count << 1;
+                        sizes = Arrays.copyOf(sizes, next);
+                        mtimes = Arrays.copyOf(mtimes, next);
+                        names = Arrays.copyOf(names, next);
+                    }
+                    candidates.add(p);
+                    sizes[count] = sz;
+                    mtimes[count] = attrs.lastModifiedTime().toMillis();
+                    names[count] = name;
+                    count++;
+                } catch (Throwable ignored) {
                 }
             }
         } catch (Throwable t) {
             return List.of();
         }
-        int count = candidates.size();
         if (count == 0) {
             return List.of();
         }
-        if (count <= 4) {
-            List<Path> matched = new ArrayList<>();
-            for (int i = 0; i < count; i++) {
-                Path p = candidates.get(i);
-                if (mightHaveDiscoveryService(p)) {
-                    matched.add(p);
+
+        // Load persistent disk cache keyed by (filename, size, mtime) to avoid opening ~300 JARs on every boot.
+        Path parentDir = modsDir.getParent();
+        Path cacheFile = parentDir != null ? parentDir.resolve("config").resolve(".sunlit-service-jars.cache") : null;
+        HashMap<String, String> cache = null;
+        if (cacheFile != null && Files.isRegularFile(cacheFile)) {
+            try {
+                List<String> lines = Files.readAllLines(cacheFile, StandardCharsets.UTF_8);
+                cache = new HashMap<>(Math.max(16, lines.size() * 2));
+                for (int i = 0, n = lines.size(); i < n; i++) {
+                    String line = lines.get(i);
+                    int t1 = line.indexOf('\t');
+                    if (t1 > 0) {
+                        cache.put(line.substring(0, t1), line.substring(t1 + 1));
+                    }
+                }
+            } catch (Throwable ignored) {
+                cache = null;
+            }
+        }
+
+        boolean[] keep = new boolean[count];
+        int[] missIndices = new int[count];
+        int missCount = 0;
+        for (int i = 0; i < count; i++) {
+            String cached = cache != null ? cache.get(names[i]) : null;
+            if (cached != null) {
+                String expectedPrefix = sizes[i] + "\t" + mtimes[i] + "\t";
+                if (cached.length() == expectedPrefix.length() + 1 && cached.startsWith(expectedPrefix)) {
+                    char flag = cached.charAt(expectedPrefix.length());
+                    if (flag == '0' || flag == '1') {
+                        keep[i] = (flag == '1');
+                        continue;
+                    }
                 }
             }
-            return matched;
+            missIndices[missCount++] = i;
         }
-        boolean[] keep = new boolean[count];
-        int workers = Math.min(16, Math.max(4, Runtime.getRuntime().availableProcessors()));
-        ExecutorService pool = Executors.newFixedThreadPool(workers, r -> {
-            Thread t = new Thread(r, "Sunlit-JarDiscover");
-            t.setDaemon(true);
-            return t;
-        });
-        try {
-            List<Callable<Void>> tasks = new ArrayList<>(workers);
-            int chunk = (count + workers - 1) / workers;
-            for (int start = 0; start < count; start += chunk) {
-                final int s = start;
-                final int e = Math.min(count, start + chunk);
-                tasks.add(() -> {
-                    for (int i = s; i < e; i++) {
-                        keep[i] = mightHaveDiscoveryService(candidates.get(i));
-                    }
-                    return null;
+
+        if (missCount > 0) {
+            if (missCount <= 4) {
+                for (int m = 0; m < missCount; m++) {
+                    int idx = missIndices[m];
+                    keep[idx] = mightHaveDiscoveryService(candidates.get(idx));
+                }
+            } else {
+                int workers = Math.min(16, Math.max(4, Runtime.getRuntime().availableProcessors()));
+                ExecutorService pool = Executors.newFixedThreadPool(workers, r -> {
+                    Thread t = new Thread(r, "Sunlit-JarDiscover");
+                    t.setDaemon(true);
+                    return t;
                 });
+                try {
+                    List<Callable<Void>> tasks = new ArrayList<>(workers);
+                    int chunk = (missCount + workers - 1) / workers;
+                    for (int start = 0; start < missCount; start += chunk) {
+                        final int s = start;
+                        final int e = Math.min(missCount, start + chunk);
+                        tasks.add(() -> {
+                            for (int m = s; m < e; m++) {
+                                int idx = missIndices[m];
+                                keep[idx] = mightHaveDiscoveryService(candidates.get(idx));
+                            }
+                            return null;
+                        });
+                    }
+                    List<Future<Void>> futures = pool.invokeAll(tasks);
+                    for (Future<Void> f : futures) {
+                        f.get();
+                    }
+                } catch (Throwable t) {
+                    // Fall back conservatively: let ModDirTransformerDiscoverer scan all candidates.
+                    return candidates;
+                } finally {
+                    pool.shutdown();
+                }
             }
-            List<Future<Void>> futures = pool.invokeAll(tasks);
-            for (Future<Void> f : futures) {
-                f.get();
-            }
-        } catch (Throwable t) {
-            // Fall back conservatively: let ModDirTransformerDiscoverer scan all candidates.
-            return candidates;
-        } finally {
-            pool.shutdown();
         }
+
+        if (cacheFile != null && (missCount > 0 || cache == null || cache.size() != count)) {
+            try {
+                Path cfgDir = cacheFile.getParent();
+                if (cfgDir != null && Files.isDirectory(cfgDir)) {
+                    StringBuilder sb = new StringBuilder(count * 48);
+                    for (int i = 0; i < count; i++) {
+                        sb.append(names[i]).append('\t')
+                                .append(sizes[i]).append('\t')
+                                .append(mtimes[i]).append('\t')
+                                .append(keep[i] ? '1' : '0').append('\n');
+                    }
+                    Path tmp = cfgDir.resolve(".sunlit-service-jars.cache.tmp");
+                    Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
+                    Files.move(tmp, cacheFile, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
         List<Path> matched = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (keep[i]) {
@@ -2661,6 +2746,7 @@ public final class BootJarPayload {
         boolean seenDot = false;
         int fracDigits = 0;
         boolean sawDigit = false;
+        int exp = 0;
         for (int i = start; i < end; i++) {
             char c = s.charAt(i);
             if (c >= '0' && c <= '9') {
@@ -2679,14 +2765,48 @@ public final class BootJarPayload {
                 }
             } else if (c == '.' && !seenDot) {
                 seenDot = true;
+            } else if ((c == 'e' || c == 'E') && sawDigit) {
+                int j = i + 1;
+                boolean expNeg = false;
+                if (j < end) {
+                    char ec = s.charAt(j);
+                    if (ec == '-') {
+                        expNeg = true;
+                        j++;
+                    } else if (ec == '+') {
+                        j++;
+                    }
+                }
+                if (j >= end) {
+                    return Float.parseFloat(s);
+                }
+                int expVal = 0;
+                for (; j < end; j++) {
+                    char ec = s.charAt(j);
+                    if (ec < '0' || ec > '9') {
+                        return Float.parseFloat(s);
+                    }
+                    expVal = expVal * 10 + (ec - '0');
+                    if (expVal > 10) {
+                        return Float.parseFloat(s);
+                    }
+                }
+                exp = expNeg ? -expVal : expVal;
+                break;
             } else {
                 return Float.parseFloat(s);
             }
         }
-        if (!sawDigit || fracDigits >= OBJ_POW10.length) {
+        if (!sawDigit) {
             return Float.parseFloat(s);
         }
-        double val = (double) mantissa / OBJ_POW10[fracDigits];
+        int netExp = exp - fracDigits;
+        if (netExp < -10 || netExp > 10) {
+            return Float.parseFloat(s);
+        }
+        double val = netExp >= 0
+                ? (double) mantissa * OBJ_POW10[netExp]
+                : (double) mantissa / OBJ_POW10[-netExp];
         return (float) (neg ? -val : val);
     }
 
@@ -4263,5 +4383,689 @@ public final class BootJarPayload {
         public K lastKey() {
             return entries[entries.length - 1].getKey();
         }
+    }
+
+    /**
+     * Zero-allocation equivalent of {@code Pattern.compile("[A-Za-z0-9._+-]+").matcher(s).matches()}
+     * used by {@code net.minecraft.nbt.StringTagVisitor.handleEscape}.
+     */
+    public static boolean isSimpleNbtKey(String s) {
+        if (s == null) {
+            return false;
+        }
+        int len = s.length();
+        if (len == 0) {
+            return false;
+        }
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (!((c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '_' || c == '-' || c == '.' || c == '+')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static volatile Object cachedEventBusRef;
+    private static volatile int cachedEventBusId = -2;
+
+    /**
+     * Reflects and caches Forge {@code EventBus.busID} so hot event sites can check
+     * {@code ListenerList.getListeners(busId).length == 0} without allocating an event object.
+     */
+    public static int getEventBusId(Object bus) {
+        if (bus == null) {
+            return -1;
+        }
+        if (bus == cachedEventBusRef) {
+            return cachedEventBusId;
+        }
+        try {
+            java.lang.reflect.Field f = bus.getClass().getDeclaredField("busID");
+            f.setAccessible(true);
+            int id = f.getInt(bus);
+            cachedEventBusId = id;
+            cachedEventBusRef = bus;
+            return id;
+        } catch (Throwable ignored) {
+            cachedEventBusId = -1;
+            cachedEventBusRef = bus;
+            return -1;
+        }
+    }
+
+    /**
+     * Exact zero-intermediate-allocation equivalent of {@code sb.append(StringTag.quoteAndEscape(s))}.
+     */
+    public static void appendQuotedNbtString(StringBuilder sb, String s) {
+        int startIdx = sb.length();
+        sb.append(' ');
+        char quote = 0;
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '\\') {
+                sb.append('\\');
+            } else if (c == '"' || c == '\'') {
+                if (quote == 0) {
+                    quote = (c == '"') ? '\'' : '"';
+                }
+                if (quote == c) {
+                    sb.append('\\');
+                }
+            }
+            sb.append(c);
+        }
+        if (quote == 0) {
+            quote = '"';
+        }
+        sb.setCharAt(startIdx, quote);
+        sb.append(quote);
+    }
+
+    /**
+     * Zero-allocation check for {@code (ns + ":" + path).equals(target)}.
+     */
+    public static boolean resourceLocationEqualsString(String ns, String path, String target) {
+        if (target == null || ns == null || path == null) {
+            return false;
+        }
+        int nsLen = ns.length();
+        int pathLen = path.length();
+        if (target.length() != nsLen + 1 + pathLen) {
+            return false;
+        }
+        if (target.charAt(nsLen) != ':') {
+            return false;
+        }
+        return target.regionMatches(0, ns, 0, nsLen)
+                && target.regionMatches(nsLen + 1, path, 0, pathLen);
+    }
+
+    /**
+     * Zero-copy prefix check for Iris {@code CommentDirectiveParser.findDirective}: locates the
+     * last occurrence of {@code needle} and verifies the non-whitespace characters immediately
+     * preceding it end with {@code "/*"} without copying or trimming the prefix.
+     */
+    public static int findCommentDirectiveIdx(String haystack, String needle) {
+        if (haystack == null || needle == null) {
+            return -1;
+        }
+        int idx = haystack.lastIndexOf(needle);
+        if (idx < 2) {
+            return -1;
+        }
+        int p = idx - 1;
+        while (p >= 0 && haystack.charAt(p) <= ' ') {
+            p--;
+        }
+        if (p < 1 || haystack.charAt(p) != '*' || haystack.charAt(p - 1) != '/') {
+            return -1;
+        }
+        return idx;
+    }
+
+    /**
+     * Zero-copy suffix extractor for Iris {@code CommentDirectiveParser.findDirective}: scans
+     * forward from {@code valueStart} to {@code "*\/"} and returns the trimmed directive value
+     * (or {@code null} if no closing marker exists) without copying the full shader tail.
+     */
+    public static String extractCommentDirectiveValue(String haystack, int valueStart) {
+        int end = haystack.indexOf("*/", valueStart);
+        if (end < 0) {
+            return null;
+        }
+        int lo = valueStart;
+        int hi = end;
+        while (lo < hi && haystack.charAt(lo) <= ' ') {
+            lo++;
+        }
+        while (hi > lo && haystack.charAt(hi - 1) <= ' ') {
+            hi--;
+        }
+        return haystack.substring(lo, hi);
+    }
+
+    /**
+     * Zero-regex line extractor for Iris {@code ConstDirectiveParser.findDirectives}: scans lines
+     * without {@code String.split("\\R")} and only materializes lines containing {@code "const"},
+     * {@code '='}, and {@code ';'} (~302MB garbage eliminated during shaderpack load).
+     */
+    public static java.util.List<String> extractConstCandidateLines(String source) {
+        if (source == null || source.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        int len = source.length();
+        java.util.ArrayList<String> out = null;
+        int pos = 0;
+        while (pos < len) {
+            int cIdx = source.indexOf("const", pos);
+            if (cIdx < 0) {
+                break;
+            }
+            // Find line start (after previous \n or \r)
+            int lineStart = cIdx;
+            while (lineStart > 0) {
+                char ch = source.charAt(lineStart - 1);
+                if (ch == '\n' || ch == '\r') {
+                    break;
+                }
+                lineStart--;
+            }
+            // Find line end (before next \n or \r)
+            int lineEnd = cIdx + 5;
+            boolean hasEq = false;
+            boolean hasSemi = false;
+            while (lineEnd < len) {
+                char ch = source.charAt(lineEnd);
+                if (ch == '\n' || ch == '\r') {
+                    break;
+                }
+                if (ch == '=') {
+                    hasEq = true;
+                } else if (ch == ';') {
+                    hasSemi = true;
+                }
+                lineEnd++;
+            }
+            if (!hasEq || !hasSemi) {
+                for (int k = lineStart; k < cIdx; k++) {
+                    char ch = source.charAt(k);
+                    if (ch == '=') hasEq = true;
+                    else if (ch == ';') hasSemi = true;
+                }
+            }
+            if (hasEq && hasSemi) {
+                if (out == null) {
+                    out = new java.util.ArrayList<>(8);
+                }
+                out.add(source.substring(lineStart, lineEnd));
+            }
+            pos = lineEnd + 1;
+            if (pos < len && source.charAt(lineEnd) == '\r' && source.charAt(pos) == '\n') {
+                pos++;
+            }
+        }
+        return out == null ? java.util.Collections.emptyList() : out;
+    }
+
+    /**
+     * Vectorized {@code indexOf}-based equivalent of Flywheel {@code StringUtil.countLines(String)}.
+     */
+    public static int fastCountLines(String s) {
+        int len = s.length();
+        if (len == 0) {
+            return 1;
+        }
+        int count = 1;
+        if (s.indexOf('\r') < 0) {
+            int pos = 0;
+            while ((pos = s.indexOf('\n', pos)) >= 0) {
+                count++;
+                pos++;
+            }
+            return count;
+        }
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt(i);
+            if (c == '\n') {
+                count++;
+            } else if (c == '\r') {
+                count++;
+                if (i + 1 < len && s.charAt(i + 1) == '\n') {
+                    i++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Zero-regex equivalent of {@code s.replaceAll("_", "")} for Create {@code TooltipHelper}.
+     */
+    public static String stripUnderscores(String s) {
+        if (s == null) {
+            return null;
+        }
+        int first = s.indexOf('_');
+        if (first < 0) {
+            return s;
+        }
+        int len = s.length();
+        StringBuilder sb = new StringBuilder(len - 1);
+        sb.append(s, 0, first);
+        for (int i = first + 1; i < len; i++) {
+            char c = s.charAt(i);
+            if (c != '_') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static final class CachedBreakIter {
+        java.util.Locale locale;
+        java.text.BreakIterator iter;
+    }
+
+    private static final ThreadLocal<CachedBreakIter> LINE_BREAK_CACHE =
+            ThreadLocal.withInitial(CachedBreakIter::new);
+
+    /**
+     * Reuses a per-thread {@code BreakIterator.getLineInstance(locale)} instead of cloning
+     * {@code RuleBasedBreakIterator} on every Create tooltip line (~46MB saved in EMI bake).
+     */
+    public static java.text.BreakIterator getCachedLineBreakIterator(java.util.Locale locale) {
+        CachedBreakIter holder = LINE_BREAK_CACHE.get();
+        if (holder.iter == null || !java.util.Objects.equals(holder.locale, locale)) {
+            holder.locale = locale;
+            holder.iter = java.text.BreakIterator.getLineInstance(locale);
+        }
+        return holder.iter;
+    }
+
+    /**
+     * Zero-stream replacement for Colorwheel {@code ProgramSourceMixin.colorwheel$parseShaderExtensions}.
+     * Scans only {@code "#extension"} occurrences instead of splitting and trimming every shader line (~125MB saved).
+     */
+    public static java.util.List<String> parseColorwheelShaderExtensions(String source) {
+        java.util.ArrayList<String> list = new java.util.ArrayList<>();
+        if (source == null || source.isEmpty()) {
+            return list;
+        }
+        int len = source.length();
+        int pos = 0;
+        while ((pos = source.indexOf("#extension", pos)) >= 0) {
+            boolean lineStartOk = true;
+            for (int k = pos - 1; k >= 0; k--) {
+                char c = source.charAt(k);
+                if (c == '\n' || c == '\r') {
+                    break;
+                }
+                if (c > ' ') {
+                    lineStartOk = false;
+                    break;
+                }
+            }
+            if (!lineStartOk) {
+                pos += 10;
+                continue;
+            }
+            int lineEnd = pos + 10;
+            while (lineEnd < len) {
+                char c = source.charAt(lineEnd);
+                if (c == '\n' || c == '\r') {
+                    break;
+                }
+                lineEnd++;
+            }
+            int trimEnd = lineEnd;
+            while (trimEnd > pos && source.charAt(trimEnd - 1) <= ' ') {
+                trimEnd--;
+            }
+            int colon = source.indexOf(':', pos);
+            if (colon >= 0 && colon < trimEnd) {
+                int subStart = pos + 11;
+                if (subStart >= trimEnd) {
+                    list.add("");
+                } else {
+                    int nextColon = source.indexOf(':', subStart);
+                    int partEnd = (nextColon >= 0 && nextColon < trimEnd) ? nextColon : trimEnd;
+                    int s = subStart;
+                    int e = partEnd;
+                    while (s < e && source.charAt(s) <= ' ') {
+                        s++;
+                    }
+                    while (e > s && source.charAt(e - 1) <= ' ') {
+                        e--;
+                    }
+                    list.add(source.substring(s, e));
+                }
+            }
+            pos = lineEnd;
+        }
+        return list;
+    }
+
+    private static volatile Object jemiNoNbtSubtypeMgr;
+    private static volatile java.util.concurrent.ConcurrentHashMap<Object, String> jemiNoNbtSubtypeCache;
+
+    /**
+     * Caches JEI {@code UidContext.Recipe} subtype strings for NBT-less {@code ItemEmiStack}s
+     * across {@code JemiPlugin.lambda$parseSubtypes$15}, keyed by {@code Item} and automatically
+     * reset whenever {@code JemiPlugin.subtypeManager} changes on reload.
+     */
+    public static String getCachedNoNbtSubtype(Object subtypeManager, Object itemKey) {
+        if (subtypeManager == null || itemKey == null) {
+            return null;
+        }
+        if (jemiNoNbtSubtypeMgr != subtypeManager) {
+            return null;
+        }
+        java.util.concurrent.ConcurrentHashMap<Object, String> map = jemiNoNbtSubtypeCache;
+        return map != null ? map.get(itemKey) : null;
+    }
+
+    public static void putCachedNoNbtSubtype(Object subtypeManager, Object itemKey, String value) {
+        if (subtypeManager == null || itemKey == null || value == null) {
+            return;
+        }
+        java.util.concurrent.ConcurrentHashMap<Object, String> map = jemiNoNbtSubtypeCache;
+        if (jemiNoNbtSubtypeMgr != subtypeManager || map == null) {
+            synchronized (BootJarPayload.class) {
+                if (jemiNoNbtSubtypeMgr != subtypeManager || jemiNoNbtSubtypeCache == null) {
+                    jemiNoNbtSubtypeCache = new java.util.concurrent.ConcurrentHashMap<>(256);
+                    jemiNoNbtSubtypeMgr = subtypeManager;
+                }
+                map = jemiNoNbtSubtypeCache;
+            }
+        }
+        map.put(itemKey, value);
+    }
+
+    private static final Object JM_CHUNK_CACHE_LOCK = new Object();
+    private static final long[] JM_CHUNK_KEYS = new long[16];
+    private static final Object[] JM_CHUNK_VALS = new Object[16];
+    private static int jmChunkCacheHits;
+
+    /**
+     * 16-slot direct-mapped hot cache in front of JourneyMap {@code DataCache.chunkMetadata} Guava
+     * cache. Bypasses {@code LocalCache$Segment.recordRead} (~59MB {@code ConcurrentLinkedQueue$Node}
+     * churn) on 63/64 hits while still refreshing Guava's access TTL every 64th hit.
+     */
+    public static Object jmChunkCacheGet(long coord) {
+        synchronized (JM_CHUNK_CACHE_LOCK) {
+            int slot = ((int) coord ^ (int) (coord >>> 32)) & 15;
+            Object val = JM_CHUNK_VALS[slot];
+            if (val != null && JM_CHUNK_KEYS[slot] == coord) {
+                if ((++jmChunkCacheHits & 63) != 0) {
+                    return val;
+                }
+            }
+            return null;
+        }
+    }
+
+    public static void jmChunkCachePut(long coord, Object md) {
+        if (md == null) {
+            return;
+        }
+        synchronized (JM_CHUNK_CACHE_LOCK) {
+            int slot = ((int) coord ^ (int) (coord >>> 32)) & 15;
+            JM_CHUNK_KEYS[slot] = coord;
+            JM_CHUNK_VALS[slot] = md;
+        }
+    }
+
+    public static void jmChunkCacheRemove(long coord) {
+        synchronized (JM_CHUNK_CACHE_LOCK) {
+            int slot = ((int) coord ^ (int) (coord >>> 32)) & 15;
+            if (JM_CHUNK_KEYS[slot] == coord) {
+                JM_CHUNK_VALS[slot] = null;
+            }
+        }
+    }
+
+    public static void jmChunkCacheClear() {
+        synchronized (JM_CHUNK_CACHE_LOCK) {
+            java.util.Arrays.fill(JM_CHUNK_VALS, null);
+        }
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<Object, java.util.List<?>> EMI_TAG_VALUES_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>(512);
+
+    /**
+     * Caches unmodifiable {@code EmiTags.getValues(EmiTagKey)} stack lists across an EMI reload
+     * (~376MB {@code ItemEmiStack} churn eliminated). Cleared on {@code EmiTags.reload()}.
+     */
+    public static java.util.List<?> getEmiTagValues(Object key) {
+        return key != null ? EMI_TAG_VALUES_CACHE.get(key) : null;
+    }
+
+    public static void putEmiTagValues(Object key, java.util.List<?> values) {
+        if (key != null && values != null) {
+            EMI_TAG_VALUES_CACHE.put(key, values);
+        }
+    }
+
+    public static void clearEmiTagValues() {
+        EMI_TAG_VALUES_CACHE.clear();
+    }
+
+    /**
+     * Zero-iterator replacement for {@code map.keySet().containsAll(list)} in {@code EmiTags.getIngredient}
+     * with O(1) size pre-check (~66MB {@code ListItr} churn eliminated).
+     */
+    public static boolean mapContainsAllList(java.util.Map<?, ?> map, java.util.List<?> list) {
+        int n = list.size();
+        if (n > map.size()) {
+            return false;
+        }
+        for (int i = 0; i < n; i++) {
+            if (!map.containsKey(list.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<Object, Object> ITEM_CRAFTING_REMAINDER_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>(1024);
+
+    /**
+     * Caches item-level crafting remainders for NBT-less {@code ItemEmiStack}s in
+     * {@code EmiShapedRecipe.setRemainders} (~293MB {@code ItemStack}/{@code HashMap} churn eliminated).
+     */
+    public static Object getCachedItemRemainder(Object item) {
+        return item != null ? ITEM_CRAFTING_REMAINDER_CACHE.get(item) : null;
+    }
+
+    public static void putCachedItemRemainder(Object item, Object remainderStack) {
+        if (item != null && remainderStack != null) {
+            ITEM_CRAFTING_REMAINDER_CACHE.put(item, remainderStack);
+        }
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<Object, Object[]> ENCHANTED_BOOK_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>(128);
+
+    /**
+     * Caches {@code EmiAnvilEnchantRecipe.getBook()} results by {@code (Enchantment, level)}
+     * (~109MB {@code CompoundTag} churn eliminated across 24,000+ anvil recipes).
+     */
+    public static Object getCachedEnchantedBook(Object enchantment, int level) {
+        if (enchantment == null || level < 0 || level >= 16) {
+            return null;
+        }
+        Object[] arr = ENCHANTED_BOOK_CACHE.get(enchantment);
+        return arr != null ? arr[level] : null;
+    }
+
+    public static void putCachedEnchantedBook(Object enchantment, int level, Object bookStack) {
+        if (enchantment == null || level < 0 || level >= 16 || bookStack == null) {
+            return;
+        }
+        Object[] arr = ENCHANTED_BOOK_CACHE.computeIfAbsent(enchantment, k -> new Object[16]);
+        arr[level] = bookStack;
+    }
+
+    private static final int FAST_INT_MIN = -128;
+    private static final int FAST_INT_MAX = 383;
+    private static final String[] FAST_INT_STRINGS = buildFastIntStrings();
+
+    private static String[] buildFastIntStrings() {
+        String[] arr = new String[FAST_INT_MAX - FAST_INT_MIN + 1];
+        for (int i = FAST_INT_MIN; i <= FAST_INT_MAX; i++) {
+            arr[i - FAST_INT_MIN] = Integer.toString(i);
+        }
+        return arr;
+    }
+
+    /**
+     * Zero-allocation {@code String.valueOf(int)} for common Minecraft Y coordinates (-128..383),
+     * eliminating ~70MB of {@code Integer.toString} churn in JourneyMap {@code RegionData.setBlockState}.
+     */
+    public static String fastIntToString(int value) {
+        if (value >= FAST_INT_MIN && value <= FAST_INT_MAX) {
+            return FAST_INT_STRINGS[value - FAST_INT_MIN];
+        }
+        return Integer.toString(value);
+    }
+
+    private static final class WrappedRtEntry {
+        final String name;
+        final Object wrapped;
+        final Object extra;
+        final Object result;
+
+        WrappedRtEntry(String name, Object wrapped, Object extra, Object result) {
+            this.name = name;
+            this.wrapped = wrapped;
+            this.extra = extra;
+            this.result = result;
+        }
+    }
+
+    private static final WrappedRtEntry[] WRAPPED_RT_CACHE = new WrappedRtEntry[256];
+
+    private static int wrappedRtSlot(String name, Object wrapped, Object extra) {
+        int h = System.identityHashCode(wrapped) * 31 + System.identityHashCode(extra);
+        h ^= (name != null ? name.hashCode() : 0);
+        return (h ^ (h >>> 16)) & 255;
+    }
+
+    /**
+     * Bounded lock-free direct-mapped cache for Iris {@code OuterWrappedRenderType.wrapExactlyOnce}
+     * (~35MB per 10s Render-thread garbage eliminated permanently during entity rendering).
+     */
+    public static Object getCachedWrappedRenderType(String name, Object wrapped, Object extra) {
+        if (name == null || wrapped == null || extra == null) {
+            return null;
+        }
+        WrappedRtEntry e = WRAPPED_RT_CACHE[wrappedRtSlot(name, wrapped, extra)];
+        if (e != null && e.wrapped == wrapped && e.extra == extra && name.equals(e.name)) {
+            return e.result;
+        }
+        return null;
+    }
+
+    public static void putCachedWrappedRenderType(String name, Object wrapped, Object extra, Object result) {
+        if (name == null || wrapped == null || extra == null || result == null) {
+            return;
+        }
+        WRAPPED_RT_CACHE[wrappedRtSlot(name, wrapped, extra)] = new WrappedRtEntry(name, wrapped, extra, result);
+    }
+
+    /**
+     * Bulk scanline {@code BufferedImage.getRGB} reader for FTB Chunks {@code MapRegionData.read()}.
+     * Replaces 1.57M per-pixel {@code getRGB(x, y)} calls (~120MB {@code byte[4]} churn) with bulk reads.
+     * Returns {@code 1} if the caller must call {@code region.markDirty()}, {@code 0} if clean, or
+     * {@code -1} if any image is null/unexpected size (caller falls back to original loop).
+     */
+    public static int readFtbRegionImages(
+            Object dataObj,
+            Object foliageObj,
+            Object grassObj,
+            Object waterObj,
+            Object blocksObj,
+            short[] height,
+            short[] waterLightAndBiome,
+            int[] foliage,
+            int[] grass,
+            int[] water,
+            int version) {
+        if (!(dataObj instanceof java.awt.image.BufferedImage dataImg)
+                || !(foliageObj instanceof java.awt.image.BufferedImage foliageImg)
+                || !(grassObj instanceof java.awt.image.BufferedImage grassImg)
+                || !(waterObj instanceof java.awt.image.BufferedImage waterImg)
+                || !(blocksObj instanceof java.awt.image.BufferedImage blocksImg)) {
+            return -1;
+        }
+        if (dataImg.getWidth() < 512 || dataImg.getHeight() < 512
+                || foliageImg.getWidth() < 512 || foliageImg.getHeight() < 512
+                || grassImg.getWidth() < 512 || grassImg.getHeight() < 512
+                || waterImg.getWidth() < 512 || waterImg.getHeight() < 512
+                || blocksImg.getWidth() < 512 || blocksImg.getHeight() < 512) {
+            return -1;
+        }
+        foliageImg.getRGB(0, 0, 512, 512, foliage, 0, 512);
+        grassImg.getRGB(0, 0, 512, 512, grass, 0, 512);
+        waterImg.getRGB(0, 0, 512, 512, water, 0, 512);
+        int[] row = new int[512];
+        boolean dirty = false;
+        boolean oldVer = version < 3;
+        for (int y = 0; y < 512; y++) {
+            int base = y << 9;
+            dataImg.getRGB(0, y, 512, 1, row, 0, 512);
+            for (int x = 0; x < 512; x++) {
+                int idx = base + x;
+                int rgb = row[x];
+                short h = (short) ((rgb >> 16) & 0xFFFF);
+                if (oldVer && h == 0) {
+                    h = (short) -32767;
+                    dirty = true;
+                }
+                height[idx] = h;
+                waterLightAndBiome[idx] = (short) (rgb & 0xFFFF);
+            }
+            blocksImg.getRGB(0, y, 512, 1, row, 0, 512);
+            for (int x = 0; x < 512; x++) {
+                int idx = base + x;
+                int b = row[x];
+                foliage[idx] = (foliage[idx] & 0xFFFFFF) | (((b >> 16) & 0xFF) << 24);
+                grass[idx] = (grass[idx] & 0xFFFFFF) | (((b >> 8) & 0xFF) << 24);
+                water[idx] = (water[idx] & 0xFFFFFF) | ((b & 0xFF) << 24);
+            }
+        }
+        return dirty ? 1 : 0;
+    }
+
+    /**
+     * Zero-allocation bit-exact replacement for JourneyMap {@code RGB.multiply(int, int)}
+     * (~28MB {@code float[3]} churn eliminated during map rendering).
+     */
+    public static int fastRgbMultiply(int c1, int c2) {
+        float r = (((c1 >> 16) & 255) / 255.0f) * (((c2 >> 16) & 255) / 255.0f);
+        float g = (((c1 >> 8) & 255) / 255.0f) * (((c2 >> 8) & 255) / 255.0f);
+        float b = ((c1 & 255) / 255.0f) * ((c2 & 255) / 255.0f);
+        return 0xFF000000
+                | ((((int) ((double) (r * 255.0f) + 0.5d)) & 255) << 16)
+                | ((((int) ((double) (g * 255.0f) + 0.5d)) & 255) << 8)
+                | (((int) ((double) (b * 255.0f) + 0.5d)) & 255);
+    }
+
+    private static final class SubIdEntry {
+        final Object key;
+        final String value;
+
+        SubIdEntry(Object key, String value) {
+            this.key = key;
+            this.value = value;
+        }
+    }
+
+    private static final SubIdEntry[] EMI_SUB_ID_CACHE = new SubIdEntry[2048];
+
+    /**
+     * Bounded lock-free cache for {@code EmiUtil.subId(ResourceLocation)} ("/" + ns + "/" + path),
+     * eliminating ~41MB of repeated {@code StringConcatHelper} allocations during EMI/JEMI reload.
+     */
+    public static String fastEmiSubId(Object rl, String ns, String path) {
+        if (rl == null) {
+            return "/" + ns + "/" + path;
+        }
+        int h = System.identityHashCode(rl);
+        int slot = (h ^ (h >>> 11)) & 2047;
+        SubIdEntry e = EMI_SUB_ID_CACHE[slot];
+        if (e != null && e.key == rl) {
+            return e.value;
+        }
+        String val = "/" + ns + "/" + path;
+        EMI_SUB_ID_CACHE[slot] = new SubIdEntry(rl, val);
+        return val;
     }
 }

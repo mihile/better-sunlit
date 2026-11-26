@@ -19,9 +19,7 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -56,12 +54,17 @@ public final class GlslTransformDiskCache {
     private static final int KIND_IRIS_MAP = 1;
     private static final int KIND_CLRWL_STR = 2;
     private static final int KIND_CLRWL_FRAG = 3;
-    private static final int MAX_MEMORY_ENTRIES = 1024;
-    private static final int WRITE_QUEUE_CAPACITY = 512;
+    private static final int KIND_JCPP_STR = 4;
+    private static final int MAX_MEMORY_ENTRIES = 4096;
+    private static final int WRITE_QUEUE_CAPACITY = 1024;
 
     private static final ConcurrentHashMap<String, Map<PatchShaderType, String>> IRIS_MEM = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, String> CLRWL_STR_MEM = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, ClrwlTransformOutput> CLRWL_FRAG_MEM = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, String> JCPP_MEM = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> DISK_KEYS = ConcurrentHashMap.newKeySet();
+    private static volatile Object lastJcppDefinesRef;
+    private static volatile String lastJcppDefinesHash;
 
     private static final BlockingQueue<WriteOp> WRITE_QUEUE = new ArrayBlockingQueue<>(WRITE_QUEUE_CAPACITY);
     private static final AtomicBoolean WRITER_STARTED = new AtomicBoolean();
@@ -78,6 +81,10 @@ public final class GlslTransformDiskCache {
         IRIS_MEM.clear();
         CLRWL_STR_MEM.clear();
         CLRWL_FRAG_MEM.clear();
+        JCPP_MEM.clear();
+        DISK_KEYS.clear();
+        lastJcppDefinesRef = null;
+        lastJcppDefinesHash = null;
         PRELOADED.set(false);
     }
 
@@ -93,6 +100,11 @@ public final class GlslTransformDiskCache {
         }
     }
 
+    /**
+     * Indexes existing {@code *.bin} keys on disk without eagerly reading hundreds of MB of unused
+     * entries from other shaderpacks/settings into OldGen heap. Cache lookups hit {@link #DISK_KEYS}
+     * in O(1) and only load files actually requested by the active shaderpack.
+     */
     public static void preload() {
         if (!PRELOADED.compareAndSet(false, true)) {
             return;
@@ -101,26 +113,21 @@ public final class GlslTransformDiskCache {
         if (!Files.isDirectory(dir)) {
             return;
         }
-        int loaded = 0;
+        int indexed = 0;
         try (var stream = Files.newDirectoryStream(dir, "*.bin")) {
             for (Path file : stream) {
-                if (IRIS_MEM.size() + CLRWL_STR_MEM.size() + CLRWL_FRAG_MEM.size() >= MAX_MEMORY_ENTRIES) {
-                    break;
-                }
                 String fileName = file.getFileName().toString();
                 if (fileName.length() <= 4) {
                     continue;
                 }
-                String key = fileName.substring(0, fileName.length() - 4);
-                if (loadFileIntoMemory(key, file)) {
-                    loaded++;
-                }
+                DISK_KEYS.add(fileName.substring(0, fileName.length() - 4));
+                indexed++;
             }
         } catch (IOException e) {
-            LOG.debug("[BetterSunlit-GLSLCache] Preload scan failed: {}", e.toString());
+            LOG.debug("[BetterSunlit-GLSLCache] Preload index scan failed: {}", e.toString());
         }
-        if (loaded > 0) {
-            LOG.info("[BetterSunlit-GLSLCache] Preloaded {} cached GLSL transforms", loaded);
+        if (indexed > 0) {
+            LOG.info("[BetterSunlit-GLSLCache] Indexed {} cached GLSL transforms", indexed);
         }
     }
 
@@ -202,6 +209,10 @@ public final class GlslTransformDiskCache {
         return toHex(md.digest());
     }
 
+    private static boolean mayExistOnDisk(String key) {
+        return !PRELOADED.get() || DISK_KEYS.contains(key);
+    }
+
     public static EnumMap<PatchShaderType, String> getIris(String key) {
         if (key == null) {
             return null;
@@ -209,6 +220,9 @@ public final class GlslTransformDiskCache {
         Map<PatchShaderType, String> mem = IRIS_MEM.get(key);
         if (mem != null) {
             return copyEnumMap(mem);
+        }
+        if (!mayExistOnDisk(key)) {
+            return null;
         }
         Path file = cacheDir().resolve(key + ".bin");
         if (Files.isRegularFile(file) && loadFileIntoMemory(key, file)) {
@@ -228,6 +242,7 @@ public final class GlslTransformDiskCache {
         if (IRIS_MEM.size() < MAX_MEMORY_ENTRIES) {
             IRIS_MEM.putIfAbsent(key, snapshot);
         }
+        DISK_KEYS.add(key);
         enqueueWrite(new WriteOp(key, KIND_IRIS_MAP, snapshot));
     }
 
@@ -238,6 +253,9 @@ public final class GlslTransformDiskCache {
         String mem = CLRWL_STR_MEM.get(key);
         if (mem != null) {
             return mem;
+        }
+        if (!mayExistOnDisk(key)) {
+            return null;
         }
         Path file = cacheDir().resolve(key + ".bin");
         if (Files.isRegularFile(file) && loadFileIntoMemory(key, file)) {
@@ -253,6 +271,7 @@ public final class GlslTransformDiskCache {
         if (CLRWL_STR_MEM.size() < MAX_MEMORY_ENTRIES) {
             CLRWL_STR_MEM.putIfAbsent(key, result);
         }
+        DISK_KEYS.add(key);
         enqueueWrite(new WriteOp(key, KIND_CLRWL_STR, result));
     }
 
@@ -263,6 +282,9 @@ public final class GlslTransformDiskCache {
         ClrwlTransformOutput mem = CLRWL_FRAG_MEM.get(key);
         if (mem != null) {
             return mem;
+        }
+        if (!mayExistOnDisk(key)) {
+            return null;
         }
         Path file = cacheDir().resolve(key + ".bin");
         if (Files.isRegularFile(file) && loadFileIntoMemory(key, file)) {
@@ -282,7 +304,79 @@ public final class GlslTransformDiskCache {
         if (CLRWL_FRAG_MEM.size() < MAX_MEMORY_ENTRIES) {
             CLRWL_FRAG_MEM.putIfAbsent(key, snapshot);
         }
+        DISK_KEYS.add(key);
         enqueueWrite(new WriteOp(key, KIND_CLRWL_FRAG, snapshot));
+    }
+
+    public static String keyForJcpp(String source, Iterable<?> environmentDefines) {
+        if (source == null
+                || source.contains("#warning IRIS_JCPP_GLSL_VERSION")
+                || source.contains("#warning IRIS_JCPP_GLSL_EXTENSION")) {
+            return null;
+        }
+        String defHash;
+        if (environmentDefines != null && environmentDefines == lastJcppDefinesRef && lastJcppDefinesHash != null) {
+            defHash = lastJcppDefinesHash;
+        } else {
+            ArrayList<String> sorted = new ArrayList<>(128);
+            if (environmentDefines != null) {
+                for (Object item : environmentDefines) {
+                    if (item instanceof net.irisshaders.iris.helpers.StringPair pair) {
+                        String k = pair.key() != null ? pair.key() : "";
+                        String v = pair.value() != null ? pair.value() : "";
+                        sorted.add(k + '\0' + v);
+                    } else if (item != null) {
+                        sorted.add(item.toString());
+                    }
+                }
+            }
+            sorted.sort(Comparator.naturalOrder());
+            MessageDigest dmd = sha256();
+            writeStr(dmd, "jcpp-defs-v2");
+            writeInt(dmd, sorted.size());
+            for (int i = 0, n = sorted.size(); i < n; i++) {
+                writeStr(dmd, sorted.get(i));
+            }
+            defHash = toHex(dmd.digest());
+            if (environmentDefines != null) {
+                lastJcppDefinesHash = defHash;
+                lastJcppDefinesRef = environmentDefines;
+            }
+        }
+        MessageDigest md = sha256();
+        writeStr(md, "jcpp-v2");
+        writeStr(md, defHash);
+        writeStr(md, source);
+        return toHex(md.digest());
+    }
+
+    public static String getJcpp(String key) {
+        if (key == null) {
+            return null;
+        }
+        String mem = JCPP_MEM.get(key);
+        if (mem != null) {
+            return mem;
+        }
+        if (!mayExistOnDisk(key)) {
+            return null;
+        }
+        Path file = cacheDir().resolve(key + ".bin");
+        if (Files.isRegularFile(file) && loadFileIntoMemory(key, file)) {
+            return JCPP_MEM.get(key);
+        }
+        return null;
+    }
+
+    public static void putJcpp(String key, String result) {
+        if (key == null || result == null) {
+            return;
+        }
+        if (JCPP_MEM.size() < MAX_MEMORY_ENTRIES) {
+            JCPP_MEM.putIfAbsent(key, result);
+        }
+        DISK_KEYS.add(key);
+        enqueueWrite(new WriteOp(key, KIND_JCPP_STR, result));
     }
 
     public static void flushWritesForTests() throws InterruptedException {
@@ -353,7 +447,7 @@ public final class GlslTransformDiskCache {
                             writeNullableUtf(out, e.getValue());
                         }
                     }
-                    case KIND_CLRWL_STR -> writeNullableUtf(out, (String) op.payload);
+                    case KIND_CLRWL_STR, KIND_JCPP_STR -> writeNullableUtf(out, (String) op.payload);
                     case KIND_CLRWL_FRAG -> {
                         ClrwlTransformOutput frag = (ClrwlTransformOutput) op.payload;
                         writeNullableUtf(out, frag.code());
@@ -377,51 +471,69 @@ public final class GlslTransformDiskCache {
     }
 
     private static boolean loadFileIntoMemory(String key, Path file) {
-        try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(file)))) {
-            if (in.readInt() != MAGIC) {
+        byte[] raw;
+        try {
+            raw = Files.readAllBytes(file);
+        } catch (IOException e) {
+            return false;
+        }
+        if (raw.length < 5) {
+            return false;
+        }
+        int[] pos = new int[] {0};
+        try {
+            if (readIntBE(raw, pos) != MAGIC) {
                 return false;
             }
-            int kind = in.readUnsignedByte();
+            int kind = raw[pos[0]++] & 0xFF;
             switch (kind) {
                 case KIND_IRIS_MAP -> {
-                    int size = in.readInt();
+                    int size = readIntBE(raw, pos);
                     if (size < 0 || size > PatchShaderType.values().length) {
                         return false;
                     }
                     PatchShaderType[] types = PatchShaderType.values();
                     EnumMap<PatchShaderType, String> map = new EnumMap<>(PatchShaderType.class);
                     for (int i = 0; i < size; i++) {
-                        int ord = in.readInt();
+                        int ord = readIntBE(raw, pos);
                         if (ord < 0 || ord >= types.length) {
                             return false;
                         }
-                        String val = readNullableUtf(in);
+                        String val = readNullableUtfDirect(raw, pos);
                         map.put(types[ord], val);
                     }
                     IRIS_MEM.putIfAbsent(key, map);
                     return true;
                 }
                 case KIND_CLRWL_STR -> {
-                    String val = readNullableUtf(in);
+                    String val = readNullableUtfDirect(raw, pos);
                     if (val == null) {
                         return false;
                     }
                     CLRWL_STR_MEM.putIfAbsent(key, val);
                     return true;
                 }
+                case KIND_JCPP_STR -> {
+                    String val = readNullableUtfDirect(raw, pos);
+                    if (val == null) {
+                        return false;
+                    }
+                    JCPP_MEM.putIfAbsent(key, val);
+                    return true;
+                }
                 case KIND_CLRWL_FRAG -> {
-                    String code = readNullableUtf(in);
+                    String code = readNullableUtfDirect(raw, pos);
                     if (code == null) {
                         return false;
                     }
-                    int count = in.readInt();
+                    int count = readIntBE(raw, pos);
                     if (count < 0 || count > 64) {
                         return false;
                     }
                     Map<Integer, String> outputs = new HashMap<>(count * 2 + 1);
                     for (int i = 0; i < count; i++) {
-                        int k = in.readInt();
-                        String v = readNullableUtf(in);
+                        int k = readIntBE(raw, pos);
+                        String v = readNullableUtfDirect(raw, pos);
                         outputs.put(k, v);
                     }
                     CLRWL_FRAG_MEM.putIfAbsent(key, new ClrwlTransformOutput(code, Map.copyOf(outputs)));
@@ -431,11 +543,37 @@ public final class GlslTransformDiskCache {
                     return false;
                 }
             }
-        } catch (EOFException e) {
-            return false;
         } catch (IOException e) {
             return false;
         }
+    }
+
+    private static int readIntBE(byte[] b, int[] pos) throws EOFException {
+        int p = pos[0];
+        if (p + 4 > b.length) {
+            throw new EOFException();
+        }
+        pos[0] = p + 4;
+        return ((b[p] & 0xFF) << 24)
+                | ((b[p + 1] & 0xFF) << 16)
+                | ((b[p + 2] & 0xFF) << 8)
+                | (b[p + 3] & 0xFF);
+    }
+
+    private static String readNullableUtfDirect(byte[] b, int[] pos) throws IOException {
+        int len = readIntBE(b, pos);
+        if (len < 0) {
+            return null;
+        }
+        if (len > 16 * 1024 * 1024) {
+            throw new IOException("Corrupt GLSL entry size: " + len);
+        }
+        int p = pos[0];
+        if (p + len > b.length) {
+            throw new EOFException("Truncated GLSL cache entry");
+        }
+        pos[0] = p + len;
+        return new String(b, p, len, StandardCharsets.UTF_8);
     }
 
     private static void writeNullableUtf(DataOutputStream out, String s) throws IOException {
@@ -446,21 +584,6 @@ public final class GlslTransformDiskCache {
         byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
         out.writeInt(bytes.length);
         out.write(bytes);
-    }
-
-    private static String readNullableUtf(DataInputStream in) throws IOException {
-        int len = in.readInt();
-        if (len < 0) {
-            return null;
-        }
-        if (len > 16 * 1024 * 1024) {
-            throw new IOException("Corrupt GLSL entry size: " + len);
-        }
-        byte[] bytes = in.readNBytes(len);
-        if (bytes.length != len) {
-            throw new EOFException("Truncated GLSL cache entry");
-        }
-        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     private static boolean hashParameters(MessageDigest md, Parameters p) {

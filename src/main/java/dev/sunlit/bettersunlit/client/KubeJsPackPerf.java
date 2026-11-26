@@ -59,6 +59,7 @@ public final class KubeJsPackPerf {
     private static volatile boolean EARLY_PREFETCH_SCHEDULED;
     private static final ConcurrentHashMap<Path, JsonObject> PRELOADED_LANG_FILES = new ConcurrentHashMap<>(1024);
     private static final ThreadLocal<JsonObject> CURRENT_PRELOADED_LANG = new ThreadLocal<>();
+    private static final JsonObject EMPTY_LANG_JSON = new JsonObject();
     private static final ConcurrentHashMap<ResourceLocation, JsonObject> DIRECT_LANG_JSON_BY_LOC =
             new ConcurrentHashMap<>(512);
 
@@ -226,11 +227,18 @@ public final class KubeJsPackPerf {
             } catch (RuntimeException ignored) {
             }
         }
-        if (file != null && !PRELOADED_LANG_FILES.isEmpty()) {
-            JsonObject preloaded = PRELOADED_LANG_FILES.remove(file.toAbsolutePath().normalize());
-            if (preloaded != null) {
-                CURRENT_PRELOADED_LANG.set(preloaded);
+        if (file != null) {
+            Path fileName = file.getFileName();
+            if (fileName != null && isOtherLocaleJson(fileName.toString(), resolveActiveLangJsonName())) {
+                CURRENT_PRELOADED_LANG.set(EMPTY_LANG_JSON);
                 return null;
+            }
+            if (!PRELOADED_LANG_FILES.isEmpty()) {
+                JsonObject preloaded = PRELOADED_LANG_FILES.remove(file.toAbsolutePath().normalize());
+                if (preloaded != null) {
+                    CURRENT_PRELOADED_LANG.set(preloaded);
+                    return null;
+                }
             }
         }
         return Files.newBufferedReader(file);

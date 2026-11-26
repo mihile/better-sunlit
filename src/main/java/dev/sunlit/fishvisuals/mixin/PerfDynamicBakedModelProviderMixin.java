@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.embeddedt.modernfix.dynamicresources.DynamicBakedModelProvider;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -24,10 +25,12 @@ import java.util.function.Function;
 
 /**
  * Adds lazy swap registration and block-ID-keyed overrides to ModernFix's
- * {@code DynamicBakedModelProvider}.
+ * {@code DynamicBakedModelProvider}, and replaces its globally synchronized
+ * {@code permanentOverrides} map with a lock-free null-safe concurrent map.
  */
 @Mixin(value = DynamicBakedModelProvider.class, remap = false)
 public abstract class PerfDynamicBakedModelProviderMixin implements DynamicLazyModelStore {
+    @Mutable
     @Shadow
     @Final
     private Map<ResourceLocation, BakedModel> permanentOverrides;
@@ -51,6 +54,7 @@ public abstract class PerfDynamicBakedModelProviderMixin implements DynamicLazyM
             ModelBakery bakery,
             Map<?, BakedModel> bakedCache,
             CallbackInfo ci) {
+        this.permanentOverrides = DynamicLazyModelHelper.newConcurrentOverridesMap(this.permanentOverrides);
         DynamicLazyModelHelper.setLastStore(this);
     }
 
