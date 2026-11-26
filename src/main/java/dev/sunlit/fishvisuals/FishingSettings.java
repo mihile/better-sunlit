@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import dev.sunlit.bettersunlit.ServerUpdateManager;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -86,16 +87,22 @@ public final class FishingSettings {
     }
 
     public static void register(RegisterCommandsEvent event) {
-        registerCommands(event.getDispatcher());
+        registerCommands(event.getDispatcher(), ServerUpdateManager.isServerChannel());
     }
 
     public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.m_82127_("bettersunlit")
+        registerCommands(dispatcher, ServerUpdateManager.isServerChannel());
+    }
+
+    public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, boolean includeServerUpdate) {
+        var root = Commands.m_82127_("bettersunlit")
             .requires(source -> source.m_6761_(2) || source.m_81377_().m_129792_())
             .executes(context -> {
                 context.getSource().m_288197_(() -> Component.m_264642_(
-                        "better_sunlit.command.server_usage",
-                        "Better Sunlit | /bettersunlit realfishing <on|off|freshSec fadingSec stepSec> (%s)",
+                        includeServerUpdate ? "better_sunlit.command.server_usage" : "better_sunlit.command.singleplayer_usage",
+                        includeServerUpdate
+                                ? "Better Sunlit | /bettersunlit realfishing <on|off|freshSec fadingSec stepSec> (%s) | /bettersunlit update"
+                                : "Better Sunlit | /bettersunlit realfishing <on|off|freshSec fadingSec stepSec> (%s)",
                         current.descriptionComponent()), false);
                 return 1;
             })
@@ -118,6 +125,12 @@ public final class FishingSettings {
                             IntegerArgumentType.getInteger(context, "fadingSeconds") * 20,
                             IntegerArgumentType.getInteger(context, "stepSeconds") * 20);
                     return update(context.getSource(), new Settings(value, current.enabled()));
-                }))))));
+                })))));
+        if (includeServerUpdate) {
+            root.then(Commands.m_82127_("update")
+                .requires(source -> source.m_6761_(2))
+                .executes(context -> ServerUpdateManager.executeUpdateCommand(context.getSource())));
+        }
+        dispatcher.register(root);
     }
 }

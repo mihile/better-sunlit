@@ -252,15 +252,20 @@ public final class RealFishingTests {
         check("PreventRemoteMovement".equals(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT),
                 "Magnet protection key must match Forge/SimpleMagnets/SophisticatedCore convention");
 
-        // Verify unified /bettersunlit client+server command trees, Forge merge, and client->server passthrough
+        // Verify unified /bettersunlit client+server command trees, Forge merge, /bettersunlit update, and client->server passthrough
         var serverDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
-        FishingSettings.registerCommands(serverDisp);
+        FishingSettings.registerCommands(serverDisp, true);
         var clientDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
         dev.sunlit.fishvisuals.client.FishPondVisuals.registerClientCommands(clientDisp);
         check(serverDisp.getRoot().getChild("bettersunlit") != null
                 && serverDisp.getRoot().getChild("realfishing") == null
-                && serverDisp.getRoot().getChild("bettersunlit").getChild("realfishing") != null,
-                "Server command must be unified under /bettersunlit realfishing");
+                && serverDisp.getRoot().getChild("bettersunlit").getChild("realfishing") != null
+                && serverDisp.getRoot().getChild("bettersunlit").getChild("update") != null,
+                "Server command must be unified under /bettersunlit (realfishing + update)");
+        var spDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+        FishingSettings.registerCommands(spDisp, false);
+        check(spDisp.getRoot().getChild("bettersunlit").getChild("update") == null,
+                "Singleplayer/client-channel server dispatcher must not expose /bettersunlit update");
         check(clientDisp.getRoot().getChild("bettersunlit") != null
                 && clientDisp.getRoot().getChild("fishpond") == null
                 && clientDisp.getRoot().getChild("bettersunlit").getChild("fishpond") != null,
@@ -275,11 +280,13 @@ public final class RealFishingTests {
         net.minecraftforge.server.command.CommandHelper.mergeCommandNode(
                 clientDisp.getRoot(), mergedRoot, new java.util.IdentityHashMap<>(), null, ctx -> 0, p -> p);
         var mergedBs = mergedRoot.getChild("bettersunlit");
-        check(mergedBs != null && mergedBs.getChild("fishpond") != null && mergedBs.getChild("realfishing") != null,
-                "Merged /bettersunlit root must expose both fishpond and realfishing subcommands");
-        // Verify client dispatcher rejects /bettersunlit realfishing ... with UNKNOWN_ARGUMENT/COMMAND so
-        // Forge ClientCommandHandler.runCommand forwards it cleanly to the server!
-        for (String serverSub : new String[]{"bettersunlit realfishing", "bettersunlit realfishing on", "bettersunlit realfishing 3 4 1"}) {
+        check(mergedBs != null && mergedBs.getChild("fishpond") != null
+                && mergedBs.getChild("realfishing") != null && mergedBs.getChild("update") != null,
+                "Merged /bettersunlit root must expose fishpond, realfishing, and update subcommands");
+        // Verify client dispatcher rejects server subcommands with UNKNOWN_ARGUMENT/COMMAND so
+        // Forge ClientCommandHandler.runCommand forwards them cleanly to the server!
+        for (String serverSub : new String[]{"bettersunlit realfishing", "bettersunlit realfishing on",
+                "bettersunlit realfishing 3 4 1", "bettersunlit update"}) {
             try {
                 clientDisp.execute(serverSub, null);
                 throw new AssertionError("Client dispatcher unexpectedly handled server subcommand: " + serverSub);
@@ -290,7 +297,14 @@ public final class RealFishingTests {
                         "Client dispatcher must forward '" + serverSub + "' to server, got: " + type);
             }
         }
-        System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, unified /bettersunlit commands, and protocol 3 catch packets");
+        // Verify OP notification messages contain command and restart warning
+        var availMsg = dev.sunlit.bettersunlit.ServerUpdateManager.buildAvailableMessage("2026.11.26.6", "2026.11.26.7").getString();
+        var promptMsg = dev.sunlit.bettersunlit.ServerUpdateManager.buildPromptMessage().getString();
+        check(availMsg.contains("2026.11.26.6") && availMsg.contains("2026.11.26.7"),
+                "Update notification must display current and latest version");
+        check(promptMsg.contains("/bettersunlit update") && promptMsg.toLowerCase(java.util.Locale.ROOT).contains("restart"),
+                "Update prompt must mention /bettersunlit update and server restart warning");
+        System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, unified /bettersunlit commands + server update, and protocol 3 catch packets");
     }
 
     private static void check(boolean condition, String message) {
