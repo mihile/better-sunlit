@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.math.Axis;
 import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.FishPondSync;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
@@ -341,6 +342,8 @@ public final class FishPondVisuals {
                 double rz = Mth.m_14139_(partialTick, s.prevZ, s.z);
                 float yaw = lerpAngle(partialTick, s.prevYaw, s.yaw);
                 float pitch = Mth.m_14179_(partialTick, s.prevPitch, s.pitch);
+                float roll = Mth.m_14179_(partialTick, s.prevRoll, s.roll);
+                float turnBend = Mth.m_14179_(partialTick, s.prevTurnBend, s.turnBend);
                 float fishScale = scale * s.individualScale;
                 BlockPos lightPos = BlockPos.m_274561_(rx, Math.min(pond.pos.m_123342_() + 0.85D, ry + 0.15D), rz);
                 int light = LevelRenderer.m_109541_(level, lightPos);
@@ -348,9 +351,15 @@ public final class FishPondVisuals {
                 pose.m_85836_();
                 try {
                     pose.m_85837_(rx - camPos.f_82479_, ry - camPos.f_82480_, rz - camPos.f_82481_);
+                    if (Math.abs(roll) > 0.05F) {
+                        // Bank gently around the fish's own longitudinal forward axis (-sin(yaw), 0, cos(yaw)).
+                        pose.m_252781_(Axis.f_252436_.m_252977_(-yaw));
+                        pose.m_252781_(Axis.f_252403_.m_252977_(roll));
+                        pose.m_252781_(Axis.f_252436_.m_252977_(yaw));
+                    }
                     if (isCustom) {
                         float animAge = (s.animTicks + partialTick) * s.swimSpeedMul + s.animPhase;
-                        CustomFishModels.renderSwimming(pond.modelId, yaw, pitch, animAge, fishScale, pose, buffers, light);
+                        CustomFishModels.renderSwimming(pond.modelId, yaw, pitch, animAge, fishScale, turnBend, pose, buffers, light);
                     } else {
                         LivingEntity proxy = getOrCreateSwimmerProxy(level, pond.modelId, s);
                         if (proxy == null) continue;
@@ -376,7 +385,13 @@ public final class FishPondVisuals {
                         proxy.f_20885_ = s.yaw;
                         proxy.f_20886_ = s.prevYaw;
 
-                        renderer.m_7392_(proxy, yaw, partialTick, pose, buffers, light);
+                        FishMeshBend mesh = Math.abs(turnBend) > 0.025F
+                                ? new FishMeshBend(buffers, pose.m_85850_().m_252922_(), yaw)
+                                : null;
+                        renderer.m_7392_(proxy, yaw, partialTick, pose, mesh == null ? buffers : mesh, light);
+                        if (mesh != null) {
+                            mesh.draw(turnCurve(turnBend));
+                        }
                     }
                     drewAny = true;
                 } catch (RuntimeException ex) {
@@ -443,8 +458,23 @@ public final class FishPondVisuals {
     }
 
     private static float lerpAngle(float t, float from, float to) {
-        float delta = (((to - from) % 360.0F) + 540.0F) % 360.0F - 180.0F;
+        float delta = wrapDegrees(to - from);
         return from + delta * t;
+    }
+
+    static float wrapDegrees(float deg) {
+        float wrapped = ((deg % 360.0F) + 540.0F) % 360.0F - 180.0F;
+        return wrapped == -180.0F ? 180.0F : wrapped;
+    }
+
+    /** Crisp C-whip spine profile engaged briefly during snappy fish flick-turns. */
+    static FishFlopMotion turnCurve(float bend) {
+        return new FishFlopMotion(
+                -0.20F * bend,
+                 0.12F * bend,
+                 0.46F * bend,
+                 0.80F * bend
+        );
     }
 
     /** Computes the 3x4 water basin bounds behind a society:fish_pond block, matching global.validatePond. */
@@ -561,39 +591,28 @@ public final class FishPondVisuals {
             Swimmer s = new Swimmer();
             s.animTicks = rng.nextInt(160);
             s.animPhase = rng.nextFloat() * 200.0F;
-            s.swimSpeedMul = 0.85F + rng.nextFloat() * 0.30F;
+            s.swimSpeedMul = 0.85F + rng.nextFloat() * 0.25F;
             s.individualScale = 0.93F + rng.nextFloat() * 0.14F;
-            s.speed = 0.020D + rng.nextDouble() * 0.014D;
+            s.speed = 0.015D + rng.nextDouble() * 0.008D;
+            s.turnAgility = 30.0F + rng.nextFloat() * 8.0F;
             s.orbitPhase = (float) (index * 2.399963D + rng.nextDouble() * 0.6D);
 
-            double margin = 0.48D;
+            double margin = 0.36D;
             double sx = Mth.m_14139_(rng.nextDouble(), bounds.minX + margin, bounds.maxX - margin);
             double sy = Mth.m_14139_(rng.nextDouble(), bounds.minY, bounds.maxY);
             double sz = Mth.m_14139_(rng.nextDouble(), bounds.minZ + margin, bounds.maxZ - margin);
             s.x = s.prevX = sx;
             s.y = s.prevY = sy;
             s.z = s.prevZ = sz;
-            s.yaw = s.prevYaw = rng.nextFloat() * 360.0F;
-            pickTarget(s, margin);
-            return s;
-        }
-
-        private void pickTarget(Swimmer s, double margin) {
-            double minX = bounds.minX + margin, maxX = bounds.maxX - margin;
-            double minZ = bounds.minZ + margin, maxZ = bounds.maxZ - margin;
-            // Prefer a waypoint at least 0.7 blocks away so turns feel unhurried and fluid.
-            for (int attempt = 0; attempt < 6; attempt++) {
-                double tx = minX + rng.nextDouble() * Math.max(0.05D, maxX - minX);
-                double tz = minZ + rng.nextDouble() * Math.max(0.05D, maxZ - minZ);
-                double ddx = tx - s.x, ddz = tz - s.z;
-                if (ddx * ddx + ddz * ddz >= 0.49D || attempt == 5) {
-                    s.targetX = tx;
-                    s.targetZ = tz;
-                    break;
-                }
+            s.yaw = s.prevYaw = rng.nextFloat() * 360.0F - 180.0F;
+            s.idleHeading = s.yaw;
+            pickTarget(s, bounds, margin, rng);
+            if (rng.nextFloat() < 0.45F) {
+                // Start some fish already calmly hovering so a freshly loaded pond feels serene.
+                s.pauseTicks = 25 + rng.nextInt(70);
+                s.idleHeading = s.yaw;
             }
-            s.targetY = bounds.minY + rng.nextDouble() * Math.max(0.02D, bounds.maxY - bounds.minY);
-            s.pauseTicks = 0;
+            return s;
         }
 
         void tick(ClientLevel level, BlockState state, long gameTime, Mode activeMode) {
@@ -603,41 +622,14 @@ public final class FishPondVisuals {
             }
             if (!active || swimmers.isEmpty()) return;
 
-            double margin = activeMode == Mode.ADAPTIVE && swimmers.size() >= 6 ? 0.38D : 0.46D;
-            double minX = bounds.minX + margin, maxX = bounds.maxX - margin;
-            double minZ = bounds.minZ + margin, maxZ = bounds.maxZ - margin;
+            double margin = activeMode == Mode.ADAPTIVE && swimmers.size() >= 6 ? 0.32D : 0.36D;
 
-            // Free swimming (SWIM or ADAPTIVE): smooth waypoint steering + gentle boids separation
-            double sepRadius = activeMode == Mode.ADAPTIVE && swimmers.size() >= 6 ? 0.56D : 0.70D;
+            // Free swimming (SWIM or ADAPTIVE): calm resting, snappy flick-turns, kick-and-glide swimming & wall loitering
+            double sepRadius = activeMode == Mode.ADAPTIVE && swimmers.size() >= 6 ? 0.52D : 0.64D;
             double sepRadiusSq = sepRadius * sepRadius;
 
             for (int i = 0; i < swimmers.size(); i++) {
                 Swimmer s = swimmers.get(i);
-                s.prevX = s.x; s.prevY = s.y; s.prevZ = s.z;
-                s.prevYaw = s.yaw; s.prevPitch = s.pitch;
-                s.animTicks = advanceAnimTicks(s.animTicks);
-                if (s.animTicks == 0) {
-                    // Reset proxy on rare wrap (~100 min) so GeckoLib never sees a negative tick delta.
-                    s.proxy = null;
-                }
-
-                double dx = s.targetX - s.x;
-                double dy = s.targetY - s.y;
-                double dz = s.targetZ - s.z;
-                double horizDistSq = dx * dx + dz * dz;
-
-                if (horizDistSq < 0.09D) {
-                    if (s.pauseTicks <= 0) {
-                        s.pauseTicks = 12 + rng.nextInt(26);
-                    } else if (--s.pauseTicks == 0) {
-                        pickTarget(s, margin);
-                        dx = s.targetX - s.x;
-                        dy = s.targetY - s.y;
-                        dz = s.targetZ - s.z;
-                        horizDistSq = dx * dx + dz * dz;
-                    }
-                }
-
                 // Pairwise separation push so 7~10 fish never stack into a single blob
                 double sepX = 0.0D, sepZ = 0.0D;
                 for (int j = 0; j < swimmers.size(); j++) {
@@ -653,47 +645,18 @@ public final class FishPondVisuals {
                         sepZ += (oz / od) * push;
                     }
                 }
-
-                double moveSpeed = s.pauseTicks > 0 ? s.speed * 0.25D : s.speed;
-                double steerX = (horizDistSq > 1.0e-5D ? dx / Math.sqrt(horizDistSq) : 0.0D) + sepX * 0.85D;
-                double steerZ = (horizDistSq > 1.0e-5D ? dz / Math.sqrt(horizDistSq) : 0.0D) + sepZ * 0.85D;
-                if (steerX * steerX + steerZ * steerZ > 1.0e-5D) {
-                    float desiredYaw = (float) Math.toDegrees(Math.atan2(-steerX, steerZ));
-                    s.yaw = stepAngle(s.yaw, desiredYaw, s.pauseTicks > 0 ? 3.5F : 6.2F);
+                stepSwimmer(s, bounds, margin, sepX, sepZ, rng);
+                if (s.animTicks == 0) {
+                    // Reset proxy on rare wrap (~100 min) so GeckoLib never sees a negative tick delta.
+                    s.proxy = null;
                 }
-
-                double rad = Math.toRadians(s.yaw);
-                double stepX = -Math.sin(rad) * moveSpeed;
-                double stepZ = Math.cos(rad) * moveSpeed;
-                double stepY = Mth.m_14008_(dy * 0.06D, -0.010D, 0.010D);
-
-                double nextX = s.x + stepX;
-                double nextZ = s.z + stepZ;
-                boolean hitWall = false;
-                if (nextX < minX || nextX > maxX) {
-                    nextX = Mth.m_14008_(nextX, minX, maxX);
-                    hitWall = true;
-                }
-                if (nextZ < minZ || nextZ > maxZ) {
-                    nextZ = Mth.m_14008_(nextZ, minZ, maxZ);
-                    hitWall = true;
-                }
-                double nextY = Mth.m_14008_(s.y + stepY + Math.sin(s.animTicks * 0.08D + s.orbitPhase) * 0.002D, bounds.minY, bounds.maxY);
-                s.vx = nextX - s.x;
-                s.vy = nextY - s.y;
-                s.vz = nextZ - s.z;
-                s.x = nextX;
-                s.y = nextY;
-                s.z = nextZ;
-                if (hitWall) {
-                    pickTarget(s, margin);
-                }
-                float desiredPitch = (float) Mth.m_14008_(-stepY * 450.0D, -12.0D, 12.0D);
-                s.pitch = s.pitch + (desiredPitch - s.pitch) * 0.18F;
-
                 if (s.proxy != null) {
                     s.proxy.f_19797_ = s.animTicks;
-                    float walkSpeed = s.pauseTicks > 0 ? 0.24F : 0.48F;
+                    float flickEffort = Math.min(1.0F, Math.abs(s.yawVel) / 26.0F);
+                    float speedRatio = (float) Math.min(1.4D, Math.hypot(s.vx, s.vz) / Math.max(0.008D, s.speed));
+                    float walkSpeed = s.pauseTicks > 0
+                            ? Mth.m_14036_(0.13F + speedRatio * 0.14F + flickEffort * 0.45F, 0.12F, 0.68F)
+                            : Mth.m_14036_(0.20F + speedRatio * 0.24F + flickEffort * 0.42F, 0.15F, 0.80F);
                     s.proxy.f_267362_.m_267566_(walkSpeed, 0.4F);
                 }
             }
@@ -746,31 +709,296 @@ public final class FishPondVisuals {
                     s.x = s.prevX = Mth.m_14008_(s.x, bounds.minX + 0.48D, bounds.maxX - 0.48D);
                     s.y = s.prevY = Mth.m_14008_(s.y, bounds.minY, bounds.maxY);
                     s.z = s.prevZ = Mth.m_14008_(s.z, bounds.minZ + 0.48D, bounds.maxZ - 0.48D);
-                    pickTarget(s, 0.48D);
+                    pickTarget(s, bounds, 0.48D, rng);
                 }
             }
         }
-
-        private static float stepAngle(float current, float target, float maxStep) {
-            float delta = (((target - current) % 360.0F) + 540.0F) % 360.0F - 180.0F;
-            return current + Mth.m_14036_(delta, -maxStep, maxStep);
-        }
     }
 
-    private static final class Swimmer {
-        double x, y, z;
-        double prevX, prevY, prevZ;
-        double vx, vy, vz;
-        double targetX, targetY, targetZ;
-        float yaw, prevYaw;
-        float pitch, prevPitch;
-        int animTicks;
-        float animPhase;
-        float swimSpeedMul;
-        float individualScale;
-        double speed;
-        float orbitPhase;
-        int pauseTicks;
+    static void pickTarget(Swimmer s, PondBounds bounds, double margin, Random rng) {
+        double minX = bounds.minX + margin;
+        double maxX = bounds.maxX - margin;
+        double minZ = bounds.minZ + margin;
+        double maxZ = bounds.maxZ - margin;
+        double bestX = Mth.m_14008_(s.x, minX, maxX);
+        double bestZ = Mth.m_14008_(s.z, minZ, maxZ);
+        double bestScore = Double.NEGATIVE_INFINITY;
+        // Sample several candidate waypoints across the basin (including near walls) and mildly prefer
+        // natural forward/angled glides over constant 180-degree reversals.
+        boolean preferGentle = rng.nextFloat() < 0.72F;
+        for (int attempt = 0; attempt < 8; attempt++) {
+            double tx = minX + rng.nextDouble() * Math.max(0.05D, maxX - minX);
+            double tz = minZ + rng.nextDouble() * Math.max(0.05D, maxZ - minZ);
+            double ddx = tx - s.x, ddz = tz - s.z;
+            double dist = Math.hypot(ddx, ddz);
+            if (dist < 0.55D && attempt < 7) continue;
+            float angleTo = (float) Math.toDegrees(Math.atan2(-ddx, ddz));
+            float absTurn = Math.abs(wrapDegrees(angleTo - s.yaw));
+            double score = Math.min(dist, 2.0D) + rng.nextDouble() * 0.45D;
+            if (preferGentle) {
+                if (absTurn <= 85.0F) score += 1.15D;
+                else if (absTurn >= 135.0F) score -= 0.75D;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestX = tx;
+                bestZ = tz;
+            }
+        }
+        s.targetX = bestX;
+        s.targetZ = bestZ;
+        s.targetY = bounds.minY + rng.nextDouble() * Math.max(0.02D, bounds.maxY - bounds.minY);
+        s.pauseTicks = 0;
+        s.turnDirection = 0;
+    }
+
+    private static void pickWallFollowTarget(Swimmer s, PondBounds bounds, double margin,
+                                             boolean hitX, boolean hitZ, Random rng) {
+        double minX = bounds.minX + margin;
+        double maxX = bounds.maxX - margin;
+        double minZ = bounds.minZ + margin;
+        double maxZ = bounds.maxZ - margin;
+        double rad = Math.toRadians(s.yaw);
+        double fwdX = -Math.sin(rad);
+        double fwdZ = Math.cos(rad);
+        double tx = s.x;
+        double tz = s.z;
+        if (hitX && !hitZ) {
+            // Glide calmly along the Z wall in whichever direction is closer to current heading.
+            double dirZ = Math.abs(fwdZ) > 0.15D ? Math.signum(fwdZ) : (rng.nextBoolean() ? 1.0D : -1.0D);
+            double span = 0.75D + rng.nextDouble() * 1.15D;
+            tz = Mth.m_14008_(s.z + dirZ * span, minZ + 0.05D, maxZ - 0.05D);
+            if (Math.abs(tz - s.z) < 0.35D) {
+                tz = Mth.m_14008_(s.z - dirZ * span, minZ + 0.05D, maxZ - 0.05D);
+            }
+            double inward = s.x <= (minX + maxX) * 0.5D ? 1.0D : -1.0D;
+            tx = Mth.m_14008_(s.x + inward * (0.08D + rng.nextDouble() * 0.30D), minX, maxX);
+        } else if (hitZ && !hitX) {
+            // Glide calmly along the X wall.
+            double dirX = Math.abs(fwdX) > 0.15D ? Math.signum(fwdX) : (rng.nextBoolean() ? 1.0D : -1.0D);
+            double span = 0.65D + rng.nextDouble() * 1.05D;
+            tx = Mth.m_14008_(s.x + dirX * span, minX + 0.05D, maxX - 0.05D);
+            if (Math.abs(tx - s.x) < 0.35D) {
+                tx = Mth.m_14008_(s.x - dirX * span, minX + 0.05D, maxX - 0.05D);
+            }
+            double inward = s.z <= (minZ + maxZ) * 0.5D ? 1.0D : -1.0D;
+            tz = Mth.m_14008_(s.z + inward * (0.08D + rng.nextDouble() * 0.30D), minZ, maxZ);
+        } else {
+            pickTarget(s, bounds, margin, rng);
+            return;
+        }
+        s.targetX = tx;
+        s.targetZ = tz;
+        s.targetY = bounds.minY + rng.nextDouble() * Math.max(0.02D, bounds.maxY - bounds.minY);
+        s.pauseTicks = 0;
+        s.turnDirection = 0;
+    }
+
+    /**
+     * Advances a single pond swimmer by one client tick using lifelike aquarium/pond fish physics:
+     * calm stillness/hovering, snappy dart-and-flick turns (both small angle adjustments and full reversals
+     * whip cleanly in ~3-7 ticks rather than slowly creeping in artificial arcs), kick-and-glide propulsion,
+     * and natural wall-side resting or parallel wall gliding.
+     */
+    public static void stepSwimmer(Swimmer s, PondBounds bounds, double margin, double sepX, double sepZ, Random rng) {
+        s.prevX = s.x; s.prevY = s.y; s.prevZ = s.z;
+        s.prevYaw = s.yaw; s.prevPitch = s.pitch;
+        s.prevRoll = s.roll; s.prevTurnBend = s.turnBend;
+        if (Math.abs(s.yaw) > 36_000.0F) {
+            float shift = Math.round(s.yaw / 360.0F) * 360.0F;
+            s.yaw -= shift;
+            s.prevYaw -= shift;
+            s.idleHeading -= shift;
+        }
+        s.animTicks = advanceAnimTicks(s.animTicks);
+
+        double minX = bounds.minX + margin, maxX = bounds.maxX - margin;
+        double minZ = bounds.minZ + margin, maxZ = bounds.maxZ - margin;
+
+        double dx = s.targetX - s.x;
+        double dy = s.targetY - s.y;
+        double dz = s.targetZ - s.z;
+        double horizDistSq = dx * dx + dz * dz;
+
+        if (s.pauseTicks > 0) {
+            if (--s.pauseTicks == 0) {
+                pickTarget(s, bounds, margin, rng);
+                dx = s.targetX - s.x;
+                dy = s.targetY - s.y;
+                dz = s.targetZ - s.z;
+                horizDistSq = dx * dx + dz * dz;
+            }
+        } else if (horizDistSq < 0.10D) {
+            if (rng.nextFloat() < 0.72F) {
+                // Rest calmly in place (2.2s - 6.7s) rather than constantly swimming back and forth.
+                s.pauseTicks = 45 + rng.nextInt(90);
+                s.idleHeading = s.yaw;
+                s.turnDirection = 0;
+            } else {
+                pickTarget(s, bounds, margin, rng);
+                dx = s.targetX - s.x;
+                dy = s.targetY - s.y;
+                dz = s.targetZ - s.z;
+                horizDistSq = dx * dx + dz * dz;
+            }
+        }
+
+        float flickStep = 0.0F;
+        double flickKick = 0.0D;
+        float maxFlick = s.turnAgility > 0.0F ? s.turnAgility : 34.0F;
+
+        if (s.pauseTicks > 0) {
+            // Stay calm and steady; occasionally perform a crisp little 20-55 deg flick-glance instead of slow creeping.
+            double sepMagSq = sepX * sepX + sepZ * sepZ;
+            if (sepMagSq > 0.20D) {
+                s.idleHeading = (float) Math.toDegrees(Math.atan2(-sepX, sepZ));
+            } else if (s.pauseTicks > 18 && Math.abs(wrapDegrees(s.idleHeading - s.yaw)) < 2.0F && rng.nextFloat() < 0.018F) {
+                float glance = (20.0F + rng.nextFloat() * 35.0F) * (rng.nextBoolean() ? 1.0F : -1.0F);
+                s.idleHeading = s.yaw + glance;
+            }
+            float idleErr = wrapDegrees(s.idleHeading - s.yaw);
+            if (Math.abs(idleErr) > 0.8F) {
+                flickStep = Mth.m_14036_(idleErr * 0.48F, -maxFlick * 0.75F, maxFlick * 0.75F);
+                s.yaw += flickStep;
+                if (Math.abs(flickStep) > 5.0F) {
+                    flickKick = s.speed * 0.45D;
+                }
+            }
+            s.yawVel = flickStep;
+        } else {
+            double invDist = horizDistSq > 1.0e-5D ? 1.0D / Math.sqrt(horizDistSq) : 0.0D;
+            double steerX = dx * invDist + sepX * 0.55D;
+            double steerZ = dz * invDist + sepZ * 0.55D;
+            if (steerX * steerX + steerZ * steerZ > 1.0e-5D) {
+                float desiredYaw = (float) Math.toDegrees(Math.atan2(-steerX, steerZ));
+                float err = wrapDegrees(desiredYaw - s.yaw);
+                float absErr = Math.abs(err);
+
+                // Commit to one turn side on sharp reversals so the whip never hesitates or flips mid-flick.
+                if (absErr > 135.0F) {
+                    if (s.turnDirection == 0) {
+                        if (Math.abs(s.yawVel) > 2.0F) {
+                            s.turnDirection = s.yawVel > 0.0F ? 1 : -1;
+                        } else {
+                            s.turnDirection = rng.nextBoolean() ? 1 : -1;
+                        }
+                    }
+                    err = s.turnDirection * absErr;
+                } else if (absErr < 50.0F) {
+                    s.turnDirection = 0;
+                }
+
+                // Snappy fast-attack exponential flick: both small adjustments (20-50 deg) and full
+                // turnarounds (180 deg) whip cleanly in ~3-7 ticks, then hold straight and glide.
+                if (absErr > 0.6F) {
+                    flickStep = Mth.m_14036_(err * 0.45F, -maxFlick, maxFlick);
+                    if (absErr < 4.0F) {
+                        flickStep = err;
+                    }
+                    s.yaw += flickStep;
+                }
+                s.yawVel = flickStep;
+
+                // Give a brief natural tail-flick glide kick right as the fish snaps into the new heading.
+                if (Math.abs(flickStep) > 6.0F && absErr < 65.0F) {
+                    flickKick = s.speed * 0.65D;
+                }
+            } else {
+                s.yawVel *= 0.50F;
+            }
+        }
+
+        double rad = Math.toRadians(s.yaw);
+        double headingX = -Math.sin(rad);
+        double headingZ = Math.cos(rad);
+
+        if (s.pauseTicks > 0) {
+            // Smooth water drag to calm stillness, with tiny push from a curious idle flick or neighbor separation.
+            s.vx = s.vx * 0.84D + headingX * flickKick * 0.35D + sepX * 0.0018D;
+            s.vz = s.vz * 0.84D + headingZ * flickKick * 0.35D + sepZ * 0.0018D;
+        } else {
+            // Kick-and-glide swimming: brief crisp stroke when snapping a turn or periodically while cruising,
+            // followed by relaxed coasting along the new heading.
+            double arrivalEase = horizDistSq < 0.30D ? 0.40D + 0.60D * (Math.sqrt(horizDistSq) / 0.55D) : 1.0D;
+            boolean strokeBeat = ((s.animTicks + (int) (s.orbitPhase * 11.0F)) % 28) < 4;
+            double cruiseTarget = s.speed * (strokeBeat ? 1.28D : 0.78D) * arrivalEase + flickKick;
+            double desiredVx = headingX * cruiseTarget;
+            double desiredVz = headingZ * cruiseTarget;
+            // Redirect velocity crisply on flick turns so the fish darts cleanly along the new heading without drifting sideways.
+            double velBlend = Math.abs(flickStep) > 6.0F ? 0.46D : (strokeBeat ? 0.26D : 0.14D);
+            s.vx += (desiredVx - s.vx) * velBlend;
+            s.vz += (desiredVz - s.vz) * velBlend;
+        }
+
+        double stepY = Mth.m_14008_(dy * 0.045D, -0.007D, 0.007D);
+        double nextX = s.x + s.vx;
+        double nextZ = s.z + s.vz;
+        boolean hitX = false;
+        boolean hitZ = false;
+        if (nextX < minX || nextX > maxX) {
+            nextX = Mth.m_14008_(nextX, minX, maxX);
+            s.vx = 0.0D;
+            hitX = true;
+        }
+        if (nextZ < minZ || nextZ > maxZ) {
+            nextZ = Mth.m_14008_(nextZ, minZ, maxZ);
+            s.vz = 0.0D;
+            hitZ = true;
+        }
+        double nextY = Mth.m_14008_(s.y + stepY + Math.sin(s.animTicks * 0.06D + s.orbitPhase) * 0.0012D, bounds.minY, bounds.maxY);
+        s.vy = nextY - s.y;
+        s.x = nextX;
+        s.y = nextY;
+        s.z = nextZ;
+
+        if ((hitX || hitZ) && s.pauseTicks <= 0) {
+            // Reaching a wall does NOT force a turnaround:
+            // often rest calmly right by the wall, or flick smoothly along the wall, or flick back into the pond.
+            float choice = rng.nextFloat();
+            if (choice < 0.45F) {
+                s.pauseTicks = 40 + rng.nextInt(75);
+                s.idleHeading = s.yaw;
+                s.targetX = s.x;
+                s.targetZ = s.z;
+                s.turnDirection = 0;
+            } else if (choice < 0.82F) {
+                pickWallFollowTarget(s, bounds, margin, hitX, hitZ, rng);
+            } else {
+                pickTarget(s, bounds, margin, rng);
+            }
+        }
+
+        float desiredPitch = (float) Mth.m_14008_(-s.vy * 380.0D, -10.0D, 10.0D);
+        s.pitch += (desiredPitch - s.pitch) * 0.22F;
+
+        // Crisp body whip and light bank synced directly to the flick; snaps straight immediately once gliding.
+        float targetRoll = Mth.m_14036_(s.yawVel * 0.16F, -5.5F, 5.5F);
+        s.roll += (targetRoll - s.roll) * 0.45F;
+        float targetBend = Mth.m_14036_(s.yawVel * 0.017F, -0.52F, 0.52F);
+        float bendRate = Math.abs(targetBend) > Math.abs(s.turnBend) ? 0.68F : 0.36F;
+        s.turnBend += (targetBend - s.turnBend) * bendRate;
+    }
+
+    public static final class Swimmer {
+        public double x, y, z;
+        public double prevX, prevY, prevZ;
+        public double vx, vy, vz;
+        public double targetX, targetY, targetZ;
+        public float yaw, prevYaw;
+        public float yawVel;
+        public float idleHeading;
+        public float pitch, prevPitch;
+        public float roll, prevRoll;
+        public float turnBend, prevTurnBend;
+        public int animTicks;
+        public float animPhase;
+        public float swimSpeedMul = 1.0F;
+        public float individualScale = 1.0F;
+        public double speed = 0.018D;
+        public float turnAgility = 34.0F;
+        public int turnDirection;
+        public float orbitPhase;
+        public int pauseTicks;
         LivingEntity proxy;
         boolean proxyFailed;
     }

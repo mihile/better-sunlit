@@ -79,6 +79,91 @@ public final class RealFishingTests {
         check(northBounds.maxX - northBounds.minX == 3.0D && northBounds.maxZ - northBounds.minZ == 4.0D,
                 "Pond bounds must match 3x4 basin");
 
+        // Verify snappy fish flick-turns (both small 35 deg and full 180 deg turns snap cleanly in a few ticks)
+        var rng = new java.util.Random(42L);
+        var sw = new dev.sunlit.fishvisuals.client.FishPondVisuals.Swimmer();
+        sw.x = sw.prevX = northBounds.centerX;
+        sw.y = sw.prevY = northBounds.centerY;
+        sw.z = sw.prevZ = northBounds.centerZ;
+        sw.yaw = sw.prevYaw = 0.0F; // facing +Z
+        sw.vx = 0.0D;
+        sw.vz = sw.speed; // cruising +Z
+        sw.targetX = northBounds.centerX;
+        sw.targetY = northBounds.centerY;
+        sw.targetZ = northBounds.minZ + 0.55D; // directly behind (-Z)
+        float maxYawVel = 0.0F;
+        float maxBend = 0.0F;
+        float maxRoll = 0.0F;
+        int firstSign = 0;
+        int ticksToAlign = -1;
+        for (int t = 0; t < 20; t++) {
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(sw, northBounds, 0.36D, 0.0D, 0.0D, rng);
+            maxYawVel = Math.max(maxYawVel, Math.abs(sw.yawVel));
+            maxBend = Math.max(maxBend, Math.abs(sw.turnBend));
+            maxRoll = Math.max(maxRoll, Math.abs(sw.roll));
+            if (Math.abs(sw.yawVel) > 1.0F) {
+                int sign = sw.yawVel > 0 ? 1 : -1;
+                if (firstSign == 0) firstSign = sign;
+                check(sign == firstSign, "180-degree flick must stay committed to one turn direction");
+            }
+            float desired = (float) Math.toDegrees(Math.atan2(-(sw.targetX - sw.x), sw.targetZ - sw.z));
+            float rem = Math.abs((((desired - sw.yaw) % 360.0F) + 540.0F) % 360.0F - 180.0F);
+            if (ticksToAlign < 0 && rem < 12.0F) {
+                ticksToAlign = t + 1;
+            }
+        }
+        check(ticksToAlign > 0 && ticksToAlign <= 9,
+                "180-degree fish flick must complete snappily within ~0.45s (ticksToAlign=" + ticksToAlign + ")");
+        check(maxYawVel >= 25.0F && maxYawVel <= 40.0F,
+                "Flick angular speed must be snappy (maxYawVel=" + maxYawVel + ")");
+        check(maxBend > 0.25F && maxBend <= 0.54F && maxRoll > 2.0F && maxRoll <= 5.6F,
+                "Flick whip bend and roll must engage cleanly (bend=" + maxBend + ", roll=" + maxRoll + ")");
+        // Verify small ~35 deg turn also snaps crisply in <= 4 ticks
+        var sm = new dev.sunlit.fishvisuals.client.FishPondVisuals.Swimmer();
+        sm.x = sm.prevX = northBounds.centerX;
+        sm.y = sm.prevY = northBounds.centerY;
+        sm.z = sm.prevZ = northBounds.centerZ;
+        sm.yaw = sm.prevYaw = 0.0F;
+        sm.targetX = northBounds.centerX - 0.70D;
+        sm.targetY = northBounds.centerY;
+        sm.targetZ = northBounds.centerZ + 1.00D; // ~35 deg right
+        for (int t = 0; t < 4; t++) {
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(sm, northBounds, 0.36D, 0.0D, 0.0D, rng);
+        }
+        float smDesired = (float) Math.toDegrees(Math.atan2(-(sm.targetX - sm.x), sm.targetZ - sm.z));
+        float smRem = Math.abs((((smDesired - sm.yaw) % 360.0F) + 540.0F) % 360.0F - 180.0F);
+        check(smRem < 6.0F, "Small ~35 deg adjustment must also flick crisply within 4 ticks (rem=" + smRem + ")");
+        // Verify wall contact can lead to calm resting near the edge instead of always bouncing into a U-turn
+        int wallRests = 0;
+        var wallRng = new java.util.Random(100L);
+        for (int trial = 0; trial < 30; trial++) {
+            var w = new dev.sunlit.fishvisuals.client.FishPondVisuals.Swimmer();
+            w.x = w.prevX = northBounds.centerX;
+            w.y = w.prevY = northBounds.centerY;
+            w.z = w.prevZ = northBounds.maxZ - 0.37D;
+            w.yaw = w.prevYaw = 0.0F;
+            w.vx = 0.0D; w.vz = w.speed;
+            w.targetX = northBounds.centerX; w.targetY = northBounds.centerY; w.targetZ = northBounds.maxZ;
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(w, northBounds, 0.36D, 0.0D, 0.0D, wallRng);
+            if (w.pauseTicks > 0) wallRests++;
+        }
+        check(wallRests >= 5 && wallRests <= 25,
+                "Reaching a wall should sometimes rest calmly by the edge rather than always turning (wallRests=" + wallRests + ")");
+        // Simulate 1000 ticks of free swimming & resting; verify strict bounds and calm resting time
+        double minX = northBounds.minX + 0.36D, maxX = northBounds.maxX - 0.36D;
+        double minZ = northBounds.minZ + 0.36D, maxZ = northBounds.maxZ - 0.36D;
+        int calmTicks = 0;
+        for (int t = 0; t < 1000; t++) {
+            dev.sunlit.fishvisuals.client.FishPondVisuals.stepSwimmer(sw, northBounds, 0.36D, 0.0D, 0.0D, rng);
+            if (sw.pauseTicks > 0) calmTicks++;
+            check(Double.isFinite(sw.x) && Double.isFinite(sw.y) && Double.isFinite(sw.z) && Float.isFinite(sw.yaw),
+                    "Swimmer coordinates and yaw must stay finite");
+            check(sw.x >= minX - 1e-6 && sw.x <= maxX + 1e-6 && sw.z >= minZ - 1e-6 && sw.z <= maxZ + 1e-6
+                    && sw.y >= northBounds.minY - 1e-6 && sw.y <= northBounds.maxY + 1e-6,
+                    "Swimmer must remain strictly inside pond basin bounds");
+        }
+        check(calmTicks >= 150, "Fish should spend substantial time calmly hovering/resting (calmTicks=" + calmTicks + ")");
+
         String absentVersion = net.minecraftforge.network.NetworkRegistry.ABSENT.version();
         String vanillaVersion = net.minecraftforge.network.NetworkRegistry.ACCEPTVANILLA;
         check(FishPondSync.acceptsVersion("1") && FishPondSync.acceptsVersion(absentVersion)

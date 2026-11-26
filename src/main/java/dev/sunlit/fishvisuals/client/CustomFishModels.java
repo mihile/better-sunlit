@@ -87,12 +87,22 @@ public final class CustomFishModels {
     /** Renders a custom fish/critter upright and smoothly swimming underwater (for fish ponds). */
     public static void renderSwimming(ResourceLocation id, float yaw, float pitch, float ageTicks,
                                       float scaleMul, PoseStack pose, MultiBufferSource buffers, int light) {
+        renderSwimming(id, yaw, pitch, ageTicks, scaleMul, 0.0F, pose, buffers, light);
+    }
+
+    /** Renders a custom fish/critter swimming underwater with natural C-curve turn bending. */
+    public static void renderSwimming(ResourceLocation id, float yaw, float pitch, float ageTicks,
+                                      float scaleMul, float turnBend, PoseStack pose, MultiBufferSource buffers, int light) {
         Entry entry = ENTRIES.get(id);
         if (entry == null) return;
         float finalScale = entry.scale * scaleMul;
         float wag = (float) Math.sin(ageTicks * 0.32F);
         pose.m_85836_();
         try {
+            FishMeshBend turnMesh = !LEECH_ID.equals(id) && Math.abs(turnBend) > 0.025F
+                    ? new FishMeshBend(buffers, pose.m_85850_().m_252922_(), yaw)
+                    : null;
+            MultiBufferSource targetBuffers = turnMesh == null ? buffers : turnMesh;
             pose.m_252781_(Axis.f_252436_.m_252977_(180.0F - yaw + wag * (entry.lieOnSide ? 4.0F : 3.0F)));
             if (pitch != 0.0F) {
                 pose.m_252781_(Axis.f_252529_.m_252977_(pitch));
@@ -107,11 +117,12 @@ public final class CustomFishModels {
                 ModelPart tl = root.m_171324_("tail_left");
                 ModelPart tr = root.m_171324_("tail_right");
                 float oldL = tl.f_104204_, oldR = tr.f_104204_;
-                tl.f_104204_ = oldL + wag * 0.28F;
-                tr.f_104204_ = oldR + wag * 0.28F;
+                tl.f_104204_ = oldL + wag * 0.28F - turnBend * 0.32F;
+                tr.f_104204_ = oldR + wag * 0.28F - turnBend * 0.32F;
                 try {
-                    VertexConsumer consumer = buffers.m_6299_(RenderType.m_110458_(entry.texture));
+                    VertexConsumer consumer = targetBuffers.m_6299_(RenderType.m_110458_(entry.texture));
                     root.m_104306_(pose, consumer, light, OverlayTexture.f_118083_, 1.0F, 1.0F, 1.0F, 1.0F);
+                    if (turnMesh != null) turnMesh.draw(FishPondVisuals.turnCurve(turnBend));
                 } finally {
                     tl.f_104204_ = oldL;
                     tr.f_104204_ = oldR;
@@ -119,20 +130,22 @@ public final class CustomFishModels {
             } else if (NEPTUNA_ID.equals(id)) {
                 ModelPart tail = root.m_171324_("tail");
                 float oldTail = tail.f_104204_;
-                tail.f_104204_ = oldTail + wag * 0.34F;
+                tail.f_104204_ = oldTail + wag * 0.34F - turnBend * 0.35F;
                 try {
-                    VertexConsumer consumer = buffers.m_6299_(RenderType.m_110458_(entry.texture));
+                    VertexConsumer consumer = targetBuffers.m_6299_(RenderType.m_110458_(entry.texture));
                     root.m_104306_(pose, consumer, light, OverlayTexture.f_118083_, 1.0F, 1.0F, 1.0F, 1.0F);
+                    if (turnMesh != null) turnMesh.draw(FishPondVisuals.turnCurve(turnBend));
                 } finally {
                     tail.f_104204_ = oldTail;
                 }
             } else {
-                // Leech glides with a gentle serpentine underwater wave via FishMeshBend.
+                // Leech glides with a gentle serpentine underwater wave + turn curvature via FishMeshBend.
+                FishFlopMotion turn = FishPondVisuals.turnCurve(turnBend);
                 FishFlopMotion swimWave = new FishFlopMotion(
-                        (float) Math.sin(ageTicks * 0.28F) * 0.14F,
-                        (float) Math.sin(ageTicks * 0.28F - 0.9F) * 0.24F,
-                        (float) Math.sin(ageTicks * 0.28F - 1.8F) * 0.34F,
-                        (float) Math.sin(ageTicks * 0.28F - 2.6F) * 0.42F
+                        (float) Math.sin(ageTicks * 0.28F) * 0.14F + turn.front(),
+                        (float) Math.sin(ageTicks * 0.28F - 0.9F) * 0.24F + turn.rear(),
+                        (float) Math.sin(ageTicks * 0.28F - 1.8F) * 0.34F + turn.tail(),
+                        (float) Math.sin(ageTicks * 0.28F - 2.6F) * 0.42F + turn.tip()
                 );
                 FishMeshBend bend = new FishMeshBend(buffers, pose.m_85850_().m_252922_(), yaw);
                 VertexConsumer consumer = bend.m_6299_(RenderType.m_110458_(entry.texture));
