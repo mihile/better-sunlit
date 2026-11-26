@@ -571,7 +571,6 @@ public final class EntryPostApplyPatches {
         }
         for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
             if (insn instanceof MethodInsnNode m && STATE_DEF_PERF.equals(m.owner) && "populateAllStates".equals(m.name)) {
-                patchPossibleStatesGetter(cn);
                 return true;
             }
         }
@@ -700,33 +699,7 @@ public final class EntryPostApplyPatches {
                         new MethodInsnNode(Opcodes.INVOKESTATIC, STATE_DEF_PERF, "finishStateDefinition", "()V", false));
             }
         }
-        patchPossibleStatesGetter(cn);
         return true;
-    }
-
-    private static void patchPossibleStatesGetter(ClassNode cn) {
-        MethodNode getter = findMethod(cn, "m_61056_", "()Lcom/google/common/collect/ImmutableList;");
-        if (getter == null || getter.instructions == null) {
-            return;
-        }
-        for (AbstractInsnNode insn = getter.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-            if (insn instanceof MethodInsnNode m && STATE_DEF_PERF.equals(m.owner) && "getPossibleStates".equals(m.name)) {
-                return;
-            }
-        }
-        for (AbstractInsnNode insn = getter.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-            if (insn.getOpcode() == Opcodes.ARETURN) {
-                getter.instructions.insertBefore(
-                        insn,
-                        new MethodInsnNode(
-                                Opcodes.INVOKESTATIC,
-                                STATE_DEF_PERF,
-                                "getPossibleStates",
-                                "(Lcom/google/common/collect/ImmutableList;)Lcom/google/common/collect/ImmutableList;",
-                                false));
-                return;
-            }
-        }
     }
 
     private static AbstractInsnNode prevRealInsnLocal(AbstractInsnNode insn) {

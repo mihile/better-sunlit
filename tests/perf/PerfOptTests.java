@@ -4847,6 +4847,13 @@ public final class PerfOptTests {
                 }
             }
             assertTrue(foundCall, "Expected populateAllStates call in patched StateDefinition.<init>");
+            MethodNode statesGetter = cn.methods.stream()
+                    .filter(method -> "m_61056_".equals(method.name))
+                    .findFirst().orElseThrow();
+            for (AbstractInsnNode instruction : statesGetter.instructions) {
+                assertFalse(instruction instanceof MethodInsnNode,
+                        "ModelBaker must receive the complete block-state list, including non-first wall states");
+            }
             org.objectweb.asm.ClassWriter cw = new org.objectweb.asm.ClassWriter(
                     org.objectweb.asm.ClassWriter.COMPUTE_FRAMES);
             cn.accept(cw);
