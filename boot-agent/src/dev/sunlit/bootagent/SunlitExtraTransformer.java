@@ -1768,6 +1768,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         ensureReadsExtraPayload(module);
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
+        // A temporary RenderType worker can exit while Windows LWJGL is still initializing JNI.
+        boolean offloadRenderType = !System.getProperty("os.name", "").startsWith("Windows");
         boolean patched = false;
         for (MethodNode mn : cn.methods) {
             if (mn.instructions == null || mn.instructions.size() == 0) {
@@ -1775,7 +1777,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             }
             for (AbstractInsnNode insn : mn.instructions.toArray()) {
                 if (insn instanceof MethodInsnNode min && min.getOpcode() == Opcodes.INVOKESTATIC) {
-                    if ("net/minecraft/client/renderer/RenderType".equals(min.owner)
+                    if (offloadRenderType && "net/minecraft/client/renderer/RenderType".equals(min.owner)
                             && "m_110451_".equals(min.name)
                             && "()Lnet/minecraft/client/renderer/RenderType;".equals(min.desc)) {
                         AbstractInsnNode next = nextRealInsn(min);
