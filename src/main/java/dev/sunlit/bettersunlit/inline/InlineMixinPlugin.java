@@ -145,10 +145,13 @@ public final class InlineMixinPlugin implements IMixinConfigPlugin {
     }
     @Override public void onLoad(String mixinPackage) {}
     @Override public String getRefMapperConfig(){return null;}
+    private static final Map<String,Boolean> targetPresent=new ConcurrentHashMap<>();
     @Override public boolean shouldApplyMixin(String targetClassName,String mixinClassName){
         var tracker=org.spongepowered.asm.service.MixinService.getService().getClassTracker();
         // Localization must never force retransformation of a class loaded during bootstrap.
-        return tracker==null||!tracker.isClassLoaded(targetClassName);
+        if(tracker!=null&&tracker.isClassLoaded(targetClassName))return false;
+        return targetPresent.computeIfAbsent(targetClassName,
+                n -> InlineMixinPlugin.class.getClassLoader().getResource(n.replace('.', '/') + ".class") != null);
     }
     @Override public void acceptTargets(Set<String> myTargets,Set<String> otherTargets){}
     @Override public List<String> getMixins(){return null;}

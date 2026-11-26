@@ -191,8 +191,12 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "net/minecraft/world/level/Level";
     private static final String VB_LEAF_COLORS_CLS =
             "com/blackgear/vanillabackport/client/api/color/LeafColors";
+    private static final String VB122_LEAF_COLORS_CLS =
+            "com/blackgear/vanillabackport/client/api/modules/falling_leaves/LeafColors";
     private static final String VB_LEASH_RENDERER_CLS =
             "com/blackgear/vanillabackport/common/api/leash/LeashFeatureRenderer";
+    private static final String VB122_LEASH_RENDERER_CLS =
+            "com/blackgear/vanillabackport/common/api/modules/leash_behavior/LeashFeatureRenderer";
     private static final String RHINO_JAVA_MEMBERS_CLS =
             "dev/latvian/mods/rhino/JavaMembers";
     private static final String BLUEPRINT_REMOLDED_CLS =
@@ -351,8 +355,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             case LIBTOOLTIPS_CLS -> transformLibTooltips(classfileBuffer);
             case MC_STRING_TAG_VISITOR_CLS -> transformStringTagVisitor(module, classfileBuffer);
             case MC_LEVEL_CLS -> transformMinecraftLevel(classfileBuffer);
-            case VB_LEAF_COLORS_CLS -> transformVanillaBackportLeafColors(classfileBuffer);
-            case VB_LEASH_RENDERER_CLS -> transformVanillaBackportLeashRenderer(classfileBuffer);
+            case VB_LEAF_COLORS_CLS, VB122_LEAF_COLORS_CLS -> transformVanillaBackportLeafColors(classfileBuffer);
+            case VB_LEASH_RENDERER_CLS, VB122_LEASH_RENDERER_CLS -> transformVanillaBackportLeashRenderer(classfileBuffer);
             case TANUKI_ROTATING_CLS,
                  TANUKI_MULTIBLOCK_CLS,
                  TANUKI_TALL_ROTATING_CLS,
@@ -2826,72 +2830,155 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
         boolean patched = false;
+        final String ownerCls = cn.name;
         final String levelDesc = "Lnet/minecraft/client/multiplayer/ClientLevel;";
         final String cacheCls = "net/minecraft/client/color/block/BlockTintCache";
         final String cacheDesc = "L" + cacheCls + ";";
         for (MethodNode mn : cn.methods) {
-            if (!"lambda$getAverageDryFoliageColor$3".equals(mn.name)
-                    || !"(Lnet/minecraft/client/multiplayer/ClientLevel;Lnet/minecraft/core/BlockPos;)Ljava/lang/Integer;".equals(mn.desc)
-                    || mn.instructions == null) {
-                continue;
-            }
-            InvokeDynamicInsnNode tintIndy = null;
-            for (AbstractInsnNode insn : mn.instructions) {
-                if (insn instanceof InvokeDynamicInsnNode indy
-                        && "(Lnet/minecraft/client/multiplayer/ClientLevel;)Ljava/util/function/ToIntFunction;".equals(indy.desc)) {
-                    tintIndy = indy;
-                    break;
+            if ("lambda$getAverageDryFoliageColor$3".equals(mn.name)
+                    && "(Lnet/minecraft/client/multiplayer/ClientLevel;Lnet/minecraft/core/BlockPos;)Ljava/lang/Integer;".equals(mn.desc)
+                    && mn.instructions != null) {
+                InvokeDynamicInsnNode tintIndy = null;
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (insn instanceof InvokeDynamicInsnNode indy
+                            && "(Lnet/minecraft/client/multiplayer/ClientLevel;)Ljava/util/function/ToIntFunction;".equals(indy.desc)) {
+                        tintIndy = indy;
+                        break;
+                    }
                 }
-            }
-            if (tintIndy == null) {
-                continue;
-            }
-            cn.fields.add(new FieldNode(
-                    Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
-                    "sunlit$lastLevel", levelDesc, null, null));
-            cn.fields.add(new FieldNode(
-                    Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
-                    "sunlit$dryCache", cacheDesc, null, null));
+                if (tintIndy == null) {
+                    continue;
+                }
+                cn.fields.add(new FieldNode(
+                        Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                        "sunlit$lastLevel", levelDesc, null, null));
+                cn.fields.add(new FieldNode(
+                        Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                        "sunlit$dryCache", cacheDesc, null, null));
 
-            InsnList il = new InsnList();
-            LabelNode miss = new LabelNode();
-            LabelNode useCache = new LabelNode();
-            // BlockTintCache cache = sunlit$dryCache;
-            il.add(new FieldInsnNode(Opcodes.GETSTATIC, VB_LEAF_COLORS_CLS, "sunlit$dryCache", cacheDesc));
-            il.add(new VarInsnNode(Opcodes.ASTORE, 2));
-            // if (cache == null || sunlit$lastLevel != level) goto miss;
-            il.add(new VarInsnNode(Opcodes.ALOAD, 2));
-            il.add(new JumpInsnNode(Opcodes.IFNULL, miss));
-            il.add(new FieldInsnNode(Opcodes.GETSTATIC, VB_LEAF_COLORS_CLS, "sunlit$lastLevel", levelDesc));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            il.add(new JumpInsnNode(Opcodes.IF_ACMPEQ, useCache));
-            // miss: cache = new BlockTintCache(indy(level)); sunlit$lastLevel = level; sunlit$dryCache = cache;
-            il.add(miss);
-            il.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] {cacheCls}, 0, null));
-            il.add(new TypeInsnNode(Opcodes.NEW, cacheCls));
-            il.add(new InsnNode(Opcodes.DUP));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            il.add(tintIndy.clone(null));
-            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, cacheCls, "<init>", "(Ljava/util/function/ToIntFunction;)V", false));
-            il.add(new VarInsnNode(Opcodes.ASTORE, 2));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            il.add(new FieldInsnNode(Opcodes.PUTSTATIC, VB_LEAF_COLORS_CLS, "sunlit$lastLevel", levelDesc));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 2));
-            il.add(new FieldInsnNode(Opcodes.PUTSTATIC, VB_LEAF_COLORS_CLS, "sunlit$dryCache", cacheDesc));
-            // useCache: return Integer.valueOf(cache.m_193812_(pos));
-            il.add(useCache);
-            il.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 2));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
-            il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cacheCls, "m_193812_", "(Lnet/minecraft/core/BlockPos;)I", false));
-            il.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false));
-            il.add(new InsnNode(Opcodes.ARETURN));
+                InsnList il = new InsnList();
+                LabelNode miss = new LabelNode();
+                LabelNode useCache = new LabelNode();
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, ownerCls, "sunlit$dryCache", cacheDesc));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new JumpInsnNode(Opcodes.IFNULL, miss));
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, ownerCls, "sunlit$lastLevel", levelDesc));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new JumpInsnNode(Opcodes.IF_ACMPEQ, useCache));
+                il.add(miss);
+                il.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] {cacheCls}, 0, null));
+                il.add(new TypeInsnNode(Opcodes.NEW, cacheCls));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(tintIndy.clone(null));
+                il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, cacheCls, "<init>", "(Ljava/util/function/ToIntFunction;)V", false));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.PUTSTATIC, ownerCls, "sunlit$lastLevel", levelDesc));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new FieldInsnNode(Opcodes.PUTSTATIC, ownerCls, "sunlit$dryCache", cacheDesc));
+                il.add(useCache);
+                il.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cacheCls, "m_193812_", "(Lnet/minecraft/core/BlockPos;)I", false));
+                il.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false));
+                il.add(new InsnNode(Opcodes.ARETURN));
 
-            mn.instructions = il;
-            if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
-            if (mn.localVariables != null) mn.localVariables.clear();
-            patched = true;
-            break;
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
+                break;
+            }
+            if ("getAverageDryFoliageColor".equals(mn.name)
+                    && "(Lnet/minecraft/core/BlockPos;)I".equals(mn.desc)
+                    && mn.instructions != null) {
+                TypeInsnNode newCache = null;
+                InvokeDynamicInsnNode tintIndy = null;
+                MethodInsnNode getColorCall = null;
+                int levelSlot = -1;
+                for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                    if (insn instanceof TypeInsnNode t && t.getOpcode() == Opcodes.NEW && cacheCls.equals(t.desc)) {
+                        newCache = t;
+                    } else if (newCache != null && tintIndy == null && insn instanceof InvokeDynamicInsnNode indy
+                            && "(Lnet/minecraft/client/multiplayer/ClientLevel;)Ljava/util/function/ToIntFunction;".equals(indy.desc)) {
+                        tintIndy = indy;
+                        AbstractInsnNode prev = indy.getPrevious();
+                        while (prev != null && prev.getOpcode() < 0) prev = prev.getPrevious();
+                        if (prev instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD) {
+                            levelSlot = v.var;
+                        }
+                    } else if (tintIndy != null && insn instanceof MethodInsnNode m
+                            && m.getOpcode() == Opcodes.INVOKEVIRTUAL
+                            && cacheCls.equals(m.owner) && "m_193812_".equals(m.name)
+                            && "(Lnet/minecraft/core/BlockPos;)I".equals(m.desc)) {
+                        getColorCall = m;
+                        break;
+                    }
+                }
+                if (newCache == null || tintIndy == null || getColorCall == null || levelSlot < 1) {
+                    continue;
+                }
+                cn.fields.add(new FieldNode(
+                        Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                        "sunlit$lastLevel", levelDesc, null, null));
+                cn.fields.add(new FieldNode(
+                        Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                        "sunlit$dryCache", cacheDesc, null, null));
+
+                MethodNode helper = new MethodNode(
+                        Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
+                        "sunlit$getDryFoliageColor",
+                        "(" + levelDesc + "Lnet/minecraft/core/BlockPos;)I",
+                        null,
+                        null);
+                LabelNode miss = new LabelNode();
+                LabelNode useCache = new LabelNode();
+                helper.instructions.add(new FieldInsnNode(Opcodes.GETSTATIC, ownerCls, "sunlit$dryCache", cacheDesc));
+                helper.instructions.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                helper.instructions.add(new JumpInsnNode(Opcodes.IFNULL, miss));
+                helper.instructions.add(new FieldInsnNode(Opcodes.GETSTATIC, ownerCls, "sunlit$lastLevel", levelDesc));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                helper.instructions.add(new JumpInsnNode(Opcodes.IF_ACMPEQ, useCache));
+                helper.instructions.add(miss);
+                helper.instructions.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] {cacheCls}, 0, null));
+                helper.instructions.add(new TypeInsnNode(Opcodes.NEW, cacheCls));
+                helper.instructions.add(new InsnNode(Opcodes.DUP));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                helper.instructions.add(tintIndy.clone(null));
+                helper.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, cacheCls, "<init>", "(Ljava/util/function/ToIntFunction;)V", false));
+                helper.instructions.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                helper.instructions.add(new FieldInsnNode(Opcodes.PUTSTATIC, ownerCls, "sunlit$lastLevel", levelDesc));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                helper.instructions.add(new FieldInsnNode(Opcodes.PUTSTATIC, ownerCls, "sunlit$dryCache", cacheDesc));
+                helper.instructions.add(useCache);
+                helper.instructions.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                helper.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                helper.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cacheCls, "m_193812_", "(Lnet/minecraft/core/BlockPos;)I", false));
+                helper.instructions.add(new InsnNode(Opcodes.IRETURN));
+                cn.methods.add(helper);
+
+                InsnList rep = new InsnList();
+                rep.add(new VarInsnNode(Opcodes.ALOAD, levelSlot));
+                rep.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                rep.add(new MethodInsnNode(Opcodes.INVOKESTATIC, ownerCls, "sunlit$getDryFoliageColor",
+                        "(" + levelDesc + "Lnet/minecraft/core/BlockPos;)I", false));
+                mn.instructions.insertBefore(newCache, rep);
+                AbstractInsnNode cur = newCache;
+                while (cur != null) {
+                    AbstractInsnNode nxt = cur.getNext();
+                    mn.instructions.remove(cur);
+                    if (cur == getColorCall) break;
+                    cur = nxt;
+                }
+                patched = true;
+                break;
+            }
         }
         if (!patched) {
             return null;
@@ -5832,10 +5919,13 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
         boolean patched = false;
+        final String ownerCls = cn.name;
         final String entCls = "net/minecraft/world/entity/Entity";
         final String fruCls = "net/minecraft/client/renderer/culling/Frustum";
         final String aabbCls = "net/minecraft/world/phys/AABB";
-        final String leashCls = "com/blackgear/vanillabackport/common/api/leash/Leashable";
+        final String leashCls = VB122_LEASH_RENDERER_CLS.equals(ownerCls)
+                ? "com/blackgear/vanillabackport/common/api/modules/leash_behavior/Leashable"
+                : "com/blackgear/vanillabackport/common/api/leash/Leashable";
         for (MethodNode mn : cn.methods) {
             if (!"shouldRender".equals(mn.name)
                     || !("(L" + entCls + ";L" + fruCls + ";ZZ)Z").equals(mn.desc)
@@ -5879,7 +5969,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             il.add(boxFallback);
             il.add(new FrameNode(
                     Opcodes.F_FULL, 7,
-                    new Object[] {VB_LEASH_RENDERER_CLS, entCls, fruCls, Opcodes.INTEGER, Opcodes.INTEGER, entCls, aabbCls},
+                    new Object[] {ownerCls, entCls, fruCls, Opcodes.INTEGER, Opcodes.INTEGER, entCls, aabbCls},
                     0, new Object[0]));
             il.add(new TypeInsnNode(Opcodes.NEW, aabbCls));
             il.add(new InsnNode(Opcodes.DUP));
@@ -5935,7 +6025,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             il.add(retTrue);
             il.add(new FrameNode(
                     Opcodes.F_FULL, 5,
-                    new Object[] {VB_LEASH_RENDERER_CLS, entCls, fruCls, Opcodes.INTEGER, Opcodes.INTEGER},
+                    new Object[] {ownerCls, entCls, fruCls, Opcodes.INTEGER, Opcodes.INTEGER},
                     0, new Object[0]));
             il.add(new InsnNode(Opcodes.ICONST_1));
             il.add(new InsnNode(Opcodes.IRETURN));

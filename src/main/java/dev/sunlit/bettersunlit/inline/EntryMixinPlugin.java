@@ -465,6 +465,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  matches(target)&&matches("com.copycatsplus.copycats.mixin.foundation.copycat.BlockStateBaseMixin")
                  &&matches("snownee.passablefoliage.mixin.BlockStateMixin")&&matches("snownee.passablefoliage.PassableFoliage")
                  &&matches("snownee.passablefoliage.PassableFoliageCommonConfig")&&matches("snownee.passablefoliage.PassableFoliageBlock");
+            case "PerfBlockModelShaperMixin" ->
+                 matches(target);
             case "PerfObeModelMixin" ->
                  matches(target)&&matches("fr.madu59.obe.client.mixin.BlockStateModelSetMixin");
             case "PerfModelPartCubeMixin" ->
@@ -595,6 +597,14 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
                  && matches("me.jellysquid.mods.sodium.client.util.color.ColorSRGB")
                  && matches("me.jellysquid.mods.sodium.mixin.features.textures.mipmaps.SpriteContentsMixin")
                  && matches("org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevel");
+            case "LegacySpriteContentsTransparencyMixin" ->
+                 matches(target)
+                 && matches("com.mojang.blaze3d.platform.NativeImage")
+                 && matches("me.jellysquid.mods.sodium.client.util.color.ColorSRGB")
+                 && matchesLegacy("me.jellysquid.mods.sodium.mixin.features.textures.mipmaps.SpriteContentsMixin",
+                     "488265d3938314720ad7797624db81f5f196011c0cb3e82d1905e1b243fa46a4")
+                 && matchesLegacy("me.jellysquid.mods.sodium.client.util.NativeImageHelper",
+                     "8e675660b3429c45dd5c05397fbe715ddc0a3c9e2342a87046a1706dc8cce86e");
             case "PerfJourneyMapResetMixin" -> matchesLegacy(target,"398c5a6472f51046212291ca49563e563c17160c27313c980ec2aa4e2a161a58");
             case "PerfQuarkSharedChatMixin" -> matchesLegacy(target,"ee4d96ae723ded94fee5b9b2cedebedd91945a137ed7a9c71d897a55c29ce8af");
             case "PerfMysticalOakTreeLoreMixin" -> matchesLegacy(target,"cdfda0747c979cd447f1db38f02315cdfeeb3cd92422c3a7b46f4a01e6103c3a");
@@ -625,6 +635,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "PerfBlocksColorMixin"->EntryPostApplyPatches.patchBlocksColorInternal(targetClass);
             case "PerfMipmapFastMixin"->applyClientPatch("patchMipmapGenerator",targetClass);
             case "PerfSpriteContentsTransparencyMixin"->applyClientPatch("patchSpriteContents",targetClass);
+            case "LegacySpriteContentsTransparencyMixin"->applyClientPatch("patchLegacySpriteContents",targetClass);
+            case "PerfBlockModelShaperMixin"->applyClientPatch("patchBlockModelShaperCore",targetClass);
             case "PerfObeModelMixin"->applyClientPatch("patchBlockModelShaper",targetClass);
             case "PerfModelPartCubeMixin"->applyClientPatch("patchModelPartCube",targetClass);
             case "PerfEmfModelPartMixin", "LegacyEmfModelPartMixin"->applyClientPatch("patchEmfModelPart",targetClass);

@@ -403,15 +403,14 @@ public final class PerfOptTests {
         var ctx = net.minecraft.client.renderer.entity.EntityRendererProvider.Context.class;
         var layer = net.minecraft.client.model.geom.ModelLayerLocation.class;
         var factory = Class.forName(mixin).getDeclaredMethod("sunlit$bakeSnowPigLayer", ctx, layer);
-        assertTrue(!java.lang.reflect.Modifier.isStatic(factory.getModifiers()),
-                "SnowPig @Redirect on <init> must be non-static to match constructor target");
+        assertTrue(java.lang.reflect.Modifier.isStatic(factory.getModifiers()),
+                "SnowPig @Redirect before super() in <init> must be static");
         factory.setAccessible(true);
-        var instance = new dev.sunlit.fishvisuals.mixin.SnowPigModelCompatMixin() {};
         var cubes = ModelPart.class.getDeclaredField("f_104212_");
         cubes.setAccessible(true);
         for (var id : List.of(net.minecraft.client.model.geom.ModelLayers.f_171205_,
                 net.minecraft.client.model.geom.ModelLayers.f_171160_)) {
-            var model = (ModelPart) factory.invoke(instance, null, id);
+            var model = (ModelPart) factory.invoke(null, null, id);
             new net.minecraft.client.model.PigModel<>(model);
             float inflate = id == net.minecraft.client.model.geom.ModelLayers.f_171160_ ? 0.5F : 0;
             var head = (List<?>) cubes.get(model.m_171324_("head"));
@@ -2008,6 +2007,8 @@ public final class PerfOptTests {
         synShaper.methods.add(obeStub);
         assertTrue(ClientPostApplyPatches.patchBlockModelShaper(synShaper), "OBE BlockModelShaper guard must patch");
         assertTrue(ClientPostApplyPatches.patchBlockModelShaper(synShaper), "OBE BlockModelShaper re-patch must be idempotent");
+        assertTrue(ClientPostApplyPatches.patchBlockModelShaperCore(synShaper), "Core BlockModelShaper patch must be idempotent");
+        assertFalse(ClientPostApplyPatches.patchBlockModelShaperCore(null), "Null Core BlockModelShaper must fail closed");
         ClassWriter shaperWriter = new ClassWriter(0);
         synShaper.accept(shaperWriter);
         verifyBytecode(synShaper.name.replace('/', '.'), shaperWriter.toByteArray());

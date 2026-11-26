@@ -384,6 +384,37 @@ public final class SpriteMipmapPerf {
         return linearToSrgbFast(r, g, b, (a1 + a2) >> 1);
     }
 
+    /**
+     * Embeddium 0.3.31 fast path for {@code sodium$fillInTransparentPixelColors(NativeImage)}.
+     * Uses zero references to Emberbium-only classes so it links cleanly on original Embeddium.
+     */
+    public static boolean fillTransparentPixelsFast(NativeImage image) {
+        if (image == null || image.m_85102_() != NativeImage.Format.RGBA) {
+            return false;
+        }
+        long ptr = ((PerfNativeImageAccessor) (Object) image).sunlit$getPixels();
+        if (ptr == 0L) {
+            return false;
+        }
+        int totalPixels = image.m_85084_() * image.m_84982_();
+        if (totalPixels <= 0) {
+            return true;
+        }
+        if (LITTLE_ENDIAN) {
+            if (!isOpaqueFastLE(ptr, totalPixels)) {
+                accumulateAndFillLE(ptr, totalPixels);
+            }
+        } else {
+            int[] px = borrowIntBuffer(TL_SRC, totalPixels);
+            MemoryUtil.memIntBuffer(ptr, totalPixels).get(px, 0, totalPixels);
+            int result = processTransparentPixels(px, totalPixels, true);
+            if ((result & 4) != 0) {
+                MemoryUtil.memIntBuffer(ptr, totalPixels).put(px, 0, totalPixels);
+            }
+        }
+        return true;
+    }
+
     public static SpriteTransparencyLevel processTransparentFast(NativeImage image, boolean fillInTransparent) {
         if (image == null || image.m_85102_() != NativeImage.Format.RGBA) {
             return null;

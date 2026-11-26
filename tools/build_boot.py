@@ -392,6 +392,37 @@ public class VerifyBootAgent {
             Method verifyM = cca.getMethod("verify", crCls, ClassLoader.class, boolean.class, PrintWriter.class);
             var sw = new StringWriter();
             var pw = new PrintWriter(sw);
+            Path vb122 = Path.of(libs, "../instances/Society- Sunlit Valley/minecraft/mods/VanillaBackport-forge-1.20.1-1.2.2.jar").normalize();
+            if (Files.isRegularFile(vb122) && Files.isRegularFile(minecraft)) {
+                byte[] vbLeaf = SunlitExtraTransformer.transformVanillaBackportLeafColors(
+                        readZip(vb122.toString(), "com/blackgear/vanillabackport/client/api/modules/falling_leaves/LeafColors.class"));
+                if (vbLeaf == null) throw new AssertionError("VanillaBackport 1.2.2 LeafColors not transformed");
+                byte[] vbLeash = SunlitExtraTransformer.transformVanillaBackportLeashRenderer(
+                        readZip(vb122.toString(), "com/blackgear/vanillabackport/common/api/modules/leash_behavior/LeashFeatureRenderer.class"));
+                if (vbLeash == null) throw new AssertionError("VanillaBackport 1.2.2 LeashFeatureRenderer not transformed");
+                List<java.net.URL> vbUrls = new ArrayList<>();
+                vbUrls.add(vb122.toUri().toURL());
+                for (String rel : new String[]{
+                        "net/minecraftforge/forge/1.20.1-47.4.0/forge-1.20.1-47.4.0-universal.jar",
+                        "net/minecraftforge/forge/1.20.1-47.4.0/forge-1.20.1-47.4.0-client.jar",
+                        "org/joml/joml/1.10.5/joml-1.10.5.jar",
+                        "com/mojang/datafixerupper/6.0.8/datafixerupper-6.0.8.jar",
+                        "net/minecraftforge/eventbus/6.0.5/eventbus-6.0.5.jar"}) {
+                    Path p = Path.of(libs, rel);
+                    if (Files.isRegularFile(p)) vbUrls.add(p.toUri().toURL());
+                }
+                vbUrls.add(minecraft.toUri().toURL());
+                try (var vbCl = new java.net.URLClassLoader(vbUrls.toArray(new java.net.URL[0]), cl)) {
+                    for (byte[] vbBytes : new byte[][]{vbLeaf, vbLeash}) {
+                        Object cr = crCls.getConstructor(byte[].class).newInstance((Object) vbBytes);
+                        verifyM.invoke(null, cr, vbCl, false, pw);
+                        String diag = sw.toString();
+                        if (!diag.isEmpty() && diag.contains("Error")) {
+                            throw new AssertionError("CheckClassAdapter error on VanillaBackport 1.2.2: " + diag);
+                        }
+                    }
+                }
+            }
             for (byte[] clsBytes : new byte[][]{
                     resolverOut, cfgOut, zipPathOut, zipOut, zipEntryOut, unionOut, ufspOut, jarOut, mddOut, ajlOut, ampOut,
                     bgWaiterOut, scanOut, bcOut, mlpOut, mthOut,
