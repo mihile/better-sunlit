@@ -186,6 +186,12 @@ with zipfile.ZipFile(OUT_JAR, 'w', zipfile.ZIP_DEFLATED) as zf:
 VERIFY_SRC = OUT_BUILD / 'VerifyBootAgent.java'
 VERIFY_SRC.write_text('''
 import dev.sunlit.bootagent.SunlitBootAgent;
+import dev.sunlit.bootagent.SunlitExtraTransformer;
+import dev.sunlit.bootagent.asm.ClassReader;
+import dev.sunlit.bootagent.asm.ClassWriter;
+import dev.sunlit.bootagent.asm.tree.ClassNode;
+import dev.sunlit.bootagent.asm.tree.MethodInsnNode;
+import static dev.sunlit.bootagent.asm.Opcodes.*;
 import java.io.*;
 import java.lang.module.*;
 import java.lang.reflect.Method;
@@ -202,6 +208,7 @@ public class VerifyBootAgent {
             VerifyBootAgent.class.getClassLoader(), new Class<?>[]{java.lang.instrument.Instrumentation.class},
             (proxy, method, arguments) -> { throw new AssertionError("Duplicate premain used instrumentation: " + method); });
         SunlitBootAgent.premain(null, secondInstrumentation);
+        verifyPostBootstrapPrewarm();
         String libs = args[0];
         String sjh = args[1];
         String fml = args[2];
@@ -998,6 +1005,37 @@ public class VerifyBootAgent {
         try (ZipFile zf = new ZipFile(jar); InputStream is = zf.getInputStream(zf.getEntry(entry))) {
             return is.readAllBytes();
         }
+    }
+
+    private static void verifyPostBootstrapPrewarm() {
+        String renderType = "net/minecraft/client/renderer/RenderType";
+        String payload = "dev/sunlit/bootagent/payload/BootJarPayload";
+        var source = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        source.visit(V17, ACC_PUBLIC, "net/minecraft/server/Bootstrap", null, "java/lang/Object", null);
+        var method = source.visitMethod(ACC_STATIC, "prewarm", "()V", null, null);
+        method.visitCode();
+        method.visitMethodInsn(INVOKESTATIC, renderType, "m_110451_", "()L" + renderType + ";", false);
+        method.visitInsn(POP);
+        method.visitMethodInsn(INVOKESTATIC, "net/minecraftforge/network/NetworkConstants", "init",
+                "()Ljava/lang/String;", false);
+        method.visitInsn(POP);
+        method.visitInsn(RETURN);
+        method.visitMaxs(0, 0);
+        method.visitEnd();
+        source.visitEnd();
+
+        byte[] out = SunlitExtraTransformer.transformMinecraftBootstrap(null, source.toByteArray());
+        if (out == null) throw new AssertionError("Forge networking prewarm was not offloaded");
+        var transformed = new ClassNode();
+        new ClassReader(out).accept(transformed, 0);
+        var calls = new ArrayList<String>();
+        for (var insn : transformed.methods.get(0).instructions) {
+            if (insn instanceof MethodInsnNode call) calls.add(call.owner + "." + call.name);
+        }
+        String prewarm = payload + ".schedulePostBootstrapPrewarm";
+        boolean windows = System.getProperty("os.name", "").startsWith("Windows");
+        var expected = List.of(windows ? renderType + ".m_110451_" : prewarm, prewarm);
+        if (!calls.equals(expected)) throw new AssertionError("Unexpected post-bootstrap calls: " + calls);
     }
 
     private static void verifyRelativePackPaths(Path root) {

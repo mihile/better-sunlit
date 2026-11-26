@@ -1,6 +1,5 @@
 package dev.sunlit.bettersunlit.perf;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.mojang.serialization.MapCodec;
@@ -42,7 +41,6 @@ public final class StateDefinitionPerf {
         void clear(Object fastMap);
     }
 
-    private static volatile Thread SINGLE_STATE_THREAD;
     private static final List<Runnable> POST_CONSTRUCT_HOOKS = new ArrayList<>(4);
     private static volatile boolean POST_CONSTRUCT_FIRED;
     private static final ThreadLocal<PropertyMapReuse> REGISTRY_MAPS = new ThreadLocal<>();
@@ -169,17 +167,6 @@ public final class StateDefinitionPerf {
                 }
             }
         }
-    }
-
-    public static void setSingleStateThread(Thread thread) {
-        SINGLE_STATE_THREAD = thread;
-    }
-
-    public static <S> ImmutableList<S> getPossibleStates(ImmutableList<S> allStates) {
-        if (SINGLE_STATE_THREAD == Thread.currentThread() && allStates != null && allStates.size() > 1) {
-            return ImmutableList.of(allStates.get(0));
-        }
-        return allStates;
     }
 
     public static void beginRegistryMapReuse() {
