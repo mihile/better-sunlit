@@ -5068,4 +5068,23 @@ public final class BootJarPayload {
         EMI_SUB_ID_CACHE[slot] = new SubIdEntry(rl, val);
         return val;
     }
+
+    private static final ThreadLocal<Integer> CRASH_PRELOAD_DEPTH = ThreadLocal.withInitial(() -> 0);
+
+    public static void enterCrashPreload() {
+        CRASH_PRELOAD_DEPTH.set(CRASH_PRELOAD_DEPTH.get() + 1);
+    }
+
+    public static void exitCrashPreload() {
+        int next = CRASH_PRELOAD_DEPTH.get() - 1;
+        if (next <= 0) {
+            CRASH_PRELOAD_DEPTH.remove();
+        } else {
+            CRASH_PRELOAD_DEPTH.set(next);
+        }
+    }
+
+    public static boolean isInCrashPreload() {
+        return CRASH_PRELOAD_DEPTH.get() > 0;
+    }
 }

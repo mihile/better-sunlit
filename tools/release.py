@@ -120,10 +120,8 @@ def needs_release(side):
     tag = metadata['tag']
     ref = f'refs/tags/{tag}'
     run(['git', 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', f'{ref}:{ref}'])
-    paths = ['src/main', 'build.py', f'keys/{side}-public.der']
-    if side == 'client':
-        paths.extend(['boot-agent/src', 'tools/build_boot.py'])
-    else:
+    paths = ['src/main', 'build.py', 'boot-agent/src', 'tools/build_boot.py', f'keys/{side}-public.der']
+    if side != 'client':
         paths.append(':(exclude,glob)src/main/java/**/client/**')
     if git('diff', '--name-only', f'{ref}^{{commit}}', 'HEAD', '--', *paths):
         return True

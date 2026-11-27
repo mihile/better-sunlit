@@ -255,6 +255,18 @@ public class VerifyBootAgent {
             byte[] resources = readZip(minecraft.toString(), "net/minecraft/server/packs/PathPackResources.class");
             byte[] patchedResources = dev.sunlit.bootagent.SunlitBootTransformer.transformVanillaPathPackResources(resources);
             if (patchedResources == null) throw new AssertionError("Vanilla PathPackResources not transformed");
+            byte[] sysRep = readZip(minecraft.toString(), "net/minecraft/SystemReport.class");
+            byte[] patchedSysRep = SunlitExtraTransformer.transformSystemReportPreload(null, sysRep);
+            if (patchedSysRep == null) throw new AssertionError("Vanilla SystemReport not transformed");
+            if (SunlitExtraTransformer.transformSystemReportPreload(null, patchedSysRep) != null) {
+                throw new AssertionError("SystemReport with FrameNode/hook must be skipped");
+            }
+            byte[] crashRep = readZip(minecraft.toString(), "net/minecraft/CrashReport.class");
+            byte[] patchedCrashRep = SunlitExtraTransformer.transformCrashReportPreload(null, crashRep);
+            if (patchedCrashRep == null) throw new AssertionError("Vanilla CrashReport not transformed");
+            if (SunlitExtraTransformer.transformCrashReportPreload(null, patchedCrashRep) != null) {
+                throw new AssertionError("CrashReport hook must be idempotent");
+            }
             try (var zip = FileSystems.newFileSystem(minecraft)) {
                 verifyRelativePackPaths(zip.getPath("/assets"));
             }
