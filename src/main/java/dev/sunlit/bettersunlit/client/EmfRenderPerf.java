@@ -1021,6 +1021,38 @@ public final class EmfRenderPerf {
     }
 
     /**
+     * Unboxed, empty-map fast-path variable lookup for EMF 3.2.4's
+     * {@code EMFAnimationEntityContext.getEntityVariable(String, float)}, avoiding
+     * {@code Float.valueOf} boxing and hash probing on empty or {@link FastEmfVarMap} maps.
+     */
+    public static float getEntityVariableFast(java.util.Map<String, Float> map, String key, float def) {
+        if (map == null || map.isEmpty()) {
+            return def;
+        }
+        if (map instanceof it.unimi.dsi.fastutil.objects.Object2FloatMap<?> o2f) {
+            return o2f.getOrDefault(key, def);
+        }
+        Float v = map.get(key);
+        return v != null ? v.floatValue() : def;
+    }
+
+    /**
+     * Unboxed variable write for EMF 3.2.4's
+     * {@code EMFAnimationEntityContext.setEntityVariable(String, float)}.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static void setEntityVariableFast(java.util.Map<String, Float> map, String key, float value) {
+        if (map == null) {
+            return;
+        }
+        if (map instanceof it.unimi.dsi.fastutil.objects.Object2FloatMap o2f) {
+            o2f.put(key, value);
+            return;
+        }
+        map.put(key, Float.valueOf(value));
+    }
+
+    /**
      * Compact, lazy-allocated {@link it.unimi.dsi.fastutil.objects.Object2FloatMap} for EMF
      * per-entity variable maps: allocates zero arrays for entities with no EMF variables, uses a
      * flat linear array for &lt;= 8 entries, and upgrades to an inline power-of-2 open-addressed

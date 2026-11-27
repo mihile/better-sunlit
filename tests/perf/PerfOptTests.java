@@ -5067,5 +5067,26 @@ public final class PerfOptTests {
                 dev.sunlit.bettersunlit.client.StartupLoadPerf.setChunkUploadBacklogged(false);
             }
         }
+
+        // 22. EmfRenderPerf.getEntityVariableFast / setEntityVariableFast (EMF 3.2.4 original-pack support).
+        {
+            var fastMap = new EmfRenderPerf.FastEmfVarMap();
+            assertEquals(-1.5f, EmfRenderPerf.getEntityVariableFast(fastMap, "var.a", -1.5f),
+                    "Empty FastEmfVarMap must return default");
+            EmfRenderPerf.setEntityVariableFast(fastMap, "var.a", 42.25f);
+            assertEquals(42.25f, EmfRenderPerf.getEntityVariableFast(fastMap, "var.a", 0f),
+                    "FastEmfVarMap unboxed put/get must roundtrip");
+            assertEquals(7.0f, EmfRenderPerf.getEntityVariableFast(fastMap, "var.missing", 7.0f),
+                    "Missing key in FastEmfVarMap must return default");
+
+            var hashMap = new java.util.HashMap<String, Float>();
+            assertEquals(3.5f, EmfRenderPerf.getEntityVariableFast(hashMap, "var.b", 3.5f),
+                    "Empty HashMap must return default");
+            EmfRenderPerf.setEntityVariableFast(hashMap, "var.b", 9.75f);
+            assertEquals(9.75f, EmfRenderPerf.getEntityVariableFast(hashMap, "var.b", 0f),
+                    "HashMap fallback put/get must roundtrip");
+            assertEquals(1.25f, EmfRenderPerf.getEntityVariableFast(null, "var.c", 1.25f),
+                    "Null map must return default");
+        }
     }
 }

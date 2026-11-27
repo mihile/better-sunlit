@@ -157,6 +157,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "net/minecraft/resources/ResourceLocation";
     private static final String MC_ITEM_STACK_CLS =
             "net/minecraft/world/item/ItemStack";
+    private static final String EMF_ANIM_CONTEXT_CLS =
+            "traben/entity_model_features/models/animation/EMFAnimationEntityContext";
     private static final String SODIUM_MESH_TASK_CLS =
             "me/jellysquid/mods/sodium/client/render/chunk/compile/tasks/ChunkBuilderMeshingTask";
     private static final String SODIUM_WORLD_RENDERER_CLS =
@@ -357,6 +359,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                  QUARK_VARIANT_ANIMAL_CLIENT_CLS -> transformStringMatches(module, classfileBuffer);
             case EMF_VAR_FACTORY_CLS -> transformEmfModelVariableFactory(module, classfileBuffer);
             case EMF_MATH_CLS -> transformEmfMath(classfileBuffer);
+            case EMF_ANIM_CONTEXT_CLS -> transformEmfAnimationEntityContext(classfileBuffer);
             case EMF_ASM_ANIM_HANDLER_CLS -> transformEmfAsmAnimationHandler(classfileBuffer);
             case MC_BAKED_QUAD_CLS -> transformBakedQuad(classfileBuffer);
             case EMBERBIUM_MODULE_SCANNER_CLS -> transformEmberbiumModuleScanner(module, classfileBuffer);
@@ -10159,6 +10162,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         final String horseCls = "net/minecraft/world/entity/animal/horse/AbstractHorse";
         final String boatCls = "net/minecraft/world/entity/vehicle/Boat";
         final String o2fCls = "it/unimi/dsi/fastutil/objects/Object2FloatOpenHashMap";
+        final String hashMapCls = "java/util/HashMap";
         final String fastVarCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf$FastEmfVarMap";
         boolean hasEntityJsBuilder = false;
         boolean hasEmfVarMap = false;
@@ -10296,13 +10300,15 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                     patched = true;
                 }
             }
-            // 3. Replace EMF's per-entity Object2FloatOpenHashMap allocations with FastEmfVarMap
+            // 3. Replace EMF's per-entity variable map allocations (Object2FloatOpenHashMap in EMF 3.3+,
+            //    HashMap in EMF 3.2.x) with FastEmfVarMap
             if (hasEmfVarMap
                     && ("<init>".equals(mn.name) || "emf$getVariableMap".equals(mn.name))) {
                 for (AbstractInsnNode insn : mn.instructions.toArray()) {
                     if (insn instanceof TypeInsnNode tin
                             && tin.getOpcode() == Opcodes.NEW
-                            && o2fCls.equals(tin.desc)) {
+                            && (o2fCls.equals(tin.desc) || hashMapCls.equals(tin.desc))) {
+                        String allocCls = tin.desc;
                         // Scan ahead up to 8 real insns for matching <init> + PUTFIELD emf$variableMap*
                         MethodInsnNode ctor = null;
                         FieldInsnNode putf = null;
@@ -10311,7 +10317,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                             if (ctor == null
                                     && cur instanceof MethodInsnNode min
                                     && min.getOpcode() == Opcodes.INVOKESPECIAL
-                                    && o2fCls.equals(min.owner)
+                                    && allocCls.equals(min.owner)
                                     && "<init>".equals(min.name)
                                     && ("()V".equals(min.desc) || "(Ljava/util/Map;)V".equals(min.desc))) {
                                 ctor = min;
@@ -10332,6 +10338,98 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                         }
                     }
                 }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Eliminates {@code Float.valueOf} boxing and empty-map hashing in EMF 3.2.4's
+     * {@code EMFAnimationEntityContext.getEntityVariable(String, float)} and
+     * {@code setEntityVariable(String, float)} by routing through
+     * {@code EmfRenderPerf.getEntityVariableFast} / {@code setEntityVariableFast}.
+     */
+    public static byte[] transformEmfAnimationEntityContext(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String stateCls = "traben/entity_model_features/models/animation/state/EMFEntityRenderState";
+        final String stateDesc = "L" + stateCls + ";";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean hasStateField = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("emfState".equals(fn.name)
+                        && (fn.access & Opcodes.ACC_STATIC) != 0
+                        && stateDesc.equals(fn.desc)) {
+                    hasStateField = true;
+                    break;
+                }
+            }
+        }
+        if (!hasStateField) {
+            return null;
+        }
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ((mn.access & Opcodes.ACC_STATIC) == 0 || mn.instructions == null) {
+                continue;
+            }
+            if ("getEntityVariable".equals(mn.name) && "(Ljava/lang/String;F)F".equals(mn.desc)) {
+                InsnList il = new InsnList();
+                LabelNode hasState = new LabelNode();
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "emfState", stateDesc));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasState));
+                il.add(new InsnNode(Opcodes.POP));
+                il.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                il.add(new InsnNode(Opcodes.FRETURN));
+                il.add(hasState);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 2,
+                        new Object[] {"java/lang/String", Opcodes.FLOAT},
+                        1, new Object[] {stateCls}));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, stateCls, "variableMap", "()Ljava/util/Map;", true));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "getEntityVariableFast",
+                        "(Ljava/util/Map;Ljava/lang/String;F)F", false));
+                il.add(new InsnNode(Opcodes.FRETURN));
+                mn.instructions.clear();
+                mn.instructions.add(il);
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
+            } else if ("setEntityVariable".equals(mn.name) && "(Ljava/lang/String;F)V".equals(mn.desc)) {
+                InsnList il = new InsnList();
+                LabelNode hasState = new LabelNode();
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "emfState", stateDesc));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasState));
+                il.add(new InsnNode(Opcodes.POP));
+                il.add(new InsnNode(Opcodes.RETURN));
+                il.add(hasState);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 2,
+                        new Object[] {"java/lang/String", Opcodes.FLOAT},
+                        1, new Object[] {stateCls}));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, stateCls, "variableMap", "()Ljava/util/Map;", true));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "setEntityVariableFast",
+                        "(Ljava/util/Map;Ljava/lang/String;F)V", false));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions.clear();
+                mn.instructions.add(il);
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
             }
         }
         if (!patched) {
