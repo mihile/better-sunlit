@@ -1,0 +1,11 @@
+{
+  "build": 2026112704,
+  "label": "2026.11.27.4",
+  "title": "기능 개선 및 오류 수정",
+  "changes": [
+    {
+      "title": "클라이언트 SystemReport 중복 변환 크래시 수정",
+      "detail": "전용 서버용 부팅 에이전트 변환(CrashReport·SystemReport·GameData·TreeLoreManager)이 클라이언트 믹신이 이미 적용된 클래스를 중복 변환하면서 발생하던 SystemReport StackMapTable VerifyError 크래시를 수정하고, 크래시 프리로드 플래그를 부트 페이로드로 분리해 초기 클래스 로딩 충돌을 방지했습니다."
+    }
+  ]
+}

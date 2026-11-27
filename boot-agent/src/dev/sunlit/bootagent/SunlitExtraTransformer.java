@@ -467,8 +467,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                  TANUKI_WIDE_CLS,
                  TANUKI_TALL_CLS,
                  TANUKI_PLASMA_CLS -> transformTanukiBlockShapes(className, classfileBuffer);
-            case MC_CRASH_REPORT_CLS -> transformCrashReportPreload(classfileBuffer);
-            case MC_SYSTEM_REPORT_CLS -> transformSystemReportPreload(classfileBuffer);
+            case MC_CRASH_REPORT_CLS -> transformCrashReportPreload(module, classfileBuffer);
+            case MC_SYSTEM_REPORT_CLS -> transformSystemReportPreload(module, classfileBuffer);
             case FORGE_GAME_DATA_CLS -> transformForgeGameData(classfileBuffer);
             case MYSTICAL_TREE_LORE_CLS -> transformMysticalTreeLore(classfileBuffer);
             case KJS_GEN_PACK_CLS -> transformKubeJsGeneratedResourcePack(classfileBuffer);
@@ -11199,27 +11199,34 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         return cw.toByteArray();
     }
 
-    public static byte[] transformCrashReportPreload(byte[] bytes) {
+    public static byte[] transformCrashReportPreload(Module module, byte[] bytes) {
+        ensureReadsExtraPayload(module);
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
-        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        if (cn.methods != null) {
+            for (MethodNode mn : cn.methods) {
+                if (mn.name != null && mn.name.contains("sunlit$enterCrashReportPreload")) {
+                    return null;
+                }
+            }
+        }
         boolean patched = false;
         for (MethodNode mn : cn.methods) {
             if (!"m_127529_".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
                 continue;
             }
             for (AbstractInsnNode insn : mn.instructions) {
-                if (insn instanceof MethodInsnNode min && perfCls.equals(min.owner)) {
+                if (insn instanceof MethodInsnNode min && PAYLOAD_CLS.equals(min.owner)) {
                     return null;
                 }
             }
             mn.instructions.insert(new MethodInsnNode(
-                    Opcodes.INVOKESTATIC, perfCls, "enterCrashPreload", "()V", false));
+                    Opcodes.INVOKESTATIC, PAYLOAD_CLS, "enterCrashPreload", "()V", false));
             for (AbstractInsnNode insn : mn.instructions.toArray()) {
                 int op = insn.getOpcode();
                 if (op == Opcodes.RETURN || op == Opcodes.ATHROW) {
                     mn.instructions.insertBefore(insn, new MethodInsnNode(
-                            Opcodes.INVOKESTATIC, perfCls, "exitCrashPreload", "()V", false));
+                            Opcodes.INVOKESTATIC, PAYLOAD_CLS, "exitCrashPreload", "()V", false));
                 }
             }
             patched = true;
@@ -11233,28 +11240,37 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         return cw.toByteArray();
     }
 
-    public static byte[] transformSystemReportPreload(byte[] bytes) {
+    public static byte[] transformSystemReportPreload(Module module, byte[] bytes) {
+        ensureReadsExtraPayload(module);
         ClassNode cn = new ClassNode();
-        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
-        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        new ClassReader(bytes).accept(cn, 0);
+        if (cn.methods != null) {
+            for (MethodNode mn : cn.methods) {
+                if (mn.name != null && mn.name.contains("sunlit$deferPreloadHardwareProbe")) {
+                    return null;
+                }
+            }
+        }
         boolean patched = false;
         for (MethodNode mn : cn.methods) {
             if (!"m_143564_".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
                 continue;
             }
             for (AbstractInsnNode insn : mn.instructions) {
-                if (insn instanceof MethodInsnNode min && perfCls.equals(min.owner)) {
+                if (insn instanceof FrameNode) {
+                    return null;
+                }
+                if (insn instanceof MethodInsnNode min && PAYLOAD_CLS.equals(min.owner)) {
                     return null;
                 }
             }
             LabelNode cont = new LabelNode();
             InsnList guard = new InsnList();
-            guard.add(new MethodInsnNode(Opcodes.INVOKESTATIC, perfCls, "isInCrashPreload", "()Z", false));
+            guard.add(new MethodInsnNode(Opcodes.INVOKESTATIC, PAYLOAD_CLS, "isInCrashPreload", "()Z", false));
             guard.add(new JumpInsnNode(Opcodes.IFEQ, cont));
             guard.add(new InsnNode(Opcodes.RETURN));
             guard.add(cont);
-            guard.add(new FrameNode(
-                    Opcodes.F_FULL, 1, new Object[] {MC_SYSTEM_REPORT_CLS}, 0, new Object[0]));
+            guard.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
             mn.instructions.insert(guard);
             patched = true;
             break;
@@ -11270,6 +11286,15 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
     public static byte[] transformForgeGameData(byte[] bytes) {
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
+        if (cn.methods != null) {
+            for (MethodNode mn : cn.methods) {
+                if (mn.name != null
+                        && (mn.name.contains("sunlit$runPostConstructHooks")
+                                || mn.name.contains("sunlit$scheduleRegistryWindowPreload"))) {
+                    return null;
+                }
+            }
+        }
         final String statePerf = "dev/sunlit/bettersunlit/perf/StateDefinitionPerf";
         boolean patched = false;
         for (MethodNode mn : cn.methods) {
@@ -11322,6 +11347,13 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
     public static byte[] transformMysticalTreeLore(byte[] bytes) {
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
+        if (cn.methods != null) {
+            for (MethodNode mn : cn.methods) {
+                if (mn.name != null && mn.name.contains("sunlit$deferStartupHttpDownloads")) {
+                    return null;
+                }
+            }
+        }
         boolean patched = false;
         for (MethodNode mn : cn.methods) {
             if ("init".equals(mn.name) && "()V".equals(mn.desc) && (mn.access & Opcodes.ACC_STATIC) != 0) {
