@@ -157,6 +157,8 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "net/minecraft/resources/ResourceLocation";
     private static final String MC_ITEM_STACK_CLS =
             "net/minecraft/world/item/ItemStack";
+    private static final String EMF_ANIM_CONTEXT_CLS =
+            "traben/entity_model_features/models/animation/EMFAnimationEntityContext";
     private static final String SODIUM_MESH_TASK_CLS =
             "me/jellysquid/mods/sodium/client/render/chunk/compile/tasks/ChunkBuilderMeshingTask";
     private static final String SODIUM_WORLD_RENDERER_CLS =
@@ -267,6 +269,17 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
     private static final String TANUKI_WIDE_CLS = "tanukidecor/block/RotatingWideBlock";
     private static final String TANUKI_TALL_CLS = "tanukidecor/block/TallBlock";
     private static final String TANUKI_PLASMA_CLS = "tanukidecor/block/misc/PlasmaBallBlock";
+    private static final String MC_CRASH_REPORT_CLS = "net/minecraft/CrashReport";
+    private static final String MC_SYSTEM_REPORT_CLS = "net/minecraft/SystemReport";
+    private static final String FORGE_GAME_DATA_CLS = "net/minecraftforge/registries/GameData";
+    private static final String MYSTICAL_TREE_LORE_CLS = "net/mehvahdjukaar/mysticaloaktree/client/TreeLoreManager";
+    private static final String KJS_GEN_PACK_CLS = "dev/latvian/mods/kubejs/script/data/GeneratedResourcePack";
+    private static final String KJS_TAG_EVENT_CLS = "dev/latvian/mods/kubejs/server/tag/TagEventJS";
+    private static final String FD_TOOL_ACTION_ING_CLS =
+            "vectorwing/farmersdelight/common/crafting/ingredient/ToolActionIngredient";
+    private static final String LOOTJS_RL_PATTERN_CLS =
+            "com/almostreliable/lootjs/filters/ResourceLocationFilter$ByPattern";
+    private static final String ALI_ABSTRACT_SERVER_CLS = "com/yanny/ali/network/AbstractServer";
     private static final String PAYLOAD_CLS = "dev/sunlit/bootagent/payload/BootJarPayload";
     private static Instrumentation extraInst;
     private static Module extraPayloadModule;
@@ -357,6 +370,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                  QUARK_VARIANT_ANIMAL_CLIENT_CLS -> transformStringMatches(module, classfileBuffer);
             case EMF_VAR_FACTORY_CLS -> transformEmfModelVariableFactory(module, classfileBuffer);
             case EMF_MATH_CLS -> transformEmfMath(classfileBuffer);
+            case EMF_ANIM_CONTEXT_CLS -> transformEmfAnimationEntityContext(classfileBuffer);
             case EMF_ASM_ANIM_HANDLER_CLS -> transformEmfAsmAnimationHandler(classfileBuffer);
             case MC_BAKED_QUAD_CLS -> transformBakedQuad(classfileBuffer);
             case EMBERBIUM_MODULE_SCANNER_CLS -> transformEmberbiumModuleScanner(module, classfileBuffer);
@@ -453,6 +467,15 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                  TANUKI_WIDE_CLS,
                  TANUKI_TALL_CLS,
                  TANUKI_PLASMA_CLS -> transformTanukiBlockShapes(className, classfileBuffer);
+            case MC_CRASH_REPORT_CLS -> transformCrashReportPreload(classfileBuffer);
+            case MC_SYSTEM_REPORT_CLS -> transformSystemReportPreload(classfileBuffer);
+            case FORGE_GAME_DATA_CLS -> transformForgeGameData(classfileBuffer);
+            case MYSTICAL_TREE_LORE_CLS -> transformMysticalTreeLore(classfileBuffer);
+            case KJS_GEN_PACK_CLS -> transformKubeJsGeneratedResourcePack(classfileBuffer);
+            case KJS_TAG_EVENT_CLS -> transformKubeJsTagEventJS(classfileBuffer);
+            case FD_TOOL_ACTION_ING_CLS -> transformToolActionIngredient(classfileBuffer);
+            case LOOTJS_RL_PATTERN_CLS -> transformLootJsByPattern(classfileBuffer);
+            case ALI_ABSTRACT_SERVER_CLS -> transformAliAbstractServer(classfileBuffer);
             default -> null;
         };
     }
@@ -10159,6 +10182,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         final String horseCls = "net/minecraft/world/entity/animal/horse/AbstractHorse";
         final String boatCls = "net/minecraft/world/entity/vehicle/Boat";
         final String o2fCls = "it/unimi/dsi/fastutil/objects/Object2FloatOpenHashMap";
+        final String hashMapCls = "java/util/HashMap";
         final String fastVarCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf$FastEmfVarMap";
         boolean hasEntityJsBuilder = false;
         boolean hasEmfVarMap = false;
@@ -10296,13 +10320,15 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                     patched = true;
                 }
             }
-            // 3. Replace EMF's per-entity Object2FloatOpenHashMap allocations with FastEmfVarMap
+            // 3. Replace EMF's per-entity variable map allocations (Object2FloatOpenHashMap in EMF 3.3+,
+            //    HashMap in EMF 3.2.x) with FastEmfVarMap
             if (hasEmfVarMap
                     && ("<init>".equals(mn.name) || "emf$getVariableMap".equals(mn.name))) {
                 for (AbstractInsnNode insn : mn.instructions.toArray()) {
                     if (insn instanceof TypeInsnNode tin
                             && tin.getOpcode() == Opcodes.NEW
-                            && o2fCls.equals(tin.desc)) {
+                            && (o2fCls.equals(tin.desc) || hashMapCls.equals(tin.desc))) {
+                        String allocCls = tin.desc;
                         // Scan ahead up to 8 real insns for matching <init> + PUTFIELD emf$variableMap*
                         MethodInsnNode ctor = null;
                         FieldInsnNode putf = null;
@@ -10311,7 +10337,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                             if (ctor == null
                                     && cur instanceof MethodInsnNode min
                                     && min.getOpcode() == Opcodes.INVOKESPECIAL
-                                    && o2fCls.equals(min.owner)
+                                    && allocCls.equals(min.owner)
                                     && "<init>".equals(min.name)
                                     && ("()V".equals(min.desc) || "(Ljava/util/Map;)V".equals(min.desc))) {
                                 ctor = min;
@@ -10332,6 +10358,98 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                         }
                     }
                 }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Eliminates {@code Float.valueOf} boxing and empty-map hashing in EMF 3.2.4's
+     * {@code EMFAnimationEntityContext.getEntityVariable(String, float)} and
+     * {@code setEntityVariable(String, float)} by routing through
+     * {@code EmfRenderPerf.getEntityVariableFast} / {@code setEntityVariableFast}.
+     */
+    public static byte[] transformEmfAnimationEntityContext(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String stateCls = "traben/entity_model_features/models/animation/state/EMFEntityRenderState";
+        final String stateDesc = "L" + stateCls + ";";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean hasStateField = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("emfState".equals(fn.name)
+                        && (fn.access & Opcodes.ACC_STATIC) != 0
+                        && stateDesc.equals(fn.desc)) {
+                    hasStateField = true;
+                    break;
+                }
+            }
+        }
+        if (!hasStateField) {
+            return null;
+        }
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ((mn.access & Opcodes.ACC_STATIC) == 0 || mn.instructions == null) {
+                continue;
+            }
+            if ("getEntityVariable".equals(mn.name) && "(Ljava/lang/String;F)F".equals(mn.desc)) {
+                InsnList il = new InsnList();
+                LabelNode hasState = new LabelNode();
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "emfState", stateDesc));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasState));
+                il.add(new InsnNode(Opcodes.POP));
+                il.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                il.add(new InsnNode(Opcodes.FRETURN));
+                il.add(hasState);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 2,
+                        new Object[] {"java/lang/String", Opcodes.FLOAT},
+                        1, new Object[] {stateCls}));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, stateCls, "variableMap", "()Ljava/util/Map;", true));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "getEntityVariableFast",
+                        "(Ljava/util/Map;Ljava/lang/String;F)F", false));
+                il.add(new InsnNode(Opcodes.FRETURN));
+                mn.instructions.clear();
+                mn.instructions.add(il);
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
+            } else if ("setEntityVariable".equals(mn.name) && "(Ljava/lang/String;F)V".equals(mn.desc)) {
+                InsnList il = new InsnList();
+                LabelNode hasState = new LabelNode();
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "emfState", stateDesc));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasState));
+                il.add(new InsnNode(Opcodes.POP));
+                il.add(new InsnNode(Opcodes.RETURN));
+                il.add(hasState);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 2,
+                        new Object[] {"java/lang/String", Opcodes.FLOAT},
+                        1, new Object[] {stateCls}));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, stateCls, "variableMap", "()Ljava/util/Map;", true));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "setEntityVariableFast",
+                        "(Ljava/util/Map;Ljava/lang/String;F)V", false));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions.clear();
+                mn.instructions.add(il);
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
             }
         }
         if (!patched) {
@@ -11076,6 +11194,464 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                 mpDesc,
                 null,
                 null));
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformCrashReportPreload(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"m_127529_".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions) {
+                if (insn instanceof MethodInsnNode min && perfCls.equals(min.owner)) {
+                    return null;
+                }
+            }
+            mn.instructions.insert(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "enterCrashPreload", "()V", false));
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                int op = insn.getOpcode();
+                if (op == Opcodes.RETURN || op == Opcodes.ATHROW) {
+                    mn.instructions.insertBefore(insn, new MethodInsnNode(
+                            Opcodes.INVOKESTATIC, perfCls, "exitCrashPreload", "()V", false));
+                }
+            }
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformSystemReportPreload(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"m_143564_".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions) {
+                if (insn instanceof MethodInsnNode min && perfCls.equals(min.owner)) {
+                    return null;
+                }
+            }
+            LabelNode cont = new LabelNode();
+            InsnList guard = new InsnList();
+            guard.add(new MethodInsnNode(Opcodes.INVOKESTATIC, perfCls, "isInCrashPreload", "()Z", false));
+            guard.add(new JumpInsnNode(Opcodes.IFEQ, cont));
+            guard.add(new InsnNode(Opcodes.RETURN));
+            guard.add(cont);
+            guard.add(new FrameNode(
+                    Opcodes.F_FULL, 1, new Object[] {MC_SYSTEM_REPORT_CLS}, 0, new Object[0]));
+            mn.instructions.insert(guard);
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformForgeGameData(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String statePerf = "dev/sunlit/bettersunlit/perf/StateDefinitionPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null || !"()V".equals(mn.desc)) {
+                continue;
+            }
+            if ("unfreezeData".equals(mn.name)) {
+                boolean already = false;
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (insn instanceof MethodInsnNode min && statePerf.equals(min.owner)) {
+                        already = true;
+                        break;
+                    }
+                }
+                if (!already) {
+                    mn.instructions.insert(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC, statePerf, "runPostConstructHooks", "()V", false));
+                    patched = true;
+                }
+            } else if ("postRegisterEvents".equals(mn.name)) {
+                boolean already = false;
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (insn instanceof MethodInsnNode min && statePerf.equals(min.owner)) {
+                        already = true;
+                        break;
+                    }
+                }
+                if (!already) {
+                    mn.instructions.insert(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC, statePerf, "beginRegistryMapReuse", "()V", false));
+                    for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                        int op = insn.getOpcode();
+                        if (op == Opcodes.RETURN || op == Opcodes.ATHROW) {
+                            mn.instructions.insertBefore(insn, new MethodInsnNode(
+                                    Opcodes.INVOKESTATIC, statePerf, "endRegistryMapReuse", "()V", false));
+                        }
+                    }
+                    patched = true;
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformMysticalTreeLore(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("init".equals(mn.name) && "()V".equals(mn.desc) && (mn.access & Opcodes.ACC_STATIC) != 0) {
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new InsnNode(Opcodes.RETURN));
+                mn.maxStack = 0;
+                mn.maxLocals = 0;
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformKubeJsGeneratedResourcePack(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean hasPackType = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                // Skip when client PerfKubeJsPackMixin already instrumented this class.
+                if ("sunlit$readyGenerated".equals(fn.name)) {
+                    return null;
+                }
+                if ("packType".equals(fn.name) && "Lnet/minecraft/server/packs/PackType;".equals(fn.desc)) {
+                    hasPackType = true;
+                }
+            }
+        }
+        if (!hasPackType) {
+            return null;
+        }
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("m_8031_".equals(mn.name)
+                    && "(Lnet/minecraft/server/packs/PackType;Ljava/lang/String;Ljava/lang/String;Lnet/minecraft/server/packs/PackResources$ResourceOutput;)V".equals(mn.desc)) {
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new FieldInsnNode(
+                        Opcodes.GETFIELD, KJS_GEN_PACK_CLS, "packType", "Lnet/minecraft/server/packs/PackType;"));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 3));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 4));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        perfCls,
+                        "listGeneratedResources",
+                        "(Ldev/latvian/mods/kubejs/script/data/GeneratedResourcePack;"
+                                + "Lnet/minecraft/server/packs/PackType;"
+                                + "Lnet/minecraft/server/packs/PackType;"
+                                + "Ljava/lang/String;Ljava/lang/String;"
+                                + "Lnet/minecraft/server/packs/PackResources$ResourceOutput;)V",
+                        false));
+                mn.instructions.add(new InsnNode(Opcodes.RETURN));
+                patched = true;
+            } else if ("scanForInvalidFiles".equals(mn.name)
+                    && "(Ljava/lang/String;Ljava/nio/file/Path;)V".equals(mn.desc)
+                    && (mn.access & Opcodes.ACC_STATIC) != 0) {
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        perfCls,
+                        "scanForInvalidFilesAsync",
+                        "(Ljava/lang/String;Ljava/nio/file/Path;)V",
+                        false));
+                mn.instructions.add(new InsnNode(Opcodes.RETURN));
+                patched = true;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformToolActionIngredient(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean hasField = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("toolAction".equals(fn.name) && "Lnet/minecraftforge/common/ToolAction;".equals(fn.desc)) {
+                    hasField = true;
+                    break;
+                }
+            }
+        }
+        if (!hasField) {
+            return null;
+        }
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("<init>".equals(mn.name)
+                    && "(Lnet/minecraftforge/common/ToolAction;)V".equals(mn.desc)
+                    && mn.instructions != null) {
+                boolean callsIngredientInit = false;
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (insn instanceof MethodInsnNode min
+                            && min.getOpcode() == Opcodes.INVOKESPECIAL
+                            && "net/minecraft/world/item/crafting/Ingredient".equals(min.owner)
+                            && "<init>".equals(min.name)
+                            && "(Ljava/util/stream/Stream;)V".equals(min.desc)) {
+                        callsIngredientInit = true;
+                        break;
+                    }
+                }
+                if (!callsIngredientInit) {
+                    continue;
+                }
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        perfCls,
+                        "toolActionValuesStream",
+                        "(Lnet/minecraftforge/common/ToolAction;)Ljava/util/stream/Stream;",
+                        false));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESPECIAL,
+                        "net/minecraft/world/item/crafting/Ingredient",
+                        "<init>",
+                        "(Ljava/util/stream/Stream;)V",
+                        false));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new FieldInsnNode(
+                        Opcodes.PUTFIELD,
+                        FD_TOOL_ACTION_ING_CLS,
+                        "toolAction",
+                        "Lnet/minecraftforge/common/ToolAction;"));
+                mn.instructions.add(new InsnNode(Opcodes.RETURN));
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformLootJsByPattern(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean hasPattern = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("pattern".equals(fn.name) && "Ljava/util/regex/Pattern;".equals(fn.desc)) {
+                    hasPattern = true;
+                    break;
+                }
+            }
+        }
+        if (!hasPattern) {
+            return null;
+        }
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("test".equals(mn.name)
+                    && "(Lnet/minecraft/resources/ResourceLocation;)Z".equals(mn.desc)) {
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new FieldInsnNode(
+                        Opcodes.GETFIELD, LOOTJS_RL_PATTERN_CLS, "pattern", "Ljava/util/regex/Pattern;"));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        perfCls,
+                        "testRegexResourceLocation",
+                        "(Ljava/util/regex/Pattern;Lnet/minecraft/resources/ResourceLocation;)Z",
+                        false));
+                mn.instructions.add(new InsnNode(Opcodes.IRETURN));
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformKubeJsTagEventJS(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        final String fieldName = "sunlit$tagIndex";
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if (fieldName.equals(fn.name)) {
+                    return null;
+                }
+            }
+        }
+        boolean patchedGet = false;
+        boolean patchedRemoveAll = false;
+        for (MethodNode mn : cn.methods) {
+            if ("get".equals(mn.name)
+                    && "(Lnet/minecraft/resources/ResourceLocation;)Ldev/latvian/mods/kubejs/server/tag/TagWrapper;".equals(mn.desc)
+                    && mn.instructions != null) {
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn.getOpcode() == Opcodes.ARETURN) {
+                        InsnList hook = new InsnList();
+                        hook.add(new InsnNode(Opcodes.DUP));
+                        hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        hook.add(new FieldInsnNode(Opcodes.GETFIELD, KJS_TAG_EVENT_CLS, fieldName, "Ljava/lang/Object;"));
+                        hook.add(new MethodInsnNode(
+                                Opcodes.INVOKESTATIC,
+                                perfCls,
+                                "onTagWrapperTouched",
+                                "(Ldev/latvian/mods/kubejs/server/tag/TagWrapper;Ljava/lang/Object;)V",
+                                false));
+                        mn.instructions.insertBefore(insn, hook);
+                        patchedGet = true;
+                    }
+                }
+            } else if ("removeAllTagsFrom".equals(mn.name)
+                    && "([Ljava/lang/Object;)V".equals(mn.desc)
+                    && mn.instructions != null) {
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, KJS_TAG_EVENT_CLS, fieldName, "Ljava/lang/Object;"));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        perfCls,
+                        "removeAllTagsFrom",
+                        "(Ldev/latvian/mods/kubejs/server/tag/TagEventJS;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+                        false));
+                mn.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, KJS_TAG_EVENT_CLS, fieldName, "Ljava/lang/Object;"));
+                mn.instructions.add(new InsnNode(Opcodes.RETURN));
+                patchedRemoveAll = true;
+            }
+        }
+        if (!patchedGet || !patchedRemoveAll) {
+            return null;
+        }
+        cn.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_TRANSIENT,
+                fieldName,
+                "Ljava/lang/Object;",
+                null,
+                null));
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    public static byte[] transformAliAbstractServer(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String perfCls = "dev/sunlit/bettersunlit/perf/ServerBootPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("predicateItem".equals(mn.name)
+                    && "(Lcom/yanny/ali/api/ILootModifier;Ljava/util/List;)Z".equals(mn.desc)
+                    && (mn.access & Opcodes.ACC_STATIC) != 0) {
+                mn.instructions.clear();
+                mn.tryCatchBlocks.clear();
+                mn.localVariables = null;
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                mn.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                mn.instructions.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        perfCls,
+                        "aliPredicateItem",
+                        "(Ljava/lang/Object;Ljava/util/List;)Z",
+                        false));
+                mn.instructions.add(new InsnNode(Opcodes.IRETURN));
+                patched = true;
+            } else if ("readLootTables".equals(mn.name)
+                    && "(Lnet/minecraft/world/level/storage/loot/LootDataManager;)V".equals(mn.desc)
+                    && mn.instructions != null) {
+                boolean already = false;
+                for (AbstractInsnNode insn : mn.instructions) {
+                    if (insn instanceof MethodInsnNode min && perfCls.equals(min.owner)) {
+                        already = true;
+                        break;
+                    }
+                }
+                if (!already) {
+                    mn.instructions.insert(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC, perfCls, "enterAliRead", "()V", false));
+                    for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                        int op = insn.getOpcode();
+                        if (op == Opcodes.RETURN || op == Opcodes.ATHROW) {
+                            mn.instructions.insertBefore(insn, new MethodInsnNode(
+                                    Opcodes.INVOKESTATIC, perfCls, "exitAliRead", "()V", false));
+                        }
+                    }
+                    patched = true;
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);
         return cw.toByteArray();

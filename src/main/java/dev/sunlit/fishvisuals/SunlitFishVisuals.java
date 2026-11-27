@@ -79,6 +79,7 @@ public final class SunlitFishVisuals {
         net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus()
                 .addListener(dev.sunlit.bettersunlit.perf.LogBegonePerf::onConfigEvent);
         FishingSettings.load();
+        dev.sunlit.bettersunlit.BootAgentSync.scheduleSync();
         dev.sunlit.bettersunlit.husbandry.AnimalStatusSync.register();
         FishPondSync.register();
         dev.sunlit.bettersunlit.cavern.SkullCavernElevator.register();

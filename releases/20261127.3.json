@@ -1,0 +1,11 @@
+{
+  "build": 2026112703,
+  "label": "2026.11.27.3",
+  "title": "기능 개선 및 오류 수정",
+  "changes": [
+    {
+      "title": "전용 서버 부팅 에이전트 동기화 및 서버 부팅 최적화",
+      "detail": "최신 sunlit-boot.jar를 서버 JAR에도 함께 내장하고 시작·업데이트 시 config/sunlit-boot.jar를 자동 동기화합니다. 서버 시작 단계의 충돌 보고서 하드웨어 사전 조회, 블록 상태 정의, KubeJS 리소스팩·태그 정리, Farmer's Delight 도구 재료, LootJS·AdvancedLootInfo 루트 테이블 처리 경로를 최적화해 서버 부팅과 준비 시간을 크게 단축했습니다."
+    }
+  ]
+}

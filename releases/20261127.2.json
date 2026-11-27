@@ -1,0 +1,11 @@
+{
+  "build": 2026112702,
+  "label": "2026.11.27.2",
+  "title": "기능 개선 및 오류 수정",
+  "changes": [
+    {
+      "title": "원본 팩(EMF 3.2.4) 렌더링 최적화 호환",
+      "detail": "원본 Society: Sunlit Valley 4.2.2(EMF 3.2.4)에서도 엔티티 변수 맵(FastEmfVarMap)과 애니메이션 변수 조회 고속 경로가 정상 적용되도록 보완했습니다."
+    }
+  ]
+}

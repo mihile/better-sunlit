@@ -137,8 +137,7 @@ inlineConfig.write_text(json.dumps(inlineData,indent=2),encoding='utf8')
 if side=='server':
  entryConfig=resources/'better_sunlit_entry.mixins.json';entryData=json.loads(entryConfig.read_text(encoding='utf8'));entryData.pop('client',None);entryConfig.write_text(json.dumps(entryData,indent=2),encoding='utf8')
 asset=resources/'assets/better_sunlit';asset.mkdir(parents=True,exist_ok=True)
-if side=='client':
- subprocess.run([sys.executable,str(ROOT/'tools/build_boot.py'),'--instance',str(INSTANCE),'--out',str(asset/'sunlit-boot.jar'),'--java-home',str(args.java_home)],check=True)
+subprocess.run([sys.executable,str(ROOT/'tools/build_boot.py'),'--instance',str(INSTANCE),'--out',str(asset/'sunlit-boot.jar'),'--java-home',str(args.java_home)],check=True)
 maint=BUILD/'maintainer-tools';maint.mkdir(exist_ok=True);subprocess.run([JDK/'javac.exe','--release','17','-d',maint,ROOT/'tools/SignRelease.java'],check=True)
 args.keys.mkdir(parents=True,exist_ok=True);secret=args.keys/(side+'.pk8');pub=ROOT/'keys'/(side+'-public.der');pub.parent.mkdir(exist_ok=True)
 if not secret.exists():
