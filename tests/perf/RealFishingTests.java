@@ -252,6 +252,30 @@ public final class RealFishingTests {
         check("PreventRemoteMovement".equals(SunlitFishVisuals.PREVENT_REMOTE_MOVEMENT),
                 "Magnet protection key must match Forge/SimpleMagnets/SophisticatedCore convention");
 
+        // Verify ClientFishVisuals SnapDampener absorbs MoveEntityPacket snaps, keeps shadow+main passes identical,
+        // and leaves normal continuous motion undamped.
+        {
+            var damp = new dev.sunlit.fishvisuals.client.ClientFishVisuals.SnapDampener();
+            long t0 = 1_000_000_000L;
+            damp.update(10, 0.0, 1.0, 64.0, 2.0, 0.0, t0);
+            check(damp.offX == 0 && damp.offY == 0 && damp.offZ == 0, "Initial offset must be zero");
+            // Simulate 8ms normal small step (0.02 blocks) -> no snap damping
+            damp.update(10, 0.16, 1.0, 64.02, 2.0, 0.2, t0 + 8_000_000L);
+            check(damp.offY == 0.0, "Normal continuous motion must not be damped, got " + damp.offY);
+            // Simulate sudden MoveEntityPacket teleport (+0.19 blocks in 8ms)
+            damp.update(10, 0.32, 1.0, 64.21, 2.0, 0.2, t0 + 16_000_000L);
+            check(damp.offY < -0.10 && damp.offY > -0.19, "Packet snap must be absorbed & partially decayed, got " + damp.offY);
+            double shadowOffY = damp.offY;
+            // Same frame (shadow pass -> main pass with identical tick & pt) must preserve exact offset
+            damp.update(10, 0.32, 1.0, 64.21, 2.0, 0.2, t0 + 16_200_000L);
+            check(damp.offY == shadowOffY, "Shadow and main pass on same frame must share exact offset");
+            // Subsequent frames decay smoothly toward 0
+            for (int f = 1; f <= 20; f++) {
+                damp.update(10 + f / 4, (f % 4) * 0.25, 1.0, 64.21, 2.0, 0.0, t0 + (16L + f * 16L) * 1_000_000L);
+            }
+            check(Math.abs(damp.offY) < 0.01, "Snap offset must decay cleanly to zero, got " + damp.offY);
+        }
+
         // Verify unified /bettersunlit client+server command trees, Forge merge, /bettersunlit update, and client->server passthrough
         var serverDisp = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
         FishingSettings.registerCommands(serverDisp, true);

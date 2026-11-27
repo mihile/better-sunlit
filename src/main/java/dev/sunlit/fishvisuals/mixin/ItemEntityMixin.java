@@ -17,6 +17,14 @@ public abstract class ItemEntityMixin {
         if (SunlitFishVisuals.isPresenting((ItemEntity)(Object)this)) ci.setReturnValue(false);
     }
 
+    @Inject(method="m_8119_", at=@At("HEAD"), require=1, remap=false)
+    private void sunlit$wakeUpwardHop(CallbackInfo ci) {
+        ItemEntity item=(ItemEntity)(Object)this;
+        if (item.m_20096_() && item.m_20184_().f_82480_ > 0.05) {
+            item.m_6853_(false);
+        }
+    }
+
     @Inject(method="m_6123_",at=@At("HEAD"),cancellable=true,require=1,remap=false)
     private void sunlit$waitUntilSpent(Player player,CallbackInfo ci) {
         ItemEntity item=(ItemEntity)(Object)this;
