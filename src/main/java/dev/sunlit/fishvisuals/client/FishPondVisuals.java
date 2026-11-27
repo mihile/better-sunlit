@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.FloatArgumentType;
+import dev.sunlit.bettersunlit.client.StartupLoadPerf;
 import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.FishPondSync;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
@@ -92,6 +93,7 @@ public final class FishPondVisuals {
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event) {
             loadSettings();
+            StartupLoadPerf.loadSettings();
             FishPondSync.setClientReceiver(FishPondVisuals::receive);
         }
     }
@@ -256,15 +258,48 @@ public final class FishPondVisuals {
         registerClientCommands(event.getDispatcher());
     }
 
+    private static Component optimizeSummaryComponent(boolean enabled) {
+        return Component.m_264642_("better_sunlit.optimize.summary",
+                "Join chunk pacing: %s", enabled ? "ON" : "OFF");
+    }
+
+    private static int applyOptimizeSetting(CommandSourceStack source, boolean enabled) {
+        try {
+            StartupLoadPerf.saveSettings(enabled);
+            StartupLoadPerf.setJoinPacingEnabled(enabled);
+        } catch (IOException ex) {
+            source.m_81352_(Component.m_264642_("better_sunlit.optimize.save_failed",
+                    "Failed to save optimize settings. Keeping previous settings."));
+            return 0;
+        }
+        source.m_288197_(() -> Component.m_264642_("better_sunlit.optimize.saved",
+                "Saved: %s", optimizeSummaryComponent(enabled)), false);
+        return 1;
+    }
+
     public static void registerClientCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.m_82127_("bettersunlit")
                 .executes(ctx -> {
                     ctx.getSource().m_288197_(() -> Component.m_264642_(
                             "better_sunlit.command.usage",
-                            "Better Sunlit | %s | /bettersunlit fishpond <adaptive [scale]|swim|off> | /bettersunlit realfishing <on|off|sec...>",
+                            "Better Sunlit | %s | /bettersunlit fishpond <adaptive [scale]|swim|off> | /bettersunlit optimize <on|off|toggle> | /bettersunlit realfishing <on|off|sec...>",
                             summaryComponent(mode, adaptiveScale)), false);
                     return 1;
                 })
+                .then(Commands.m_82127_("optimize")
+                        .executes(ctx -> {
+                            ctx.getSource().m_288197_(() -> Component.m_264642_(
+                                    "better_sunlit.optimize.usage",
+                                    "%s | /bettersunlit optimize <on|off|toggle>",
+                                    optimizeSummaryComponent(StartupLoadPerf.isJoinPacingEnabled())), false);
+                            return 1;
+                        })
+                        .then(Commands.m_82127_("on")
+                                .executes(ctx -> applyOptimizeSetting(ctx.getSource(), true)))
+                        .then(Commands.m_82127_("off")
+                                .executes(ctx -> applyOptimizeSetting(ctx.getSource(), false)))
+                        .then(Commands.m_82127_("toggle")
+                                .executes(ctx -> applyOptimizeSetting(ctx.getSource(), !StartupLoadPerf.isJoinPacingEnabled()))))
                 .then(Commands.m_82127_("fishpond")
                         .executes(ctx -> {
                             ctx.getSource().m_288197_(() -> Component.m_264642_(
@@ -316,6 +351,22 @@ public final class FishPondVisuals {
         }
     }
 
+    private static final BlockPos.MutableBlockPos RENDER_LIGHT_POS = new BlockPos.MutableBlockPos();
+    private static Class<?> cachedFullyBufferedClass;
+    private static boolean cachedFullyBufferedResult;
+
+    private static boolean isFullyBufferedSource(MultiBufferSource.BufferSource buffers) {
+        if (buffers == null) return false;
+        Class<?> cls = buffers.getClass();
+        if (cls == cachedFullyBufferedClass) {
+            return cachedFullyBufferedResult;
+        }
+        boolean match = "net.irisshaders.batchedentityrendering.impl.FullyBufferedMultiBufferSource".equals(cls.getName());
+        cachedFullyBufferedClass = cls;
+        cachedFullyBufferedResult = match;
+        return match;
+    }
+
     @SubscribeEvent
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static void onRenderLevel(RenderLevelStageEvent event) {
@@ -358,8 +409,8 @@ public final class FishPondVisuals {
                 float pitch = Mth.m_14179_(partialTick, s.prevPitch, s.pitch);
                 float moveFactor = Mth.m_14179_(partialTick, s.prevMoveFactor, s.moveFactor);
                 float fishScale = scale * s.individualScale;
-                BlockPos lightPos = BlockPos.m_274561_(rx, Math.min(pond.pos.m_123342_() + 0.85D, ry + 0.15D), rz);
-                int light = LevelRenderer.m_109541_(level, lightPos);
+                RENDER_LIGHT_POS.m_122169_(rx, Math.min(pond.pos.m_123342_() + 0.85D, ry + 0.15D), rz);
+                int light = LevelRenderer.m_109541_(level, RENDER_LIGHT_POS);
 
                 pose.m_85836_();
                 try {
@@ -381,8 +432,8 @@ public final class FishPondVisuals {
                         proxy.f_19854_ = s.prevX;
                         proxy.f_19855_ = s.prevY;
                         proxy.f_19856_ = s.prevZ;
-                        proxy.m_20219_(new Vec3(rx, ry, rz));
-                        proxy.m_20256_(new Vec3(s.vx, s.vy, s.vz));
+                        proxy.m_6034_(rx, ry, rz);
+                        proxy.m_20334_(s.vx, s.vy, s.vz);
                         ((EntityWaterStateAccessor) proxy).sunlit$setWasTouchingWater(true);
                         proxy.m_6853_(false);
                         proxy.f_19797_ = s.animTicks;
@@ -410,8 +461,10 @@ public final class FishPondVisuals {
             }
         }
 
-        if (drewAny) {
-            // Flush now inside AFTER_ENTITIES so water translucent pass draws properly over submerged fish.
+        if (drewAny && !isFullyBufferedSource(buffers)) {
+            // Non-Iris BufferSource needs explicit flush before translucent water pass;
+            // Iris/Oculus FullyBufferedMultiBufferSource flushes batched entities automatically
+            // before translucents, so calling endBatch() here would double-flush & sort every frame.
             buffers.m_109911_();
         }
     }

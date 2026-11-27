@@ -5022,5 +5022,50 @@ public final class PerfOptTests {
             cn.accept(cw);
             assertTrue(cw.toByteArray().length > 0, "Patched Horseman Entity callback must compute frames cleanly");
         }
+
+        // 21. StartupLoadPerf join chunk pacing toggle + JSON config parsing + /bettersunlit optimize command registration.
+        {
+            boolean prev = dev.sunlit.bettersunlit.client.StartupLoadPerf.isJoinPacingEnabled();
+            try {
+                dev.sunlit.bettersunlit.client.StartupLoadPerf.setJoinPacingEnabled(true);
+                assertTrue(dev.sunlit.bettersunlit.client.StartupLoadPerf.isJoinPacingEnabled(),
+                        "Join pacing must be enabled when set to true");
+                assertEquals(16, dev.sunlit.bettersunlit.client.StartupLoadPerf.getChunkUploadBudget(),
+                        "Steady-state upload budget must be 16 when enabled");
+                dev.sunlit.bettersunlit.client.StartupLoadPerf.setChunkUploadBacklogged(true);
+                assertEquals(2, dev.sunlit.bettersunlit.client.StartupLoadPerf.clampChunkSchedulingBudget(20, 4),
+                        "Backlogged steady-state scheduling must clamp to 6 - queueSize when enabled");
+
+                dev.sunlit.bettersunlit.client.StartupLoadPerf.setJoinPacingEnabled(false);
+                assertFalse(dev.sunlit.bettersunlit.client.StartupLoadPerf.isJoinPacingEnabled(),
+                        "Join pacing must be disabled when set to false");
+                assertEquals(Integer.MAX_VALUE, dev.sunlit.bettersunlit.client.StartupLoadPerf.getChunkUploadBudget(),
+                        "Upload budget must be uncapped when disabled");
+                dev.sunlit.bettersunlit.client.StartupLoadPerf.setChunkUploadBacklogged(true);
+                assertEquals(20, dev.sunlit.bettersunlit.client.StartupLoadPerf.clampChunkSchedulingBudget(20, 4),
+                        "Scheduling budget must remain uncapped when disabled");
+
+                assertTrue(dev.sunlit.bettersunlit.client.StartupLoadPerf.readJoinPacingEnabled("{\"joinLoadingPacing\":true}"),
+                        "JSON true must parse as true");
+                assertFalse(dev.sunlit.bettersunlit.client.StartupLoadPerf.readJoinPacingEnabled("{\"joinLoadingPacing\":false}"),
+                        "JSON false must parse as false");
+                assertTrue(dev.sunlit.bettersunlit.client.StartupLoadPerf.readJoinPacingEnabled("{}"),
+                        "Missing key must default to true");
+                assertTrue(dev.sunlit.bettersunlit.client.StartupLoadPerf.readJoinPacingEnabled(""),
+                        "Empty config text must default to true");
+
+                var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+                dev.sunlit.fishvisuals.client.FishPondVisuals.registerClientCommands(dispatcher);
+                var rootNode = dispatcher.getRoot().getChild("bettersunlit");
+                assertTrue(rootNode != null, "/bettersunlit root command must be registered");
+                var optNode = rootNode.getChild("optimize");
+                assertTrue(optNode != null, "/bettersunlit optimize subcommand must be registered");
+                assertTrue(optNode.getChild("on") != null && optNode.getChild("off") != null && optNode.getChild("toggle") != null,
+                        "/bettersunlit optimize must register on, off, and toggle subcommands");
+            } finally {
+                dev.sunlit.bettersunlit.client.StartupLoadPerf.setJoinPacingEnabled(prev);
+                dev.sunlit.bettersunlit.client.StartupLoadPerf.setChunkUploadBacklogged(false);
+            }
+        }
     }
 }

@@ -17,12 +17,42 @@ import java.lang.invoke.MethodType;
 public final class GbfMolangPerf {
     private static final String IVALUE_INTERNAL = "com/eliotlash/mclib/math/IValue";
     private static final String IVALUE_DESC = "L" + IVALUE_INTERNAL + ";";
-    private static final String COMPILED_AST_INTERNAL = "com/moepus/gbf/molang/compiler/CompiledAst";
-    private static final String BYTECODE_GEN_INTERNAL = "com/moepus/gbf/molang/compiler/BytecodeGen";
     private static final String WRAPPER_INTERNAL = "dev/sunlit/bettersunlit/client/LazyMolangValue";
+    private static final String SELF_INTERNAL = "dev/sunlit/bettersunlit/client/GbfMolangPerf";
     private static volatile MethodHandle factoryHandle;
+    private static volatile MethodHandle compileHandle;
+    private static volatile boolean compileHandleInit;
 
     private GbfMolangPerf() {
+    }
+
+    public static Object compileAst(Object compiledAst) throws Throwable {
+        MethodHandle h = compileHandle;
+        if (h == null && !compileHandleInit) {
+            synchronized (GbfMolangPerf.class) {
+                if (!compileHandleInit) {
+                    try {
+                        ClassLoader cl = compiledAst.getClass().getClassLoader();
+                        Class<?> bytecodeGen = Class.forName("com.moepus.gbf.molang.compiler.BytecodeGen", false, cl);
+                        Class<?> astClass = Class.forName("com.moepus.gbf.molang.compiler.CompiledAst", false, cl);
+                        java.lang.reflect.Method m = bytecodeGen.getDeclaredMethod("compile", astClass);
+                        m.setAccessible(true);
+                        compileHandle = MethodHandles.lookup()
+                                .unreflect(m)
+                                .asType(MethodType.methodType(Object.class, Object.class));
+                    } catch (Throwable ignored) {
+                        compileHandle = null;
+                    } finally {
+                        compileHandleInit = true;
+                    }
+                }
+                h = compileHandle;
+            }
+        }
+        if (h == null) {
+            return null;
+        }
+        return h.invokeExact(compiledAst);
     }
 
     public static Object wrapLazy(Object compiledAst, Object fallback) {
@@ -131,12 +161,18 @@ public final class GbfMolangPerf {
         res.visitLabel(tryStart);
         res.visitVarInsn(Opcodes.ALOAD, 0);
         res.visitFieldInsn(Opcodes.GETFIELD, WRAPPER_INTERNAL, "ast", "Ljava/lang/Object;");
-        res.visitTypeInsn(Opcodes.CHECKCAST, COMPILED_AST_INTERNAL);
-        res.visitMethodInsn(Opcodes.INVOKESTATIC, BYTECODE_GEN_INTERNAL, "compile",
-                "(L" + COMPILED_AST_INTERNAL + ";)" + IVALUE_DESC, false);
+        res.visitMethodInsn(Opcodes.INVOKESTATIC, SELF_INTERNAL, "compileAst",
+                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+        res.visitTypeInsn(Opcodes.CHECKCAST, IVALUE_INTERNAL);
+        res.visitVarInsn(Opcodes.ASTORE, 1);
+        res.visitVarInsn(Opcodes.ALOAD, 1);
+        Label clearAndStore = new Label();
+        res.visitJumpInsn(Opcodes.IFNONNULL, clearAndStore);
+        res.visitVarInsn(Opcodes.ALOAD, 0);
+        res.visitFieldInsn(Opcodes.GETFIELD, WRAPPER_INTERNAL, "fallback", "Ljava/lang/Object;");
+        res.visitTypeInsn(Opcodes.CHECKCAST, IVALUE_INTERNAL);
         res.visitVarInsn(Opcodes.ASTORE, 1);
         res.visitLabel(tryEnd);
-        Label clearAndStore = new Label();
         res.visitJumpInsn(Opcodes.GOTO, clearAndStore);
 
         res.visitLabel(catchHandler);

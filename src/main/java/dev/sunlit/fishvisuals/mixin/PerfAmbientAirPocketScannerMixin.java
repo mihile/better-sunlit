@@ -136,6 +136,10 @@ public abstract class PerfAmbientAirPocketScannerMixin {
      */
     @Overwrite(remap = false)
     public void run() {
+        Thread current = Thread.currentThread();
+        if (current.getPriority() > Thread.MIN_PRIORITY) {
+            current.setPriority(Thread.MIN_PRIORITY);
+        }
         try {
             int ox = this.origin.m_123341_();
             int oy = this.origin.m_123342_();
