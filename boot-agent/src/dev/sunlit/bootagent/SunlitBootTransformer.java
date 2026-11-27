@@ -143,6 +143,8 @@ public final class SunlitBootTransformer implements ClassFileTransformer {
             if (inst.isModifiableClass(cls)) {
                 inst.retransformClasses(cls);
             }
+        } catch (ClassNotFoundException ignored) {
+            // Normal on dedicated servers where ASM is loaded by ModLauncher after premain.
         } catch (Throwable t) {
             System.err.println("[SunlitBootAgent] Retransform skipped for " + className + ": " + t);
         }

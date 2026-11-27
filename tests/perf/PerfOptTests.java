@@ -5088,5 +5088,54 @@ public final class PerfOptTests {
             assertEquals(1.25f, EmfRenderPerf.getEntityVariableFast(null, "var.c", 1.25f),
                     "Null map must return default");
         }
+
+        // 23. ServerBootPerf (crash preload nesting, fast regex RL matcher, ALI read scope).
+        {
+            assertFalse(dev.sunlit.bettersunlit.perf.ServerBootPerf.isInCrashPreload(),
+                    "Crash preload flag must default to false");
+            dev.sunlit.bettersunlit.perf.ServerBootPerf.enterCrashPreload();
+            assertTrue(dev.sunlit.bettersunlit.perf.ServerBootPerf.isInCrashPreload(),
+                    "Crash preload flag must be true after enter");
+            dev.sunlit.bettersunlit.perf.ServerBootPerf.exitCrashPreload();
+            assertFalse(dev.sunlit.bettersunlit.perf.ServerBootPerf.isInCrashPreload(),
+                    "Crash preload flag must be false after exit");
+
+            var rlHit = new net.minecraft.resources.ResourceLocation("minecraft", "blocks/diamond_ore");
+            var rlMiss = new net.minecraft.resources.ResourceLocation("minecraft", "blocks/stone");
+            var rlOther = new net.minecraft.resources.ResourceLocation("society", "chests/farm_loot");
+            var testPatterns = new java.util.regex.Pattern[] {
+                java.util.regex.Pattern.compile(".*"),
+                java.util.regex.Pattern.compile("^.*$"),
+                java.util.regex.Pattern.compile("minecraft:blocks/diamond_ore"),
+                java.util.regex.Pattern.compile("^minecraft:.*"),
+                java.util.regex.Pattern.compile(".*_ore$"),
+                java.util.regex.Pattern.compile(".*chests/.*"),
+                java.util.regex.Pattern.compile("minecraft:blocks/.*_ore"),
+                java.util.regex.Pattern.compile("minecraft:(blocks|chests)/.*"),
+                java.util.regex.Pattern.compile("MINECRAFT:.*", java.util.regex.Pattern.CASE_INSENSITIVE)
+            };
+            var testRls = new net.minecraft.resources.ResourceLocation[] { rlHit, rlMiss, rlOther };
+            for (var pat : testPatterns) {
+                for (var rl : testRls) {
+                    boolean expected = pat.matcher(rl.toString()).matches();
+                    assertEquals(expected,
+                            dev.sunlit.bettersunlit.perf.ServerBootPerf.testRegexResourceLocation(pat, rl),
+                            "FastRlMatcher mismatch for pattern=" + pat.pattern() + " rl=" + rl);
+                    assertEquals(expected,
+                            dev.sunlit.bettersunlit.perf.ServerBootPerf.testRegexResourceLocation(pat, rl),
+                            "FastRlMatcher cached mismatch for pattern=" + pat.pattern() + " rl=" + rl);
+                }
+            }
+
+            dev.sunlit.bettersunlit.perf.ServerBootPerf.enterAliRead();
+            try {
+                assertTrue(dev.sunlit.bettersunlit.perf.ServerBootPerf.aliPredicateItem(null, java.util.List.of()),
+                        "Empty item list must return true");
+                assertFalse(dev.sunlit.bettersunlit.perf.ServerBootPerf.aliPredicateItem(null, java.util.List.of("x")),
+                        "Null modifier with non-empty list must return false");
+            } finally {
+                dev.sunlit.bettersunlit.perf.ServerBootPerf.exitAliRead();
+            }
+        }
     }
 }
