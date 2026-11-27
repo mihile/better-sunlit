@@ -21,7 +21,7 @@ ASM_COMMONS_JAR = sorted((LIBRARIES / 'org/ow2/asm/asm-commons').glob('9.8/asm-c
 ASM_UTIL_JAR = sorted((LIBRARIES / 'org/ow2/asm/asm-util').glob('9.8/asm-util-*.jar'))[-1]
 ASM_ANALYSIS_JAR = sorted((LIBRARIES / 'org/ow2/asm/asm-analysis').glob('9.8/asm-analysis-*.jar'))[-1]
 
-OUT_BUILD = ROOT / 'build/boot'
+OUT_BUILD = (ROOT / f'build/boot-{os.getpid()}') if cli.out is not None else (ROOT / 'build/boot')
 if OUT_BUILD.exists():
     shutil.rmtree(OUT_BUILD)
 OUT_BUILD.mkdir(parents=True)
@@ -1127,3 +1127,5 @@ verify_cp = os.pathsep.join([str(TEST_CLASSES), str(PAYLOAD_CLASSES), str(OUT_JA
 subprocess.run([str(JDK / 'javac.exe'), '--release', '17', '-cp', os.pathsep.join([str(PAYLOAD_CLASSES), str(OUT_JAR)]), '-d', str(TEST_CLASSES), str(VERIFY_SRC)], check=True)
 subprocess.run([str(JDK / 'java.exe'), f'-javaagent:{OUT_JAR}', '--add-opens', 'java.base/java.lang.module=ALL-UNNAMED', '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED', '-cp', verify_cp, 'VerifyBootAgent', str(LIBRARIES), sjh_jar, fml_jar, mixin_jar, str(ASM_JAR), str(ASM_TREE_JAR), str(ASM_UTIL_JAR), str(ASM_ANALYSIS_JAR), modlauncher_jar, mf_jar, emf_jar, co_jar, *extra_jars], check=True)
 print('Built & verified', OUT_JAR, OUT_JAR.stat().st_size, 'bytes')
+if cli.out is not None and OUT_BUILD.exists():
+    shutil.rmtree(OUT_BUILD, ignore_errors=True)
