@@ -143,6 +143,7 @@ public final class SunlitFishVisuals {
             double vy = (target.f_82480_ + 0.03 - item.m_20186_()
                     + 0.04 / (1 - drag) * (ticks - drag * sum)) / sum;
             item.m_20256_(new Vec3((x-item.m_20185_())/sum,vy,(z-item.m_20189_())/sum));
+            item.m_6853_(false);
             item.f_19812_ = true;
             return;
         }
@@ -257,7 +258,7 @@ public final class SunlitFishVisuals {
     private static void stopped(ServerStoppedEvent event) { CATCHES.clear(); }
 
     private static void tick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
+        if (event.phase != TickEvent.Phase.START) return;
         var iterator = CATCHES.values().iterator();
         while (iterator.hasNext()) {
             CatchState state = iterator.next();
@@ -319,6 +320,7 @@ public final class SunlitFishVisuals {
             break;
         }
         item.m_20256_(new Vec3(vx,height,vz));
+        item.m_6853_(false);
         item.f_19812_=true;
         state.kickAt=now;state.kickStrength=strength;
         int interval = 16 + random.m_188503_(8);
