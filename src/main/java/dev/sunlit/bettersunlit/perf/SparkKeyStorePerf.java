@@ -15,13 +15,14 @@ import java.util.function.Supplier;
  * synchronous completion if a caller queries local keys early.
  */
 public final class SparkKeyStorePerf {
-    private static final long DEFAULT_DELAY_SECONDS = 20L;
+    private static final long DEFAULT_DELAY_SECONDS = 60L;
     private static final Map<CompletableFuture<KeyPair>, Supplier<KeyPair>> PENDING =
             Collections.synchronizedMap(new IdentityHashMap<>());
     private static final ScheduledExecutorService SCHEDULER =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread thread = new Thread(r, "BetterSunlit-SparkKeyGen");
                 thread.setDaemon(true);
+                thread.setPriority(Thread.MIN_PRIORITY);
                 return thread;
             });
 

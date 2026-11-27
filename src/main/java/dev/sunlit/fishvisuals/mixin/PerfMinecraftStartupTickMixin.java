@@ -5,11 +5,18 @@ import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = Minecraft.class, remap = false)
 public abstract class PerfMinecraftStartupTickMixin {
+    @Redirect(
+            method = "m_91383_(Z)V",
+            at = @At(value = "INVOKE", target = "Ljava/lang/Math;min(II)I"))
+    private int sunlit$capJoinCatchupTicks(int vanillaMax, int elapsedTicks) {
+        return StartupLoadPerf.clampJoinCatchupTicks((Minecraft) (Object) this, vanillaMax, elapsedTicks);
+    }
     @Inject(method = "m_91275_", at = @At("HEAD"), cancellable = true)
     private void sunlit$uncapOverlayFpsLimit(CallbackInfoReturnable<Integer> cir) {
         Minecraft self = (Minecraft) (Object) this;

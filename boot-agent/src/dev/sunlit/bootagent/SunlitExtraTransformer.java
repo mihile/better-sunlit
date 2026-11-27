@@ -64,6 +64,12 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "traben/entity_model_features/models/animation/math/expression_tree/MathExpressionParser";
     private static final String EMF_VAR_FACTORY_CLS =
             "traben/entity_model_features/models/animation/math/variables/factories/ModelVariableFactory";
+    private static final String EMF_MATH_CLS =
+            "traben/entity_model_features/models/animation/math/EMFMath";
+    private static final String EMF_ASM_ANIM_HANDLER_CLS =
+            "traben/entity_model_features/models/animation/math/asm/ASMAnimationHandler";
+    private static final String MC_BAKED_QUAD_CLS =
+            "net/minecraft/client/renderer/block/model/BakedQuad";
     private static final String FUSION_ENTITY_LOADER_CLS =
             "com/supermartijn642/fusion/entity/model/loader/FusionEntityModelLoader";
     private static final String CSC_MATH_CLS = "com/Pink_Cats/createschematicchecker/core/attach/Math";
@@ -139,6 +145,10 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "net/irisshaders/iris/shaderpack/programs/ProgramSource";
     private static final String IRIS_OUTER_WRAPPED_RT_CLS =
             "net/irisshaders/iris/layer/OuterWrappedRenderType";
+    private static final String IRIS_ENTITY_VERTEX_CLS =
+            "net/irisshaders/iris/compat/sodium/impl/vertex_format/entity_xhfp/EntityVertex";
+    private static final String MC_CLIENT_LEVEL_CLS =
+            "net/minecraft/client/multiplayer/ClientLevel";
     private static final String FLW_STRING_UTIL_CLS =
             "dev/engine_room/flywheel/lib/util/StringUtil";
     private static final String MC_VIS_GRAPH_CLS =
@@ -149,6 +159,56 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             "net/minecraft/world/item/ItemStack";
     private static final String SODIUM_MESH_TASK_CLS =
             "me/jellysquid/mods/sodium/client/render/chunk/compile/tasks/ChunkBuilderMeshingTask";
+    private static final String SODIUM_WORLD_RENDERER_CLS =
+            "me/jellysquid/mods/sodium/client/render/SodiumWorldRenderer";
+    private static final String SODIUM_RADIX_SORT_CLS =
+            "me/jellysquid/mods/sodium/client/util/sorting/RadixSort";
+    private static final String SODIUM_WORKER_THREAD_CLS =
+            "me/jellysquid/mods/sodium/client/render/chunk/compile/executor/ChunkBuilder$WorkerThread";
+    private static final String SODIUM_CHUNK_BUILDER_CLS =
+            "me/jellysquid/mods/sodium/client/render/chunk/compile/executor/ChunkBuilder";
+    private static final String SODIUM_RENDER_SECTION_MGR_CLS =
+            "me/jellysquid/mods/sodium/client/render/chunk/RenderSectionManager";
+    private static final String SMALLSHIPS_CANNON_MODEL_CLS =
+            "com/talhanation/smallships/client/model/CannonModel";
+    private static final String AMBIENT_DIMENSION_CLS =
+            "team/creative/ambientsounds/dimension/AmbientDimension";
+    private static final String QUARK_VARIANT_ANIMAL_CLIENT_CLS =
+            "org/violetmoon/quark/content/client/module/VariantAnimalTexturesModule$Client";
+    private static final String JM_THREAD_FACTORY_CLS =
+            "journeymap/common/thread/JMThreadFactory";
+    private static final String GECKOLIB_GEO_RENDERER_CLS =
+            "software/bernie/geckolib/renderer/GeoRenderer";
+    private static final String GECKOLIB_RENDER_UTILS_CLS =
+            "software/bernie/geckolib/util/RenderUtils";
+    private static final String GECKOLIB_ANIM_POINT_QUEUE_CLS =
+            "software/bernie/geckolib/core/keyframe/AnimationPointQueue";
+    private static final String GECKOLIB_ANIM_POINT_CLS =
+            "software/bernie/geckolib/core/keyframe/AnimationPoint";
+    private static final String GECKOLIB_ANIM_CTRL_CLS =
+            "software/bernie/geckolib/core/animation/AnimationController";
+    private static final String GECKOLIB_BONE_ANIM_QUEUE_CLS =
+            "software/bernie/geckolib/core/keyframe/BoneAnimationQueue";
+    private static final String GECKOLIB_LAZY_VAR_CLS =
+            "software/bernie/geckolib/core/molang/LazyVariable";
+    private static final String GECKOLIB_MOLANG_PARSER_CLS =
+            "software/bernie/geckolib/core/molang/MolangParser";
+    private static final String MC_ITEM_RENDERER_CLS =
+            "net/minecraft/client/renderer/entity/ItemRenderer";
+    private static final String MC_ENTITY_CLS =
+            "net/minecraft/world/entity/Entity";
+    private static final String PARTICLERAIN_WIND_MGR_CLS =
+            "pigcart/particlerain/WindManager";
+    private static final String EMBEDDIUM_BLOCK_RENDERER_REGISTRY_CLS =
+            "org/embeddedt/embeddium/api/BlockRendererRegistry";
+    private static final String GBF_IRIS_COMPAT_CLS =
+            "com/moepus/gbf/IrisCompat";
+    private static final String MC_FRUSTUM_CLS =
+            "net/minecraft/client/renderer/culling/Frustum";
+    private static final String IRIS_ADV_FRUSTUM_CLS =
+            "net/irisshaders/iris/shadows/frustum/advanced/AdvancedShadowCullingFrustum";
+    private static final String MC_BUFFER_BUILDER_CLS =
+            "com/mojang/blaze3d/vertex/BufferBuilder";
     private static final String INDIGO_ABSTRACT_RENDER_CTX_CLS =
             "net/fabricmc/fabric/impl/client/indigo/renderer/render/AbstractRenderContext";
     private static final String FTB_MAP_REGION_DATA_CLS =
@@ -287,13 +347,18 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                  EMF_MAPPINGS_CLS,
                  EMF_MANAGER_CLS,
                  EMF_MATH_PARSER_CLS,
-                 EMF_VAR_FACTORY_CLS,
                  FUSION_ENTITY_LOADER_CLS,
                  CSC_MATH_CLS,
                  CSC_TOML_EDITOR_CLS,
                  FM_LOADING_REQ_CLS,
                  MOONLIGHT_PATH_TRIE_CLS,
-                 MIXIN_INJECTION_POINT_CLS -> transformStringMatches(module, classfileBuffer);
+                 MIXIN_INJECTION_POINT_CLS,
+                 AMBIENT_DIMENSION_CLS,
+                 QUARK_VARIANT_ANIMAL_CLIENT_CLS -> transformStringMatches(module, classfileBuffer);
+            case EMF_VAR_FACTORY_CLS -> transformEmfModelVariableFactory(module, classfileBuffer);
+            case EMF_MATH_CLS -> transformEmfMath(classfileBuffer);
+            case EMF_ASM_ANIM_HANDLER_CLS -> transformEmfAsmAnimationHandler(classfileBuffer);
+            case MC_BAKED_QUAD_CLS -> transformBakedQuad(classfileBuffer);
             case EMBERBIUM_MODULE_SCANNER_CLS -> transformEmberbiumModuleScanner(module, classfileBuffer);
             case AMENDMENTS_WALL_LANTERN_CLS -> transformWallLanternBlock(module, classfileBuffer);
             case EMF_JEM_DATA_CLS -> transformEmfJemData(module, classfileBuffer);
@@ -330,11 +395,36 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             case IRIS_CONST_DIRECTIVE_CLS -> transformIrisConstDirectiveParser(module, classfileBuffer);
             case IRIS_PROGRAM_SOURCE_CLS -> transformIrisProgramSource(module, classfileBuffer);
             case IRIS_OUTER_WRAPPED_RT_CLS -> transformIrisOuterWrappedRenderType(module, classfileBuffer);
+            case IRIS_ENTITY_VERTEX_CLS -> transformIrisEntityVertex(classfileBuffer);
+            case MC_CLIENT_LEVEL_CLS -> transformClientLevel(classfileBuffer);
             case FLW_STRING_UTIL_CLS -> transformFlywheelStringUtil(module, classfileBuffer);
             case MC_VIS_GRAPH_CLS -> transformVisGraph(classfileBuffer);
             case MC_RESOURCE_LOCATION_CLS -> transformResourceLocation(classfileBuffer);
             case MC_ITEM_STACK_CLS -> transformItemStackTooltips(classfileBuffer);
             case SODIUM_MESH_TASK_CLS -> transformSodiumChunkBuilderMeshingTask(classfileBuffer);
+            case SODIUM_WORLD_RENDERER_CLS -> transformSodiumWorldRenderer(classfileBuffer);
+            case SODIUM_RADIX_SORT_CLS -> transformSodiumRadixSort(classfileBuffer);
+            case SODIUM_WORKER_THREAD_CLS -> transformSodiumWorkerThread(classfileBuffer);
+            case SODIUM_CHUNK_BUILDER_CLS -> transformSodiumChunkBuilder(classfileBuffer);
+            case SODIUM_RENDER_SECTION_MGR_CLS -> transformSodiumRenderSectionManager(classfileBuffer);
+            case SMALLSHIPS_CANNON_MODEL_CLS -> transformSmallShipsCannonModel(classfileBuffer);
+            case JM_THREAD_FACTORY_CLS -> transformJourneyMapThreadFactory(classfileBuffer);
+            case GECKOLIB_GEO_RENDERER_CLS -> transformGeckoLibGeoRenderer(classfileBuffer);
+            case GECKOLIB_RENDER_UTILS_CLS -> transformGeckoLibRenderUtils(classfileBuffer);
+            case GECKOLIB_ANIM_POINT_QUEUE_CLS -> transformGeckoLibAnimationPointQueue(classfileBuffer);
+            case GECKOLIB_ANIM_POINT_CLS -> transformGeckoLibAnimationPoint(classfileBuffer);
+            case GECKOLIB_ANIM_CTRL_CLS,
+                 GECKOLIB_BONE_ANIM_QUEUE_CLS -> transformGeckoLibAnimationPointCallers(classfileBuffer);
+            case GECKOLIB_LAZY_VAR_CLS -> transformGeckoLibLazyVariable(classfileBuffer);
+            case GECKOLIB_MOLANG_PARSER_CLS -> transformGeckoLibMolangParser(classfileBuffer);
+            case MC_ITEM_RENDERER_CLS -> transformItemRenderer(classfileBuffer);
+            case MC_ENTITY_CLS -> transformEntity(classfileBuffer);
+            case PARTICLERAIN_WIND_MGR_CLS -> transformParticleRainWindManager(classfileBuffer);
+            case EMBEDDIUM_BLOCK_RENDERER_REGISTRY_CLS -> transformEmbeddiumBlockRendererRegistry(classfileBuffer);
+            case GBF_IRIS_COMPAT_CLS -> transformGbfIrisCompat(classfileBuffer);
+            case MC_FRUSTUM_CLS -> transformFrustum(classfileBuffer);
+            case IRIS_ADV_FRUSTUM_CLS -> transformIrisShadowFrustum(classfileBuffer);
+            case MC_BUFFER_BUILDER_CLS -> transformBufferBuilder(classfileBuffer);
             case INDIGO_ABSTRACT_RENDER_CTX_CLS -> transformIndigoAbstractRenderContext(classfileBuffer);
             case FTB_MAP_REGION_DATA_CLS -> transformFtbMapRegionData(module, classfileBuffer);
             case REMI_STACK_GROUP_MGR_CLS -> transformReliableEmiStackGroupManager(classfileBuffer);
@@ -2310,7 +2400,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                             EMI_RELOAD_MANAGER_CLS,
                             "thread",
                             "Ljava/lang/Thread;"));
-                    prio.add(new InsnNode(Opcodes.ICONST_3));
+                    prio.add(new InsnNode(Opcodes.ICONST_1));
                     prio.add(new MethodInsnNode(
                             Opcodes.INVOKEVIRTUAL,
                             "java/lang/Thread",
@@ -3066,7 +3156,7 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                             && "()V".equals(min.desc)) {
                         InsnList prio = new InsnList();
                         prio.add(new InsnNode(Opcodes.DUP));
-                        prio.add(new InsnNode(Opcodes.ICONST_3));
+                        prio.add(new InsnNode(Opcodes.ICONST_1));
                         prio.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/Thread", "setPriority", "(I)V", false));
                         mn.instructions.insertBefore(min, prio);
                         patched = true;
@@ -4587,71 +4677,81 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
             mn.instructions.insert(guard);
             patched = true;
         }
-        if (!patched) {
+        boolean patchedIrisBlockType = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions != null && mn.name.contains("iris$setCustomRenderType")) {
+                if (patchIrisBlockRenderTypeLookup(mn)) {
+                    patchedIrisBlockType = true;
+                }
+            }
+        }
+        if (!patched && !patchedIrisBlockType) {
             return null;
         }
-        cn.fields.add(new FieldNode(
-                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
-                "sunlit$fluidListeners", "L" + llCls + ";", null, null));
-        MethodNode helper = new MethodNode(
-                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
-                "sunlit$hasFluidEventListeners",
-                "()Z",
-                null,
-                null);
-        {
-            InsnList il = helper.instructions;
-            LabelNode retTrue = new LabelNode();
-            LabelNode hasLl = new LabelNode();
-            // int busId = BootJarPayload.getEventBusId(MinecraftForge.EVENT_BUS);
-            il.add(new FieldInsnNode(
-                    Opcodes.GETSTATIC, "net/minecraftforge/common/MinecraftForge",
-                    "EVENT_BUS", "Lnet/minecraftforge/eventbus/api/IEventBus;"));
-            il.add(new MethodInsnNode(
-                    Opcodes.INVOKESTATIC, PAYLOAD_CLS, "getEventBusId", "(Ljava/lang/Object;)I", false));
-            il.add(new VarInsnNode(Opcodes.ISTORE, 0));
-            il.add(new VarInsnNode(Opcodes.ILOAD, 0));
-            il.add(new JumpInsnNode(Opcodes.IFLT, retTrue));
-            // ListenerList ll = sunlit$fluidListeners;
-            il.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "sunlit$fluidListeners", "L" + llCls + ";"));
-            il.add(new VarInsnNode(Opcodes.ASTORE, 1));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
-            il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasLl));
-            // ll = new EventGetFluidRenderType(null, null).getListenerList(); sunlit$fluidListeners = ll;
-            il.add(new TypeInsnNode(Opcodes.NEW, evCls));
-            il.add(new InsnNode(Opcodes.DUP));
-            il.add(new InsnNode(Opcodes.ACONST_NULL));
-            il.add(new InsnNode(Opcodes.ACONST_NULL));
-            il.add(new MethodInsnNode(
-                    Opcodes.INVOKESPECIAL, evCls, "<init>",
-                    "(Lnet/minecraft/world/level/material/FluidState;Lnet/minecraft/client/renderer/RenderType;)V", false));
-            il.add(new MethodInsnNode(
-                    Opcodes.INVOKEVIRTUAL, "net/minecraftforge/eventbus/api/Event",
-                    "getListenerList", "()L" + llCls + ";", false));
-            il.add(new VarInsnNode(Opcodes.ASTORE, 1));
-            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
-            il.add(new FieldInsnNode(Opcodes.PUTSTATIC, cn.name, "sunlit$fluidListeners", "L" + llCls + ";"));
-            il.add(hasLl);
-            il.add(new FrameNode(
-                    Opcodes.F_FULL, 2,
-                    new Object[] {Opcodes.INTEGER, llCls},
-                    0, new Object[0]));
-            // return ll.getListeners(busId).length != 0;
-            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
-            il.add(new VarInsnNode(Opcodes.ILOAD, 0));
-            il.add(new MethodInsnNode(
-                    Opcodes.INVOKEVIRTUAL, llCls, "getListeners",
-                    "(I)[Lnet/minecraftforge/eventbus/api/IEventListener;", false));
-            il.add(new InsnNode(Opcodes.ARRAYLENGTH));
-            il.add(new JumpInsnNode(Opcodes.IFNE, retTrue));
-            il.add(new InsnNode(Opcodes.ICONST_0));
-            il.add(new InsnNode(Opcodes.IRETURN));
-            il.add(retTrue);
-            il.add(new FrameNode(Opcodes.F_FULL, 1, new Object[] {Opcodes.INTEGER}, 0, new Object[0]));
-            il.add(new InsnNode(Opcodes.ICONST_1));
-            il.add(new InsnNode(Opcodes.IRETURN));
+        if (patched) {
+            cn.fields.add(new FieldNode(
+                    Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                    "sunlit$fluidListeners", "L" + llCls + ";", null, null));
+            MethodNode helper = new MethodNode(
+                    Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
+                    "sunlit$hasFluidEventListeners",
+                    "()Z",
+                    null,
+                    null);
+            {
+                InsnList il = helper.instructions;
+                LabelNode retTrue = new LabelNode();
+                LabelNode hasLl = new LabelNode();
+                // int busId = BootJarPayload.getEventBusId(MinecraftForge.EVENT_BUS);
+                il.add(new FieldInsnNode(
+                        Opcodes.GETSTATIC, "net/minecraftforge/common/MinecraftForge",
+                        "EVENT_BUS", "Lnet/minecraftforge/eventbus/api/IEventBus;"));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, PAYLOAD_CLS, "getEventBusId", "(Ljava/lang/Object;)I", false));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 0));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 0));
+                il.add(new JumpInsnNode(Opcodes.IFLT, retTrue));
+                // ListenerList ll = sunlit$fluidListeners;
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "sunlit$fluidListeners", "L" + llCls + ";"));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasLl));
+                // ll = new EventGetFluidRenderType(null, null).getListenerList(); sunlit$fluidListeners = ll;
+                il.add(new TypeInsnNode(Opcodes.NEW, evCls));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new InsnNode(Opcodes.ACONST_NULL));
+                il.add(new InsnNode(Opcodes.ACONST_NULL));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESPECIAL, evCls, "<init>",
+                        "(Lnet/minecraft/world/level/material/FluidState;Lnet/minecraft/client/renderer/RenderType;)V", false));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEVIRTUAL, "net/minecraftforge/eventbus/api/Event",
+                        "getListenerList", "()L" + llCls + ";", false));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new FieldInsnNode(Opcodes.PUTSTATIC, cn.name, "sunlit$fluidListeners", "L" + llCls + ";"));
+                il.add(hasLl);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 2,
+                        new Object[] {Opcodes.INTEGER, llCls},
+                        0, new Object[0]));
+                // return ll.getListeners(busId).length != 0;
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 0));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEVIRTUAL, llCls, "getListeners",
+                        "(I)[Lnet/minecraftforge/eventbus/api/IEventListener;", false));
+                il.add(new InsnNode(Opcodes.ARRAYLENGTH));
+                il.add(new JumpInsnNode(Opcodes.IFNE, retTrue));
+                il.add(new InsnNode(Opcodes.ICONST_0));
+                il.add(new InsnNode(Opcodes.IRETURN));
+                il.add(retTrue);
+                il.add(new FrameNode(Opcodes.F_FULL, 1, new Object[] {Opcodes.INTEGER}, 0, new Object[0]));
+                il.add(new InsnNode(Opcodes.ICONST_1));
+                il.add(new InsnNode(Opcodes.IRETURN));
+            }
+            cn.methods.add(helper);
         }
-        cn.methods.add(helper);
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);
         return cw.toByteArray();
@@ -7566,6 +7666,306 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
                         0, new Object[0]));
                 mn.instructions.insert(pre);
                 patched = true;
+            } else if (mn.name.contains("oculus$overrideRenderTypes")) {
+                if (patchIrisBlockRenderTypeLookup(mn)) {
+                    patched = true;
+                }
+            }
+        }
+        // Pool MixinExtras LocalRefImpl instances and fast-skip vanilla air blocks inside execute(...)
+        final String localRefImplCls = "com/llamalad7/mixinextras/sugar/impl/ref/generated/LocalRefImpl";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        int localRefSiteCount = 0;
+        for (MethodNode mn : cn.methods) {
+            if (!"execute".equals(mn.name)
+                    || !"(Lme/jellysquid/mods/sodium/client/render/chunk/compile/ChunkBuildContext;Lme/jellysquid/mods/sodium/client/util/task/CancellationToken;)Lme/jellysquid/mods/sodium/client/render/chunk/compile/ChunkBuildOutput;"
+                            .equals(mn.desc)
+                    || mn.instructions == null) {
+                continue;
+            }
+            // 1. Replace every `NEW LocalRefImpl; DUP; INVOKESPECIAL <init>()V` with a per-site cached field getter
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof TypeInsnNode tin
+                        && tin.getOpcode() == Opcodes.NEW
+                        && localRefImplCls.equals(tin.desc)) {
+                    AbstractInsnNode n1 = nextRealInsn(tin);
+                    AbstractInsnNode n2 = nextRealInsn(n1);
+                    if (n1 != null && n1.getOpcode() == Opcodes.DUP
+                            && n2 instanceof MethodInsnNode min
+                            && min.getOpcode() == Opcodes.INVOKESPECIAL
+                            && localRefImplCls.equals(min.owner)
+                            && "<init>".equals(min.name)
+                            && "()V".equals(min.desc)) {
+                        String fieldName = "sunlit$lr" + localRefSiteCount;
+                        String getterName = "sunlit$getLr" + localRefSiteCount;
+                        localRefSiteCount++;
+                        InsnList rep = new InsnList();
+                        rep.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        rep.add(new MethodInsnNode(
+                                Opcodes.INVOKESPECIAL, cn.name, getterName,
+                                "()L" + localRefImplCls + ";", false));
+                        mn.instructions.insertBefore(tin, rep);
+                        mn.instructions.remove(tin);
+                        mn.instructions.remove(n1);
+                        mn.instructions.remove(n2);
+                        cn.fields.add(new FieldNode(
+                                Opcodes.ACC_PRIVATE, fieldName, "L" + localRefImplCls + ";", null, null));
+                        MethodNode getter = new MethodNode(
+                                Opcodes.ACC_PRIVATE, getterName, "()L" + localRefImplCls + ";", null, null);
+                        InsnList gil = getter.instructions;
+                        LabelNode ready = new LabelNode();
+                        gil.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        gil.add(new FieldInsnNode(Opcodes.GETFIELD, cn.name, fieldName, "L" + localRefImplCls + ";"));
+                        gil.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                        gil.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                        gil.add(new JumpInsnNode(Opcodes.IFNONNULL, ready));
+                        gil.add(new TypeInsnNode(Opcodes.NEW, localRefImplCls));
+                        gil.add(new InsnNode(Opcodes.DUP));
+                        gil.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, localRefImplCls, "<init>", "()V", false));
+                        gil.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                        gil.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        gil.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                        gil.add(new FieldInsnNode(Opcodes.PUTFIELD, cn.name, fieldName, "L" + localRefImplCls + ";"));
+                        gil.add(ready);
+                        gil.add(new FrameNode(
+                                Opcodes.F_NEW, 2,
+                                new Object[] {cn.name, localRefImplCls},
+                                0, new Object[0]));
+                        gil.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                        gil.add(new InsnNode(Opcodes.ARETURN));
+                        cn.methods.add(getter);
+                        patched = true;
+                    }
+                }
+            }
+            // 2. Fast-skip vanilla AIR / CAVE_AIR / VOID_AIR right after WorldSlice.getBlockState -> ASTORE stateVar
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode getBs
+                        && getBs.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && wsCls.equals(getBs.owner)
+                        && "getBlockState".equals(getBs.name)
+                        && ("(III)L" + bsCls + ";").equals(getBs.desc)) {
+                    AbstractInsnNode storeNode = nextRealInsn(getBs);
+                    if (storeNode instanceof VarInsnNode stBs && stBs.getOpcode() == Opcodes.ASTORE) {
+                        int bsSlot = stBs.var;
+                        // Locate the air-skip GOTO following the blockState.m_60795_() check (within 40 real insns)
+                        LabelNode continueLabel = null;
+                        boolean sawIsAir = false;
+                        boolean sawHasBe = false;
+                        AbstractInsnNode cur = nextRealInsn(storeNode);
+                        for (int steps = 0; cur != null && steps < 45; steps++, cur = nextRealInsn(cur)) {
+                            if (cur instanceof MethodInsnNode m) {
+                                if (bsCls.equals(m.owner) && "m_60795_".equals(m.name) && "()Z".equals(m.desc)) {
+                                    sawIsAir = true;
+                                } else if (sawIsAir && bsCls.equals(m.owner) && "m_155947_".equals(m.name) && "()Z".equals(m.desc)) {
+                                    sawHasBe = true;
+                                }
+                            } else if (sawHasBe && cur instanceof JumpInsnNode jmp && jmp.getOpcode() == Opcodes.GOTO) {
+                                continueLabel = jmp.label;
+                                break;
+                            }
+                        }
+                        if (continueLabel != null) {
+                            FrameNode contFrame = null;
+                            for (AbstractInsnNode fnScan = continueLabel.getNext(); fnScan != null; fnScan = fnScan.getNext()) {
+                                if (fnScan instanceof FrameNode fn) {
+                                    contFrame = fn;
+                                    break;
+                                }
+                                if (fnScan.getOpcode() >= 0) {
+                                    break;
+                                }
+                            }
+                            InsnList airSkip = new InsnList();
+                            if (contFrame != null && contFrame.local != null) {
+                                for (int k = bsSlot + 1; k < contFrame.local.size(); k++) {
+                                    Object locType = contFrame.local.get(k);
+                                    if ("java/lang/Object".equals(locType)) {
+                                        airSkip.add(new InsnNode(Opcodes.ACONST_NULL));
+                                        airSkip.add(new VarInsnNode(Opcodes.ASTORE, k));
+                                    }
+                                }
+                            }
+                            airSkip.add(new VarInsnNode(Opcodes.ALOAD, bsSlot));
+                            airSkip.add(new MethodInsnNode(
+                                    Opcodes.INVOKESTATIC, perfCls, "isVanillaAir", "(L" + bsCls + ";)Z", false));
+                            airSkip.add(new JumpInsnNode(Opcodes.IFNE, continueLabel));
+                            mn.instructions.insert(storeNode, airSkip);
+                            patched = true;
+                        }
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Replaces {@code ForgeRegistries.BLOCKS.getDelegateOrThrow(state.m_60734_()) -> map.get(holder)}
+     * inside Iris's {@code oculus$overrideRenderTypes} and {@code iris$setCustomRenderType} with
+     * an identity-cached {@code Block -> ChunkRenderTypeSet} lookup in {@code EmfRenderPerf}.
+     */
+    private static boolean patchIrisBlockRenderTypeLookup(MethodNode mn) {
+        final String bsCls = "net/minecraft/world/level/block/state/BlockState";
+        final String blkCls = "net/minecraft/world/level/block/Block";
+        final String regCls = "net/minecraftforge/registries/ForgeRegistries";
+        final String iregCls = "net/minecraftforge/registries/IForgeRegistry";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean patched = false;
+        for (AbstractInsnNode insn : mn.instructions.toArray()) {
+            if (insn instanceof FieldInsnNode getBlocks
+                    && getBlocks.getOpcode() == Opcodes.GETSTATIC
+                    && regCls.equals(getBlocks.owner)
+                    && "BLOCKS".equals(getBlocks.name)) {
+                AbstractInsnNode n1 = nextRealInsn(getBlocks);
+                AbstractInsnNode n2 = nextRealInsn(n1);
+                AbstractInsnNode n3 = nextRealInsn(n2);
+                AbstractInsnNode n4 = nextRealInsn(n3);
+                if (n1 instanceof VarInsnNode loadBs && loadBs.getOpcode() == Opcodes.ALOAD
+                        && n2 instanceof MethodInsnNode getBlock
+                        && getBlock.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && bsCls.equals(getBlock.owner)
+                        && "m_60734_".equals(getBlock.name)
+                        && ("()L" + blkCls + ";").equals(getBlock.desc)
+                        && n3 instanceof MethodInsnNode getDel
+                        && getDel.getOpcode() == Opcodes.INVOKEINTERFACE
+                        && iregCls.equals(getDel.owner)
+                        && "getDelegateOrThrow".equals(getDel.name)
+                        && n4 instanceof MethodInsnNode mapGet
+                        && mapGet.getOpcode() == Opcodes.INVOKEINTERFACE
+                        && "java/util/Map".equals(mapGet.owner)
+                        && "get".equals(mapGet.name)
+                        && "(Ljava/lang/Object;)Ljava/lang/Object;".equals(mapGet.desc)) {
+                    mn.instructions.remove(getBlocks);
+                    mn.instructions.remove(getDel);
+                    mn.instructions.set(mapGet, new MethodInsnNode(
+                            Opcodes.INVOKESTATIC, perfCls, "getIrisBlockRenderTypeOverride",
+                            "(Ljava/util/Map;L" + blkCls + ";)Ljava/lang/Object;", false));
+                    patched = true;
+                }
+            }
+        }
+        return patched;
+    }
+
+    /**
+     * Enables Embeddium pose-stack matrix caching around {@code SodiumWorldRenderer.renderBlockEntity}
+     * (main & shadow passes), eliminating ~250MB of per-frame {@code Matrix4f}/{@code Matrix3f}/{@code Pose}
+     * churn across all visible block entities.
+     */
+    public static byte[] transformSodiumWorldRenderer(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String psCls = "com/mojang/blaze3d/vertex/PoseStack";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"renderBlockEntity".equals(mn.name)
+                    || mn.desc == null
+                    || !mn.desc.startsWith("(L" + psCls + ";")
+                    || (mn.access & Opcodes.ACC_STATIC) == 0
+                    || mn.instructions == null) {
+                continue;
+            }
+            MethodInsnNode pushInsn = null;
+            MethodInsnNode popInsn = null;
+            int pushCount = 0;
+            int popCount = 0;
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && psCls.equals(min.owner)
+                        && "()V".equals(min.desc)) {
+                    if ("m_85836_".equals(min.name)) {
+                        pushInsn = min;
+                        pushCount++;
+                    } else if ("m_85849_".equals(min.name)) {
+                        popInsn = min;
+                        popCount++;
+                    }
+                }
+            }
+            if (pushCount != 1 || popCount != 1 || pushInsn == null || popInsn == null) {
+                continue;
+            }
+            MethodInsnNode newPush = new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "pushWithPoseCaching", "(L" + psCls + ";)V", false);
+            MethodInsnNode newPop = new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "popWithPoseCaching", "(L" + psCls + ";)V", false);
+            mn.instructions.set(pushInsn, newPush);
+            mn.instructions.set(popInsn, newPop);
+
+            LabelNode tryStart = new LabelNode();
+            LabelNode tryEnd = new LabelNode();
+            LabelNode catchHandler = new LabelNode();
+            mn.instructions.insert(newPush, tryStart);
+            AbstractInsnNode beforePop = prevRealInsn(newPop);
+            AbstractInsnNode tryEndAnchor = (beforePop instanceof VarInsnNode vin
+                    && vin.getOpcode() == Opcodes.ALOAD && vin.var == 0) ? beforePop : newPop;
+            mn.instructions.insertBefore(tryEndAnchor, tryEnd);
+
+            Type[] argTypes = Type.getArgumentTypes(mn.desc);
+            Object[] frameLocals = new Object[argTypes.length];
+            for (int i = 0; i < argTypes.length; i++) {
+                frameLocals[i] = asmFrameType(argTypes[i]);
+            }
+            InsnList handler = new InsnList();
+            handler.add(catchHandler);
+            handler.add(new FrameNode(
+                    Opcodes.F_NEW,
+                    frameLocals.length,
+                    frameLocals,
+                    1,
+                    new Object[] {"java/lang/Throwable"}));
+            handler.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            handler.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "disablePoseCaching", "(L" + psCls + ";)V", false));
+            handler.add(new InsnNode(Opcodes.ATHROW));
+            mn.instructions.add(handler);
+            if (mn.tryCatchBlocks == null) {
+                mn.tryCatchBlocks = new java.util.ArrayList<>();
+            }
+            mn.tryCatchBlocks.add(new TryCatchBlockNode(tryStart, tryEnd, catchHandler, null));
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Redirects Emberbium {@code RadixSort.radixSortDescending(float[])} to
+     * {@code EmfRenderPerf.radixSortDescending(float[])}, pooling internal temporary arrays on
+     * the render thread to eliminate ~135MB+ of translucent-sort {@code int[]} GC churn.
+     */
+    public static byte[] transformSodiumRadixSort(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("radixSortDescending".equals(mn.name) && "([F)[I".equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "radixSortDescending", "([F)[I", false));
+                il.add(new InsnNode(Opcodes.ARETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
+                break;
             }
         }
         if (!patched) {
@@ -7856,6 +8256,2826 @@ public final class SunlitExtraTransformer implements ClassFileTransformer {
         if (!patched) {
             return null;
         }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Lowers Embeddium/Sodium chunk builder worker thread priority to NORM_PRIORITY - 2 (3) so
+     * intense post-join and camera-pan chunk meshing never starves the Render thread on Windows.
+     */
+    public static byte[] transformSodiumWorkerThread(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"<init>".equals(mn.name) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn.getOpcode() == Opcodes.RETURN) {
+                    InsnList prio = new InsnList();
+                    prio.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    prio.add(new InsnNode(Opcodes.ICONST_3));
+                    prio.add(new MethodInsnNode(
+                            Opcodes.INVOKEVIRTUAL, "java/lang/Thread", "setPriority", "(I)V", false));
+                    mn.instructions.insertBefore(insn, prio);
+                    patched = true;
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Lowers JourneyMap background worker threads (JM-task) from NORM_PRIORITY (5) to priority 2
+     * so map tile baking and I/O never compete with the Render thread during world join.
+     */
+    public static byte[] transformJourneyMapThreadFactory(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"newThread".equals(mn.name)
+                    || !"(Ljava/lang/Runnable;)Ljava/lang/Thread;".equals(mn.desc)
+                    || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn.getOpcode() == Opcodes.ICONST_5) {
+                    mn.instructions.set(insn, new InsnNode(Opcodes.ICONST_2));
+                    patched = true;
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Enables Embeddium's CachingPoseStack pooling across GeckoLib GeoRenderer.defaultRender calls
+     * (with an exception handler to guarantee refcount balance), eliminating ~840MB of per-frame
+     * Matrix4f/Matrix3f allocations across GeoEntityRenderer/GeoBlockRenderer/GeoItemRenderer.
+     */
+    public static byte[] transformGeckoLibGeoRenderer(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String psCls = "com/mojang/blaze3d/vertex/PoseStack";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        final String targetDesc = "(L" + psCls
+                + ";Lsoftware/bernie/geckolib/core/animatable/GeoAnimatable;"
+                + "Lnet/minecraft/client/renderer/MultiBufferSource;"
+                + "Lnet/minecraft/client/renderer/RenderType;"
+                + "Lcom/mojang/blaze3d/vertex/VertexConsumer;FFI)V";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"defaultRender".equals(mn.name) || !targetDesc.equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            MethodInsnNode pushInsn = null;
+            MethodInsnNode popInsn = null;
+            int pushCount = 0;
+            int popCount = 0;
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && psCls.equals(min.owner)
+                        && "()V".equals(min.desc)) {
+                    if ("m_85836_".equals(min.name)) {
+                        pushInsn = min;
+                        pushCount++;
+                    } else if ("m_85849_".equals(min.name)) {
+                        popInsn = min;
+                        popCount++;
+                    }
+                }
+            }
+            if (pushCount != 1 || popCount != 1 || pushInsn == null || popInsn == null) {
+                continue;
+            }
+            MethodInsnNode newPush = new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "pushWithPoseCaching", "(L" + psCls + ";)V", false);
+            MethodInsnNode newPop = new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "popWithPoseCaching", "(L" + psCls + ";)V", false);
+            mn.instructions.set(pushInsn, newPush);
+            mn.instructions.set(popInsn, newPop);
+
+            LabelNode tryStart = new LabelNode();
+            LabelNode tryEnd = new LabelNode();
+            LabelNode catchHandler = new LabelNode();
+            mn.instructions.insert(newPush, tryStart);
+            // Place tryEnd right before the ALOAD 1 preceding newPop (or before newPop itself).
+            AbstractInsnNode beforePop = prevRealInsn(newPop);
+            AbstractInsnNode tryEndAnchor = (beforePop instanceof VarInsnNode vin
+                    && vin.getOpcode() == Opcodes.ALOAD && vin.var == 1) ? beforePop : newPop;
+            mn.instructions.insertBefore(tryEndAnchor, tryEnd);
+
+            InsnList handler = new InsnList();
+            handler.add(catchHandler);
+            handler.add(new FrameNode(
+                    Opcodes.F_NEW,
+                    9,
+                    new Object[] {
+                        cn.name,
+                        psCls,
+                        "software/bernie/geckolib/core/animatable/GeoAnimatable",
+                        "net/minecraft/client/renderer/MultiBufferSource",
+                        "net/minecraft/client/renderer/RenderType",
+                        "com/mojang/blaze3d/vertex/VertexConsumer",
+                        Opcodes.FLOAT,
+                        Opcodes.FLOAT,
+                        Opcodes.INTEGER
+                    },
+                    1,
+                    new Object[] {"java/lang/Throwable"}));
+            handler.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            handler.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, perfCls, "disablePoseCaching", "(L" + psCls + ";)V", false));
+            handler.add(new InsnNode(Opcodes.ATHROW));
+            mn.instructions.add(handler);
+            if (mn.tryCatchBlocks == null) {
+                mn.tryCatchBlocks = new java.util.ArrayList<>();
+            }
+            mn.tryCatchBlocks.add(new TryCatchBlockNode(tryStart, tryEnd, catchHandler, null));
+            patched = true;
+            break;
+        }
+        if (patchGbfGeoRendererIrisFastPath(cn)) {
+            patched = true;
+        }
+        if (patchGeckoLibGeoRendererLoops(cn)) {
+            patched = true;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Replaces {@code List.iterator()} loops in GeckoLib {@code GeoRenderer}'s hottest per-bone
+     * methods ({@code applyRenderLayersForBone}, {@code applyRenderLayers},
+     * {@code renderCubesOfBone}, {@code renderChildBones}) with indexed {@code size()/get(i)}
+     * loops, eliminating ~128MB+ of {@code ObjectArrayList$1} iterator allocations.
+     */
+    private static boolean patchGeckoLibGeoRendererLoops(ClassNode cn) {
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null) {
+                continue;
+            }
+            if (!"applyRenderLayersForBone".equals(mn.name)
+                    && !"applyRenderLayers".equals(mn.name)
+                    && !"renderCubesOfBone".equals(mn.name)
+                    && !"renderChildBones".equals(mn.name)) {
+                continue;
+            }
+            if (replaceSimpleListIteratorLoop(mn)) {
+                patched = true;
+            }
+        }
+        return patched;
+    }
+
+    private static boolean replaceSimpleListIteratorLoop(MethodNode mn) {
+        MethodInsnNode iterCall = null;
+        for (AbstractInsnNode insn : mn.instructions.toArray()) {
+            if (insn instanceof MethodInsnNode min
+                    && min.getOpcode() == Opcodes.INVOKEINTERFACE
+                    && "java/util/List".equals(min.owner)
+                    && "iterator".equals(min.name)
+                    && "()Ljava/util/Iterator;".equals(min.desc)) {
+                if (iterCall != null) {
+                    return false;
+                }
+                iterCall = min;
+            }
+        }
+        if (iterCall == null) {
+            return false;
+        }
+        AbstractInsnNode stInsn = nextRealInsn(iterCall);
+        if (!(stInsn instanceof VarInsnNode stIter) || stIter.getOpcode() != Opcodes.ASTORE) {
+            return false;
+        }
+        int listSlot = stIter.var;
+        // Find loop LabelNode right after stIter
+        LabelNode loopLabel = null;
+        FrameNode loopFrame = null;
+        AbstractInsnNode scan = stIter.getNext();
+        while (scan != null && scan.getOpcode() < 0) {
+            if (scan instanceof LabelNode ln && loopLabel == null) {
+                loopLabel = ln;
+            } else if (scan instanceof FrameNode fn && loopFrame == null) {
+                loopFrame = fn;
+            }
+            scan = scan.getNext();
+        }
+        if (loopLabel == null || !(scan instanceof VarInsnNode ld1)
+                || ld1.getOpcode() != Opcodes.ALOAD || ld1.var != listSlot) {
+            return false;
+        }
+        AbstractInsnNode hasNextInsn = nextRealInsn(ld1);
+        AbstractInsnNode ifeqInsn = nextRealInsn(hasNextInsn);
+        AbstractInsnNode ld2Insn = nextRealInsn(ifeqInsn);
+        AbstractInsnNode nextInsn = nextRealInsn(ld2Insn);
+        if (!(hasNextInsn instanceof MethodInsnNode hn)
+                || hn.getOpcode() != Opcodes.INVOKEINTERFACE
+                || !"java/util/Iterator".equals(hn.owner)
+                || !"hasNext".equals(hn.name)
+                || !(ifeqInsn instanceof JumpInsnNode ifeq)
+                || ifeq.getOpcode() != Opcodes.IFEQ
+                || !(ld2Insn instanceof VarInsnNode ld2)
+                || ld2.getOpcode() != Opcodes.ALOAD || ld2.var != listSlot
+                || !(nextInsn instanceof MethodInsnNode nx)
+                || nx.getOpcode() != Opcodes.INVOKEINTERFACE
+                || !"java/util/Iterator".equals(nx.owner)
+                || !"next".equals(nx.name)) {
+            return false;
+        }
+        // Find the unique back-edge GOTO loopLabel
+        JumpInsnNode backEdge = null;
+        for (AbstractInsnNode insn = nextInsn.getNext(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof JumpInsnNode j && j.getOpcode() == Opcodes.GOTO && j.label == loopLabel) {
+                if (backEdge != null) {
+                    return false;
+                }
+                backEdge = j;
+            }
+        }
+        if (backEdge == null) {
+            return false;
+        }
+        // Ensure listSlot is not referenced anywhere else
+        for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof VarInsnNode v && v.var == listSlot && v != stIter && v != ld1 && v != ld2) {
+                return false;
+            }
+        }
+        int idxSlot = Math.max(mn.maxLocals, listSlot + 1);
+        int sizeSlot = idxSlot + 1;
+        // Verify no existing local uses idxSlot or sizeSlot
+        for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof VarInsnNode v && (v.var == idxSlot || v.var == sizeSlot)) {
+                return false;
+            }
+        }
+
+        // Replace `INVOKEINTERFACE List.iterator()` with:
+        // DUP; INVOKEINTERFACE List.size()I; ISTORE sizeSlot; ICONST_0; ISTORE idxSlot;
+        // (followed by existing ASTORE listSlot!)
+        InsnList init = new InsnList();
+        init.add(new InsnNode(Opcodes.DUP));
+        init.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+        init.add(new VarInsnNode(Opcodes.ISTORE, sizeSlot));
+        init.add(new InsnNode(Opcodes.ICONST_0));
+        init.add(new VarInsnNode(Opcodes.ISTORE, idxSlot));
+        mn.instructions.insertBefore(iterCall, init);
+        mn.instructions.remove(iterCall);
+
+        // Replace `ALOAD listSlot; hasNext; IFEQ end` with `ILOAD idxSlot; ILOAD sizeSlot; IF_ICMPGE end`
+        InsnList cond = new InsnList();
+        cond.add(new VarInsnNode(Opcodes.ILOAD, idxSlot));
+        cond.add(new VarInsnNode(Opcodes.ILOAD, sizeSlot));
+        cond.add(new JumpInsnNode(Opcodes.IF_ICMPGE, ifeq.label));
+        mn.instructions.insertBefore(ld1, cond);
+        mn.instructions.remove(ld1);
+        mn.instructions.remove(hasNextInsn);
+        mn.instructions.remove(ifeqInsn);
+
+        // Replace `ALOAD listSlot; next()` with `ALOAD listSlot; ILOAD idxSlot; INVOKEINTERFACE List.get(I)Object;`
+        mn.instructions.insertBefore(nextInsn, new VarInsnNode(Opcodes.ILOAD, idxSlot));
+        mn.instructions.set(nextInsn, new MethodInsnNode(
+                Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+
+        // Insert `IINC idxSlot, 1` right before backEdge GOTO
+        mn.instructions.insertBefore(backEdge, new IincInsnNode(idxSlot, 1));
+
+        // Update expanded F_NEW FrameNode at loopLabel
+        if (loopFrame != null && loopFrame.local != null) {
+            java.util.ArrayList<Object> newLocals = new java.util.ArrayList<>(loopFrame.local);
+            while (newLocals.size() <= sizeSlot) {
+                newLocals.add(Opcodes.TOP);
+            }
+            newLocals.set(listSlot, "java/util/List");
+            newLocals.set(idxSlot, Opcodes.INTEGER);
+            newLocals.set(sizeSlot, Opcodes.INTEGER);
+            loopFrame.local = newLocals;
+        }
+        // Also update any other FrameNode in the method that mentions java/util/Iterator at listSlot
+        for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof FrameNode fn && fn != loopFrame && fn.local != null && fn.local.size() > listSlot) {
+                if ("java/util/Iterator".equals(fn.local.get(listSlot))) {
+                    java.util.ArrayList<Object> nl = new java.util.ArrayList<>(fn.local);
+                    nl.set(listSlot, "java/util/List");
+                    fn.local = nl;
+                }
+            }
+        }
+        if (mn.localVariables != null) {
+            mn.localVariables.clear();
+        }
+        return true;
+    }
+
+    /**
+     * Fixes GBF 1.0.2's broken Iris entity vertex format check in merged {@code GeoRenderer.renderCube}:
+     * GBF compared {@code BufferBuilder.format} (VertexFormat) against {@code IrisEntityVertex.FORMAT}
+     * (VertexFormatDescription), which was always false and forced every GeckoLib entity under shaders
+     * onto the slow per-vertex {@code BufferBuilder.vertex -> iris$finishExtendedVertex} path.
+     * Also adds Iris format dispatch for {@code SodiumBufferBuilder}.
+     */
+    private static boolean patchGbfGeoRendererIrisFastPath(ClassNode cn) {
+        final String renderCubeDesc = "(Lcom/mojang/blaze3d/vertex/PoseStack;"
+                + "Lsoftware/bernie/geckolib/cache/object/GeoCube;"
+                + "Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V";
+        final String bbCls = "com/mojang/blaze3d/vertex/BufferBuilder";
+        final String vfDesc = "Lcom/mojang/blaze3d/vertex/VertexFormat;";
+        final String irisVfCls = "net/irisshaders/iris/vertices/IrisVertexFormats";
+        final String irisCompatCls = "com/moepus/gbf/IrisCompat";
+        final String irisCubeCls = "com/moepus/gbf/renderer/IrisCubeRenderer";
+        final String sbbCls = "me/jellysquid/mods/sodium/client/render/vertex/buffer/SodiumBufferBuilder";
+        final String cubeRenderDesc = "(Lcom/mojang/blaze3d/vertex/PoseStack;"
+                + "Lsoftware/bernie/geckolib/cache/object/GeoCube;"
+                + "Lnet/caffeinemc/mods/sodium/api/vertex/buffer/VertexBufferWriter;IIFFFF)V";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"renderCube".equals(mn.name) || !renderCubeDesc.equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            // Fix 1: BufferBuilder.f_85658_ == IrisEntityVertex.FORMAT -> IrisCompat.IS_IRIS_INSTALLED && == IrisVertexFormats.ENTITY
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof FieldInsnNode fin
+                        && fin.getOpcode() == Opcodes.GETSTATIC
+                        && "com/moepus/gbf/renderer/IrisEntityVertex".equals(fin.owner)
+                        && "FORMAT".equals(fin.name)) {
+                    AbstractInsnNode prev1 = prevRealInsn(fin);
+                    AbstractInsnNode prev2 = prevRealInsn(prev1);
+                    AbstractInsnNode next1 = nextRealInsn(fin);
+                    if (prev1 instanceof FieldInsnNode getFmt
+                            && getFmt.getOpcode() == Opcodes.GETFIELD
+                            && bbCls.equals(getFmt.owner)
+                            && "f_85658_".equals(getFmt.name)
+                            && vfDesc.equals(getFmt.desc)
+                            && prev2 instanceof VarInsnNode loadBb
+                            && loadBb.getOpcode() == Opcodes.ALOAD
+                            && next1 instanceof JumpInsnNode jmp
+                            && jmp.getOpcode() == Opcodes.IF_ACMPNE) {
+                        InsnList guard = new InsnList();
+                        guard.add(new FieldInsnNode(Opcodes.GETSTATIC, irisCompatCls, "IS_IRIS_INSTALLED", "Z"));
+                        guard.add(new JumpInsnNode(Opcodes.IFEQ, jmp.label));
+                        mn.instructions.insertBefore(loadBb, guard);
+                        fin.owner = irisVfCls;
+                        fin.name = "ENTITY";
+                        fin.desc = vfDesc;
+                        patched = true;
+                    }
+                }
+            }
+            // Fix 2: SodiumBufferBuilder branch also dispatches IrisVertexFormats.ENTITY -> IrisCubeRenderer
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode getOrig
+                        && getOrig.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && sbbCls.equals(getOrig.owner)
+                        && "getOriginalBufferBuilder".equals(getOrig.name)
+                        && ("()L" + bbCls + ";").equals(getOrig.desc)) {
+                    AbstractInsnNode loadSbb = prevRealInsn(getOrig);
+                    AbstractInsnNode getFmt = nextRealInsn(getOrig);
+                    AbstractInsnNode getDvf = nextRealInsn(getFmt);
+                    AbstractInsnNode jmp = nextRealInsn(getDvf);
+                    if (loadSbb instanceof VarInsnNode sbbVar
+                            && sbbVar.getOpcode() == Opcodes.ALOAD
+                            && getFmt instanceof FieldInsnNode fmtInsn
+                            && fmtInsn.getOpcode() == Opcodes.GETFIELD
+                            && bbCls.equals(fmtInsn.owner)
+                            && "f_85658_".equals(fmtInsn.name)
+                            && getDvf instanceof FieldInsnNode dvfInsn
+                            && dvfInsn.getOpcode() == Opcodes.GETSTATIC
+                            && "com/mojang/blaze3d/vertex/DefaultVertexFormat".equals(dvfInsn.owner)
+                            && "f_85812_".equals(dvfInsn.name)
+                            && jmp instanceof JumpInsnNode ifNe
+                            && ifNe.getOpcode() == Opcodes.IF_ACMPNE) {
+                        // Find the SodiumCubeRenderer.renderCube call and following RETURN right after ifNe
+                        MethodInsnNode sodiumCall = null;
+                        AbstractInsnNode retInsn = null;
+                        int writerSlot = -1;
+                        AbstractInsnNode cur = nextRealInsn(ifNe);
+                        for (int steps = 0; cur != null && steps < 14; steps++, cur = nextRealInsn(cur)) {
+                            if (cur instanceof MethodInsnNode mc
+                                    && "com/moepus/gbf/renderer/SodiumCubeRenderer".equals(mc.owner)
+                                    && "renderCube".equals(mc.name)) {
+                                sodiumCall = mc;
+                                AbstractInsnNode n = nextRealInsn(mc);
+                                if (n != null && n.getOpcode() == Opcodes.RETURN) {
+                                    retInsn = n;
+                                }
+                                break;
+                            }
+                            if (steps == 2 && cur instanceof VarInsnNode wv && wv.getOpcode() == Opcodes.ALOAD) {
+                                writerSlot = wv.var;
+                            }
+                        }
+                        if (sodiumCall != null && retInsn != null && writerSlot >= 0) {
+                            LabelNode origFallback = ifNe.label;
+                            LabelNode checkSbbIris = new LabelNode();
+                            ifNe.label = checkSbbIris;
+                            int localCount = Math.max(sbbVar.var, writerSlot) + 1;
+                            Object[] locals = new Object[localCount];
+                            java.util.Arrays.fill(locals, Opcodes.TOP);
+                            locals[0] = cn.name;
+                            locals[1] = "com/mojang/blaze3d/vertex/PoseStack";
+                            locals[2] = "software/bernie/geckolib/cache/object/GeoCube";
+                            locals[3] = "com/mojang/blaze3d/vertex/VertexConsumer";
+                            locals[4] = Opcodes.INTEGER;
+                            locals[5] = Opcodes.INTEGER;
+                            locals[6] = Opcodes.FLOAT;
+                            locals[7] = Opcodes.FLOAT;
+                            locals[8] = Opcodes.FLOAT;
+                            locals[9] = Opcodes.FLOAT;
+                            locals[10] = "net/minecraft/world/phys/Vec3";
+                            locals[writerSlot] = "net/caffeinemc/mods/sodium/api/vertex/buffer/VertexBufferWriter";
+                            locals[sbbVar.var] = sbbCls;
+                            InsnList extra = new InsnList();
+                            extra.add(checkSbbIris);
+                            extra.add(new FrameNode(Opcodes.F_NEW, localCount, locals, 0, new Object[0]));
+                            extra.add(new FieldInsnNode(Opcodes.GETSTATIC, irisCompatCls, "IS_IRIS_INSTALLED", "Z"));
+                            extra.add(new JumpInsnNode(Opcodes.IFEQ, origFallback));
+                            extra.add(new VarInsnNode(Opcodes.ALOAD, sbbVar.var));
+                            extra.add(new MethodInsnNode(
+                                    Opcodes.INVOKEVIRTUAL, sbbCls, "getOriginalBufferBuilder",
+                                    "()L" + bbCls + ";", false));
+                            extra.add(new FieldInsnNode(Opcodes.GETFIELD, bbCls, "f_85658_", vfDesc));
+                            extra.add(new FieldInsnNode(Opcodes.GETSTATIC, irisVfCls, "ENTITY", vfDesc));
+                            extra.add(new JumpInsnNode(Opcodes.IF_ACMPNE, origFallback));
+                            extra.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                            extra.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                            extra.add(new VarInsnNode(Opcodes.ALOAD, writerSlot));
+                            extra.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                            extra.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                            extra.add(new VarInsnNode(Opcodes.FLOAD, 6));
+                            extra.add(new VarInsnNode(Opcodes.FLOAD, 7));
+                            extra.add(new VarInsnNode(Opcodes.FLOAD, 8));
+                            extra.add(new VarInsnNode(Opcodes.FLOAD, 9));
+                            extra.add(new MethodInsnNode(
+                                    Opcodes.INVOKESTATIC, irisCubeCls, "renderCube", cubeRenderDesc, false));
+                            extra.add(new InsnNode(Opcodes.RETURN));
+                            mn.instructions.insert(retInsn, extra);
+                            patched = true;
+                        }
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+        return patched;
+    }
+
+    /**
+     * Fixes GBF 1.0.2's Iris detection on Forge 1.20.1 where Iris is registered under mod ID
+     * {@code "oculus"} (Emberlens/Oculus) rather than {@code "iris"}.
+     */
+    public static byte[] transformGbfIrisCompat(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean patched = false;
+        final String lmlCls = "net/minecraftforge/fml/loading/LoadingModList";
+        for (MethodNode mn : cn.methods) {
+            if (!"<clinit>".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            InsnList il = new InsnList();
+            LabelNode isTrue = new LabelNode();
+            LabelNode isFalse = new LabelNode();
+            LabelNode store = new LabelNode();
+            il.add(new MethodInsnNode(Opcodes.INVOKESTATIC, lmlCls, "get", "()L" + lmlCls + ";", false));
+            il.add(new InsnNode(Opcodes.DUP));
+            il.add(new LdcInsnNode("iris"));
+            il.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, lmlCls, "getModFileById",
+                    "(Ljava/lang/String;)Lnet/minecraftforge/fml/loading/moddiscovery/ModFileInfo;", false));
+            il.add(new JumpInsnNode(Opcodes.IFNONNULL, isTrue));
+            il.add(new LdcInsnNode("oculus"));
+            il.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, lmlCls, "getModFileById",
+                    "(Ljava/lang/String;)Lnet/minecraftforge/fml/loading/moddiscovery/ModFileInfo;", false));
+            il.add(new JumpInsnNode(Opcodes.IFNULL, isFalse));
+            il.add(new InsnNode(Opcodes.ICONST_1));
+            il.add(new JumpInsnNode(Opcodes.GOTO, store));
+            il.add(isTrue);
+            il.add(new FrameNode(Opcodes.F_SAME1, 0, null, 1, new Object[] {lmlCls}));
+            il.add(new InsnNode(Opcodes.POP));
+            il.add(new InsnNode(Opcodes.ICONST_1));
+            il.add(new JumpInsnNode(Opcodes.GOTO, store));
+            il.add(isFalse);
+            il.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+            il.add(new InsnNode(Opcodes.ICONST_0));
+            il.add(store);
+            il.add(new FrameNode(Opcodes.F_SAME1, 0, null, 1, new Object[] {Opcodes.INTEGER}));
+            il.add(new FieldInsnNode(Opcodes.PUTSTATIC, GBF_IRIS_COMPAT_CLS, "IS_IRIS_INSTALLED", "Z"));
+            il.add(new InsnNode(Opcodes.RETURN));
+            mn.instructions = il;
+            if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+            if (mn.localVariables != null) mn.localVariables.clear();
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Widens vanilla {@code Frustum.m_113006_(DDDDDD)Z} ({@code cubeInFrustum}) to public and
+     * implements {@code EmfRenderPerf$FastBoxFrustum} so entity frustum checks avoid both
+     * {@code new AABB} allocations and {@code MethodHandle.invokeExact} dispatch.
+     */
+    public static byte[] transformFrustum(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String fastItf = "dev/sunlit/bettersunlit/client/EmfRenderPerf$FastBoxFrustum";
+        boolean patched = false;
+        boolean hasBridge = false;
+        for (MethodNode mn : cn.methods) {
+            if ("m_113006_".equals(mn.name) && "(DDDDDD)Z".equals(mn.desc)) {
+                mn.access = (mn.access & ~(Opcodes.ACC_PRIVATE | Opcodes.ACC_PROTECTED)) | Opcodes.ACC_PUBLIC;
+                patched = true;
+            } else if ("sunlit$isBoxVisible".equals(mn.name) && "(DDDDDD)Z".equals(mn.desc)) {
+                hasBridge = true;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        if (!hasBridge) {
+            if (cn.interfaces == null) {
+                cn.interfaces = new java.util.ArrayList<>();
+            }
+            if (!cn.interfaces.contains(fastItf)) {
+                cn.interfaces.add(fastItf);
+            }
+            MethodNode bridge = new MethodNode(
+                    Opcodes.ACC_PUBLIC, "sunlit$isBoxVisible", "(DDDDDD)Z", null, null);
+            InsnList il = bridge.instructions;
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+            il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+            il.add(new VarInsnNode(Opcodes.DLOAD, 5));
+            il.add(new VarInsnNode(Opcodes.DLOAD, 7));
+            il.add(new VarInsnNode(Opcodes.DLOAD, 9));
+            il.add(new VarInsnNode(Opcodes.DLOAD, 11));
+            il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, cn.name, "m_113006_", "(DDDDDD)Z", false));
+            il.add(new InsnNode(Opcodes.IRETURN));
+            cn.methods.add(bridge);
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Adds an allocation-free {@code sunlit$isBoxVisible(DDDDDD)Z} entry point and implements
+     * {@code EmfRenderPerf$FastBoxFrustum} on Iris {@code AdvancedShadowCullingFrustum}.
+     */
+    public static byte[] transformIrisShadowFrustum(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String fastItf = "dev/sunlit/bettersunlit/client/EmfRenderPerf$FastBoxFrustum";
+        boolean hasBoxCuller = false;
+        boolean hasIsVisible = false;
+        for (FieldNode fn : cn.fields) {
+            if ("boxCuller".equals(fn.name)
+                    && "Lnet/irisshaders/iris/shadows/frustum/BoxCuller;".equals(fn.desc)) {
+                hasBoxCuller = true;
+            }
+        }
+        for (MethodNode mn : cn.methods) {
+            if ("isVisible".equals(mn.name) && "(DDDDDD)I".equals(mn.desc)) {
+                hasIsVisible = true;
+            }
+            if ("sunlit$isBoxVisible".equals(mn.name)) {
+                return null;
+            }
+        }
+        if (!hasBoxCuller || !hasIsVisible) {
+            return null;
+        }
+        if (cn.interfaces == null) {
+            cn.interfaces = new java.util.ArrayList<>();
+        }
+        if (!cn.interfaces.contains(fastItf)) {
+            cn.interfaces.add(fastItf);
+        }
+        MethodNode helper = new MethodNode(
+                Opcodes.ACC_PUBLIC, "sunlit$isBoxVisible", "(DDDDDD)Z", null, null);
+        InsnList il = helper.instructions;
+        LabelNode checkFrustum = new LabelNode();
+        LabelNode retFalse = new LabelNode();
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new FieldInsnNode(
+                Opcodes.GETFIELD, IRIS_ADV_FRUSTUM_CLS, "boxCuller",
+                "Lnet/irisshaders/iris/shadows/frustum/BoxCuller;"));
+        il.add(new JumpInsnNode(Opcodes.IFNULL, checkFrustum));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new FieldInsnNode(
+                Opcodes.GETFIELD, IRIS_ADV_FRUSTUM_CLS, "boxCuller",
+                "Lnet/irisshaders/iris/shadows/frustum/BoxCuller;"));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 5));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 7));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 9));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 11));
+        il.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL, "net/irisshaders/iris/shadows/frustum/BoxCuller",
+                "isCulled", "(DDDDDD)Z", false));
+        il.add(new JumpInsnNode(Opcodes.IFNE, retFalse));
+        il.add(checkFrustum);
+        il.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 5));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 7));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 9));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 11));
+        il.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL, IRIS_ADV_FRUSTUM_CLS, "isVisible", "(DDDDDD)I", false));
+        il.add(new JumpInsnNode(Opcodes.IFEQ, retFalse));
+        il.add(new InsnNode(Opcodes.ICONST_1));
+        il.add(new InsnNode(Opcodes.IRETURN));
+        il.add(retFalse);
+        il.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+        il.add(new InsnNode(Opcodes.ICONST_0));
+        il.add(new InsnNode(Opcodes.IRETURN));
+        cn.methods.add(helper);
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Pools per-BufferBuilder {@code Vector3f} instances in {@code BufferBuilder.m_166794_}
+     * ({@code makeQuadSortingPoints}) and reads vertex coordinates off-heap without
+     * {@code ByteBuffer.asFloatBuffer()} (~340MB GC churn eliminated in 55s). Detaches the pool
+     * in {@code m_166770_} ({@code getSortState}) so snapshotted {@code SortState} arrays remain
+     * strictly isolated.
+     */
+    public static byte[] transformBufferBuilder(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        final String poolField = "sunlit$sortPool";
+        boolean hasMakePoints = false;
+        boolean hasGetSortState = false;
+        for (FieldNode fn : cn.fields) {
+            if (poolField.equals(fn.name)) {
+                return null;
+            }
+        }
+        for (MethodNode mn : cn.methods) {
+            if ("m_166794_".equals(mn.name) && "()[Lorg/joml/Vector3f;".equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                LabelNode hasPool = new LabelNode();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BUFFER_BUILDER_CLS, poolField, "Ljava/lang/Object;"));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new JumpInsnNode(Opcodes.IFNONNULL, hasPool));
+                il.add(new MethodInsnNode(Opcodes.INVOKESTATIC, perfCls, "newQuadSortPool", "()Ljava/lang/Object;", false));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, MC_BUFFER_BUILDER_CLS, poolField, "Ljava/lang/Object;"));
+                il.add(hasPool);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW,
+                        2,
+                        new Object[] {MC_BUFFER_BUILDER_CLS, "java/lang/Object"},
+                        0,
+                        new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BUFFER_BUILDER_CLS, "f_85648_", "Ljava/nio/ByteBuffer;"));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BUFFER_BUILDER_CLS, "f_231157_", "I"));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BUFFER_BUILDER_CLS, "f_85658_", "Lcom/mojang/blaze3d/vertex/VertexFormat;"));
+                il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "com/mojang/blaze3d/vertex/VertexFormat", "m_86017_", "()I", false));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BUFFER_BUILDER_CLS, "f_85657_", "Lcom/mojang/blaze3d/vertex/VertexFormat$Mode;"));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, "com/mojang/blaze3d/vertex/VertexFormat$Mode", "f_166948_", "I"));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BUFFER_BUILDER_CLS, "f_85654_", "I"));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "makeQuadSortingPointsPooled",
+                        "(Ljava/nio/ByteBuffer;IIIILjava/lang/Object;)[Lorg/joml/Vector3f;", false));
+                il.add(new InsnNode(Opcodes.ARETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                hasMakePoints = true;
+            } else if ("m_166770_".equals(mn.name)
+                    && "()Lcom/mojang/blaze3d/vertex/BufferBuilder$SortState;".equals(mn.desc)
+                    && mn.instructions != null) {
+                InsnList detach = new InsnList();
+                detach.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                detach.add(new InsnNode(Opcodes.ACONST_NULL));
+                detach.add(new FieldInsnNode(Opcodes.PUTFIELD, MC_BUFFER_BUILDER_CLS, poolField, "Ljava/lang/Object;"));
+                mn.instructions.insert(detach);
+                hasGetSortState = true;
+            }
+        }
+        if (!hasMakePoints || !hasGetSortState) {
+            return null;
+        }
+        cn.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, poolField, "Ljava/lang/Object;", null, null));
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Prepends a fast early-exit to {@code RenderUtils.fixInvertedFlatCube(GeoCube, Vector3f)}:
+     * when all 3 cube size components are non-zero (non-flat 3D cubes, ~98% of geometry),
+     * none of the inverted-flat-cube flips can trigger.
+     */
+    public static byte[] transformGeckoLibRenderUtils(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String desc = "(Lsoftware/bernie/geckolib/cache/object/GeoCube;Lorg/joml/Vector3f;)V";
+        final String vec3Cls = "net/minecraft/world/phys/Vec3";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"fixInvertedFlatCube".equals(mn.name) || !desc.equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            LabelNode fallthrough = new LabelNode();
+            InsnList fast = new InsnList();
+            fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            fast.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, "software/bernie/geckolib/cache/object/GeoCube",
+                    "size", "()L" + vec3Cls + ";", false));
+            fast.add(new InsnNode(Opcodes.DUP));
+            fast.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, vec3Cls, "m_7096_", "()D", false));
+            fast.add(new InsnNode(Opcodes.DCONST_0));
+            fast.add(new InsnNode(Opcodes.DCMPL));
+            LabelNode popAndFallthrough = new LabelNode();
+            fast.add(new JumpInsnNode(Opcodes.IFEQ, popAndFallthrough));
+            fast.add(new InsnNode(Opcodes.DUP));
+            fast.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, vec3Cls, "m_7098_", "()D", false));
+            fast.add(new InsnNode(Opcodes.DCONST_0));
+            fast.add(new InsnNode(Opcodes.DCMPL));
+            fast.add(new JumpInsnNode(Opcodes.IFEQ, popAndFallthrough));
+            fast.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, vec3Cls, "m_7094_", "()D", false));
+            fast.add(new InsnNode(Opcodes.DCONST_0));
+            fast.add(new InsnNode(Opcodes.DCMPL));
+            fast.add(new JumpInsnNode(Opcodes.IFEQ, fallthrough));
+            fast.add(new InsnNode(Opcodes.RETURN));
+            fast.add(popAndFallthrough);
+            fast.add(new FrameNode(
+                    Opcodes.F_NEW,
+                    2,
+                    new Object[] {"software/bernie/geckolib/cache/object/GeoCube", "org/joml/Vector3f"},
+                    1,
+                    new Object[] {vec3Cls}));
+            fast.add(new InsnNode(Opcodes.POP));
+            fast.add(fallthrough);
+            fast.add(new FrameNode(
+                    Opcodes.F_NEW,
+                    2,
+                    new Object[] {"software/bernie/geckolib/cache/object/GeoCube", "org/joml/Vector3f"},
+                    0,
+                    new Object[0]));
+            mn.instructions.insert(fast);
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Adds a zero-allocation 1-element fast slot to GeckoLib's {@code AnimationPointQueue}
+     * (which extends {@code LinkedList} and almost exclusively performs single-element
+     * {@code add -> poll} pairs per bone per tick), eliminating ~140MB+ of {@code LinkedList$Node}
+     * churn while transparently flushing to {@code super} for multi-element or collection operations.
+     */
+    public static byte[] transformGeckoLibAnimationPointQueue(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        if (!"java/util/LinkedList".equals(cn.superName)) {
+            return null;
+        }
+        final String self = GECKOLIB_ANIM_POINT_QUEUE_CLS;
+        final String ll = "java/util/LinkedList";
+        final String slot = "sunlit$single";
+        for (FieldNode fn : cn.fields) {
+            if (slot.equals(fn.name)) {
+                return null;
+            }
+        }
+        cn.fields.add(new FieldNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_TRANSIENT, slot, "Ljava/lang/Object;", null, null));
+
+        // private void sunlit$flush()
+        MethodNode flushM = new MethodNode(Opcodes.ACC_PRIVATE, "sunlit$flush", "()V", null, null);
+        {
+            InsnList il = flushM.instructions;
+            LabelNode done = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new JumpInsnNode(Opcodes.IFNULL, done));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new InsnNode(Opcodes.ACONST_NULL));
+            il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "add", "(Ljava/lang/Object;)Z", false));
+            il.add(new InsnNode(Opcodes.POP));
+            il.add(done);
+            il.add(new FrameNode(Opcodes.F_NEW, 2, new Object[] {self, "java/lang/Object"}, 0, new Object[0]));
+            il.add(new InsnNode(Opcodes.RETURN));
+        }
+        cn.methods.add(flushM);
+
+        // public boolean add(Object e)
+        MethodNode addM = new MethodNode(Opcodes.ACC_PUBLIC, "add", "(Ljava/lang/Object;)Z", null, null);
+        {
+            InsnList il = addM.instructions;
+            LabelNode slow = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new JumpInsnNode(Opcodes.IFNULL, slow));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new JumpInsnNode(Opcodes.IFNONNULL, slow));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "size", "()I", false));
+            il.add(new JumpInsnNode(Opcodes.IFNE, slow));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new InsnNode(Opcodes.ICONST_1));
+            il.add(new InsnNode(Opcodes.IRETURN));
+            il.add(slow);
+            il.add(new FrameNode(Opcodes.F_NEW, 2, new Object[] {self, "java/lang/Object"}, 0, new Object[0]));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, self, "sunlit$flush", "()V", false));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "add", "(Ljava/lang/Object;)Z", false));
+            il.add(new InsnNode(Opcodes.IRETURN));
+        }
+        cn.methods.add(addM);
+
+        // public boolean offer(Object e)
+        MethodNode offerM = new MethodNode(Opcodes.ACC_PUBLIC, "offer", "(Ljava/lang/Object;)Z", null, null);
+        {
+            InsnList il = offerM.instructions;
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, self, "add", "(Ljava/lang/Object;)Z", false));
+            il.add(new InsnNode(Opcodes.IRETURN));
+        }
+        cn.methods.add(offerM);
+
+        // public Object poll()
+        MethodNode pollM = new MethodNode(Opcodes.ACC_PUBLIC, "poll", "()Ljava/lang/Object;", null, null);
+        {
+            InsnList il = pollM.instructions;
+            LabelNode slow = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new JumpInsnNode(Opcodes.IFNULL, slow));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new InsnNode(Opcodes.ACONST_NULL));
+            il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new InsnNode(Opcodes.ARETURN));
+            il.add(slow);
+            il.add(new FrameNode(Opcodes.F_NEW, 2, new Object[] {self, "java/lang/Object"}, 0, new Object[0]));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "poll", "()Ljava/lang/Object;", false));
+            il.add(new InsnNode(Opcodes.ARETURN));
+        }
+        cn.methods.add(pollM);
+
+        // public Object peek()
+        MethodNode peekM = new MethodNode(Opcodes.ACC_PUBLIC, "peek", "()Ljava/lang/Object;", null, null);
+        {
+            InsnList il = peekM.instructions;
+            LabelNode slow = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new JumpInsnNode(Opcodes.IFNULL, slow));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new InsnNode(Opcodes.ARETURN));
+            il.add(slow);
+            il.add(new FrameNode(Opcodes.F_NEW, 2, new Object[] {self, "java/lang/Object"}, 0, new Object[0]));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "peek", "()Ljava/lang/Object;", false));
+            il.add(new InsnNode(Opcodes.ARETURN));
+        }
+        cn.methods.add(peekM);
+
+        // public int size()
+        MethodNode sizeM = new MethodNode(Opcodes.ACC_PUBLIC, "size", "()I", null, null);
+        {
+            InsnList il = sizeM.instructions;
+            LabelNode slow = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new JumpInsnNode(Opcodes.IFNULL, slow));
+            il.add(new InsnNode(Opcodes.ICONST_1));
+            il.add(new InsnNode(Opcodes.IRETURN));
+            il.add(slow);
+            il.add(new FrameNode(Opcodes.F_NEW, 1, new Object[] {self}, 0, new Object[0]));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "size", "()I", false));
+            il.add(new InsnNode(Opcodes.IRETURN));
+        }
+        cn.methods.add(sizeM);
+
+        // public boolean isEmpty()
+        MethodNode emptyM = new MethodNode(Opcodes.ACC_PUBLIC, "isEmpty", "()Z", null, null);
+        {
+            InsnList il = emptyM.instructions;
+            LabelNode retFalse = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new JumpInsnNode(Opcodes.IFNONNULL, retFalse));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "size", "()I", false));
+            il.add(new JumpInsnNode(Opcodes.IFNE, retFalse));
+            il.add(new InsnNode(Opcodes.ICONST_1));
+            il.add(new InsnNode(Opcodes.IRETURN));
+            il.add(retFalse);
+            il.add(new FrameNode(Opcodes.F_NEW, 1, new Object[] {self}, 0, new Object[0]));
+            il.add(new InsnNode(Opcodes.ICONST_0));
+            il.add(new InsnNode(Opcodes.IRETURN));
+        }
+        cn.methods.add(emptyM);
+
+        // public void clear()
+        MethodNode clearM = new MethodNode(Opcodes.ACC_PUBLIC, "clear", "()V", null, null);
+        {
+            InsnList il = clearM.instructions;
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new InsnNode(Opcodes.ACONST_NULL));
+            il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, slot, "Ljava/lang/Object;"));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, "clear", "()V", false));
+            il.add(new InsnNode(Opcodes.RETURN));
+        }
+        cn.methods.add(clearM);
+
+        // Delegate all other commonly used LinkedList methods via sunlit$flush() + super.<m>()
+        String[][] flushDelegates = new String[][] {
+            {"iterator", "()Ljava/util/Iterator;"},
+            {"listIterator", "(I)Ljava/util/ListIterator;"},
+            {"descendingIterator", "()Ljava/util/Iterator;"},
+            {"getFirst", "()Ljava/lang/Object;"},
+            {"getLast", "()Ljava/lang/Object;"},
+            {"get", "(I)Ljava/lang/Object;"},
+            {"remove", "()Ljava/lang/Object;"},
+            {"removeFirst", "()Ljava/lang/Object;"},
+            {"removeLast", "()Ljava/lang/Object;"},
+            {"remove", "(Ljava/lang/Object;)Z"},
+            {"remove", "(I)Ljava/lang/Object;"},
+            {"contains", "(Ljava/lang/Object;)Z"},
+            {"toArray", "()[Ljava/lang/Object;"},
+            {"toArray", "([Ljava/lang/Object;)[Ljava/lang/Object;"},
+            {"addFirst", "(Ljava/lang/Object;)V"},
+            {"addLast", "(Ljava/lang/Object;)V"},
+            {"add", "(ILjava/lang/Object;)V"},
+            {"addAll", "(Ljava/util/Collection;)Z"}
+        };
+        for (String[] pair : flushDelegates) {
+            String mName = pair[0];
+            String mDesc = pair[1];
+            MethodNode dm = new MethodNode(Opcodes.ACC_PUBLIC, mName, mDesc, null, null);
+            InsnList il = dm.instructions;
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, self, "sunlit$flush", "()V", false));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            Type[] args = Type.getArgumentTypes(mDesc);
+            int slotIdx = 1;
+            for (Type arg : args) {
+                il.add(new VarInsnNode(arg.getOpcode(Opcodes.ILOAD), slotIdx));
+                slotIdx += arg.getSize();
+            }
+            il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, ll, mName, mDesc, false));
+            Type ret = Type.getReturnType(mDesc);
+            il.add(new InsnNode(ret.getOpcode(Opcodes.IRETURN)));
+            cn.methods.add(dm);
+        }
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Replaces {@code CopyOnWriteArrayList.isEmpty()/iterator()} overhead on every block in
+     * Emberbium {@code BlockRendererRegistry.fillCustomRenderers} with a lock-free volatile
+     * {@code RenderPopulator[]} snapshot array updated in {@code registerRenderPopulator}.
+     */
+    public static byte[] transformEmbeddiumBlockRendererRegistry(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String self = EMBEDDIUM_BLOCK_RENDERER_REGISTRY_CLS;
+        final String popCls = self + "$RenderPopulator";
+        final String popArrDesc = "[L" + popCls + ";";
+        final String arrField = "sunlit$popArray";
+        final String fillDesc = "(Ljava/util/List;Lme/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext;)V";
+        final String regDesc = "(L" + popCls + ";)V";
+        for (FieldNode fn : cn.fields) {
+            if (arrField.equals(fn.name)) {
+                return null;
+            }
+        }
+        boolean patchedInit = false;
+        boolean patchedReg = false;
+        boolean patchedFill = false;
+        for (MethodNode mn : cn.methods) {
+            if ("<init>".equals(mn.name) && "()V".equals(mn.desc) && mn.instructions != null) {
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn.getOpcode() == Opcodes.RETURN) {
+                        InsnList initArr = new InsnList();
+                        initArr.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        initArr.add(new InsnNode(Opcodes.ICONST_0));
+                        initArr.add(new TypeInsnNode(Opcodes.ANEWARRAY, popCls));
+                        initArr.add(new FieldInsnNode(Opcodes.PUTFIELD, self, arrField, popArrDesc));
+                        mn.instructions.insertBefore(insn, initArr);
+                        patchedInit = true;
+                    }
+                }
+            } else if ("registerRenderPopulator".equals(mn.name) && regDesc.equals(mn.desc) && mn.instructions != null) {
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn.getOpcode() == Opcodes.RETURN) {
+                        InsnList syncArr = new InsnList();
+                        syncArr.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        syncArr.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                        syncArr.add(new FieldInsnNode(Opcodes.GETFIELD, self, "renderPopulators", "Ljava/util/List;"));
+                        syncArr.add(new InsnNode(Opcodes.ICONST_0));
+                        syncArr.add(new TypeInsnNode(Opcodes.ANEWARRAY, popCls));
+                        syncArr.add(new MethodInsnNode(
+                                Opcodes.INVOKEINTERFACE, "java/util/List", "toArray",
+                                "([Ljava/lang/Object;)[Ljava/lang/Object;", true));
+                        syncArr.add(new TypeInsnNode(Opcodes.CHECKCAST, popArrDesc));
+                        syncArr.add(new FieldInsnNode(Opcodes.PUTFIELD, self, arrField, popArrDesc));
+                        mn.instructions.insertBefore(insn, syncArr);
+                        patchedReg = true;
+                    }
+                }
+            } else if ("fillCustomRenderers".equals(mn.name) && fillDesc.equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                LabelNode loop = new LabelNode();
+                LabelNode done = new LabelNode();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, self, arrField, popArrDesc));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 3));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+                il.add(new InsnNode(Opcodes.ARRAYLENGTH));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 4));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new JumpInsnNode(Opcodes.IFEQ, done));
+                il.add(new InsnNode(Opcodes.ICONST_0));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 5));
+                il.add(loop);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW,
+                        6,
+                        new Object[] {
+                            self,
+                            "java/util/List",
+                            "me/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext",
+                            popArrDesc,
+                            Opcodes.INTEGER,
+                            Opcodes.INTEGER
+                        },
+                        0,
+                        new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new JumpInsnNode(Opcodes.IF_ICMPGE, done));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                il.add(new InsnNode(Opcodes.AALOAD));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEINTERFACE, popCls, "fillCustomRenderers", fillDesc, true));
+                il.add(new IincInsnNode(5, 1));
+                il.add(new JumpInsnNode(Opcodes.GOTO, loop));
+                il.add(done);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW,
+                        5,
+                        new Object[] {
+                            self,
+                            "java/util/List",
+                            "me/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderContext",
+                            popArrDesc,
+                            Opcodes.INTEGER
+                        },
+                        0,
+                        new Object[0]));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedFill = true;
+            }
+        }
+        if (!patchedInit || !patchedReg || !patchedFill) {
+            return null;
+        }
+        cn.fields.add(new FieldNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_VOLATILE, arrField, popArrDesc, null, null));
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Redirects Iris {@code EntityVertex.writeQuadVertices} to {@code EmfRenderPerf.writeIrisEntityQuad},
+     * eliminating per-quad {@code MemoryStack.stackPush()/close()}, 4x {@code Direction.step()}
+     * {@code Vector3f} allocations, 4x {@code CapturedRenderingState} queries, and off-heap tangent readbacks.
+     */
+    public static byte[] transformIrisEntityVertex(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String targetDesc = "(Lnet/caffeinemc/mods/sodium/api/vertex/buffer/VertexBufferWriter;"
+                + "Lcom/mojang/blaze3d/vertex/PoseStack$Pose;"
+                + "Lme/jellysquid/mods/sodium/client/model/quad/ModelQuadView;III)V";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("writeQuadVertices".equals(mn.name) && targetDesc.equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "writeIrisEntityQuad", targetDesc, false));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Optimizes {@code ClientLevel.m_233612_} ({@code doAnimateTick}, called 26,680 times/sec):
+     * <ul>
+     *   <li>Replaces redundant {@code this.m_6425_(pos)} ({@code getFluidState}) with {@code blockState.m_60819_()}.</li>
+     *   <li>Routes the biome ambient particle check through {@code EmfRenderPerf.maybeSpawnBiomeAmbientParticle}
+     *       to skip Voronoi {@code BiomeManager.getBiome} hashes and lambda allocations when no nearby biome has
+     *       ambient particles.</li>
+     * </ul>
+     */
+    public static byte[] transformClientLevel(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String targetDesc = "(IIIILnet/minecraft/util/RandomSource;"
+                + "Lnet/minecraft/world/level/block/Block;Lnet/minecraft/core/BlockPos$MutableBlockPos;)V";
+        final String bsCls = "net/minecraft/world/level/block/state/BlockState";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"m_233612_".equals(mn.name) || !targetDesc.equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            // 1. Replace `ALOAD 0; ALOAD 7; INVOKEVIRTUAL ClientLevel.m_6425_(BlockPos)FluidState`
+            //    with `ALOAD 11; INVOKEVIRTUAL BlockState.m_60819_()FluidState`
+            int bsSlot = -1;
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode m
+                        && m.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && MC_CLIENT_LEVEL_CLS.equals(m.owner)
+                        && "m_8055_".equals(m.name)
+                        && "(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;".equals(m.desc)) {
+                    AbstractInsnNode st = nextRealInsn(m);
+                    if (st instanceof VarInsnNode vin && vin.getOpcode() == Opcodes.ASTORE) {
+                        bsSlot = vin.var;
+                        break;
+                    }
+                }
+            }
+            if (bsSlot >= 0) {
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn instanceof MethodInsnNode m
+                            && m.getOpcode() == Opcodes.INVOKEVIRTUAL
+                            && MC_CLIENT_LEVEL_CLS.equals(m.owner)
+                            && "m_6425_".equals(m.name)
+                            && "(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/material/FluidState;".equals(m.desc)) {
+                        AbstractInsnNode p1 = prevRealInsn(m);
+                        AbstractInsnNode p2 = prevRealInsn(p1);
+                        if (p1 instanceof VarInsnNode vPos && vPos.getOpcode() == Opcodes.ALOAD && vPos.var == 7
+                                && p2 instanceof VarInsnNode vThis && vThis.getOpcode() == Opcodes.ALOAD && vThis.var == 0) {
+                            mn.instructions.remove(p2);
+                            mn.instructions.set(p1, new VarInsnNode(Opcodes.ALOAD, bsSlot));
+                            mn.instructions.set(m, new MethodInsnNode(
+                                    Opcodes.INVOKEVIRTUAL, bsCls, "m_60819_",
+                                    "()Lnet/minecraft/world/level/material/FluidState;", false));
+                            patched = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            // 2. Replace biome ambient particle lookup + Optional.ifPresent (both vanilla INVOKEDYNAMIC
+            //    and Emberbium GETFIELD embeddium$particleSettingsConsumer forms) with
+            //    `ALOAD 0; ALOAD 7; INVOKESTATIC EmfRenderPerf.maybeSpawnBiomeAmbientParticle(ClientLevel, MutableBlockPos)V`
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode getBiome
+                        && getBiome.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && MC_CLIENT_LEVEL_CLS.equals(getBiome.owner)
+                        && "m_204166_".equals(getBiome.name)
+                        && "(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/Holder;".equals(getBiome.desc)) {
+                    AbstractInsnNode p1 = prevRealInsn(getBiome);
+                    AbstractInsnNode p2 = prevRealInsn(p1);
+                    AbstractInsnNode n1 = nextRealInsn(getBiome); // Holder.m_203334_()
+                    AbstractInsnNode n2 = nextRealInsn(n1);       // CHECKCAST Biome
+                    AbstractInsnNode n3 = nextRealInsn(n2);       // Biome.m_47562_()
+                    AbstractInsnNode n4 = nextRealInsn(n3);       // ALOAD 0
+                    AbstractInsnNode n5 = nextRealInsn(n4);       // ALOAD 7 (vanilla) or GETFIELD (Emberbium)
+                    AbstractInsnNode n6 = nextRealInsn(n5);       // INVOKEDYNAMIC (vanilla) or Optional.ifPresent (Emberbium)
+                    if (p1 instanceof VarInsnNode vp && vp.getOpcode() == Opcodes.ALOAD && vp.var == 7
+                            && p2 instanceof VarInsnNode vt && vt.getOpcode() == Opcodes.ALOAD && vt.var == 0
+                            && n3 instanceof MethodInsnNode mAmb && "m_47562_".equals(mAmb.name)) {
+                        if (n4 instanceof VarInsnNode vSelf && vSelf.getOpcode() == Opcodes.ALOAD && vSelf.var == 0
+                                && n5 instanceof FieldInsnNode fCons && fCons.getOpcode() == Opcodes.GETFIELD
+                                && "java/util/function/Consumer".equals(
+                                        fCons.desc.length() > 2 ? fCons.desc.substring(1, fCons.desc.length() - 1) : "")
+                                && n6 instanceof MethodInsnNode mIfPres
+                                && "java/util/Optional".equals(mIfPres.owner)
+                                && "ifPresent".equals(mIfPres.name)) {
+                            mn.instructions.set(getBiome, new MethodInsnNode(
+                                    Opcodes.INVOKESTATIC, perfCls, "maybeSpawnBiomeAmbientParticle",
+                                    "(L" + MC_CLIENT_LEVEL_CLS + ";Lnet/minecraft/core/BlockPos$MutableBlockPos;)V",
+                                    false));
+                            mn.instructions.remove(n1);
+                            mn.instructions.remove(n2);
+                            mn.instructions.remove(n3);
+                            mn.instructions.remove(n4);
+                            mn.instructions.remove(n5);
+                            mn.instructions.remove(n6);
+                            patched = true;
+                            break;
+                        }
+                        AbstractInsnNode n7 = nextRealInsn(n6); // Optional.ifPresent (vanilla)
+                        if (n6 instanceof InvokeDynamicInsnNode
+                                && n7 instanceof MethodInsnNode mIfPres
+                                && "java/util/Optional".equals(mIfPres.owner)
+                                && "ifPresent".equals(mIfPres.name)) {
+                            mn.instructions.set(getBiome, new MethodInsnNode(
+                                    Opcodes.INVOKESTATIC, perfCls, "maybeSpawnBiomeAmbientParticle",
+                                    "(L" + MC_CLIENT_LEVEL_CLS + ";Lnet/minecraft/core/BlockPos$MutableBlockPos;)V",
+                                    false));
+                            mn.instructions.remove(n1);
+                            mn.instructions.remove(n2);
+                            mn.instructions.remove(n3);
+                            mn.instructions.remove(n4);
+                            mn.instructions.remove(n5);
+                            mn.instructions.remove(n6);
+                            mn.instructions.remove(n7);
+                            patched = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Implements {@code EmfRenderPerf$BakedQuadIrisMeta} on vanilla {@code BakedQuad} so
+     * {@code EmfRenderPerf.writeIrisEntityQuad} caches object-space tangents and midUV once per quad.
+     */
+    public static byte[] transformBakedQuad(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String itf = "dev/sunlit/bettersunlit/client/EmfRenderPerf$BakedQuadIrisMeta";
+        final String fieldName = "sunlit$irisMeta";
+        for (FieldNode fn : cn.fields) {
+            if (fieldName.equals(fn.name)) {
+                return null;
+            }
+        }
+        if (cn.interfaces == null) {
+            cn.interfaces = new java.util.ArrayList<>();
+        }
+        if (!cn.interfaces.contains(itf)) {
+            cn.interfaces.add(itf);
+        }
+        cn.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, fieldName, "[F", null, null));
+
+        MethodNode getM = new MethodNode(Opcodes.ACC_PUBLIC, "sunlit$getIrisMeta", "()[F", null, null);
+        getM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        getM.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, MC_BAKED_QUAD_CLS, fieldName, "[F"));
+        getM.instructions.add(new InsnNode(Opcodes.ARETURN));
+        cn.methods.add(getM);
+
+        MethodNode setM = new MethodNode(Opcodes.ACC_PUBLIC, "sunlit$setIrisMeta", "([F)V", null, null);
+        setM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        setM.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        setM.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, MC_BAKED_QUAD_CLS, fieldName, "[F"));
+        setM.instructions.add(new InsnNode(Opcodes.RETURN));
+        cn.methods.add(setM);
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Applies string-matches optimization and interns variable name strings in
+     * {@code ModelVariableFactory.getSupplierOrNull} so entity variable map lookups hit
+     * pointer-equality fast paths.
+     */
+    public static byte[] transformEmfModelVariableFactory(Module module, byte[] bytes) {
+        byte[] base = transformStringMatches(module, bytes);
+        byte[] src = base != null ? base : bytes;
+        ClassNode cn = new ClassNode();
+        new ClassReader(src).accept(cn, ClassReader.EXPAND_FRAMES);
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("getSupplierOrNull".equals(mn.name)
+                    && mn.desc != null
+                    && mn.desc.startsWith("(Ljava/lang/String;")
+                    && mn.instructions != null) {
+                LabelNode notNull = new LabelNode();
+                InsnList pre = new InsnList();
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                pre.add(new JumpInsnNode(Opcodes.IFNULL, notNull));
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                pre.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/String", "intern", "()Ljava/lang/String;", false));
+                pre.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                pre.add(notNull);
+                Type[] argTypes = Type.getArgumentTypes(mn.desc);
+                Object[] locals = new Object[1 + argTypes.length];
+                locals[0] = cn.name;
+                for (int i = 0; i < argTypes.length; i++) {
+                    locals[1 + i] = asmFrameType(argTypes[i]);
+                }
+                pre.add(new FrameNode(Opcodes.F_NEW, locals.length, locals, 0, new Object[0]));
+                mn.instructions.insert(pre);
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            return base;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Adds an {@code isEmpty()} fast-return before {@code Object2FloatMap.getOrDefault} in
+     * {@code EMFMath.getEntityVariable(String, float)} to avoid hashing and probing empty per-entity
+     * variable maps.
+     */
+    public static byte[] transformEmfMath(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String o2fCls = "it/unimi/dsi/fastutil/objects/Object2FloatMap";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"getEntityVariable".equals(mn.name)
+                    || !"(Ljava/lang/String;F)F".equals(mn.desc)
+                    || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEINTERFACE
+                        && o2fCls.equals(min.owner)
+                        && "getOrDefault".equals(min.name)
+                        && "(Ljava/lang/Object;F)F".equals(min.desc)) {
+                    AbstractInsnNode p1 = prevRealInsn(min);
+                    AbstractInsnNode p2 = prevRealInsn(p1);
+                    AbstractInsnNode p3 = prevRealInsn(p2);
+                    if (p1 instanceof VarInsnNode vDef && vDef.getOpcode() == Opcodes.FLOAD && vDef.var == 1
+                            && p2 instanceof VarInsnNode vKey && vKey.getOpcode() == Opcodes.ALOAD && vKey.var == 0
+                            && p3 instanceof VarInsnNode vMap && vMap.getOpcode() == Opcodes.ALOAD) {
+                        int mapSlot = vMap.var;
+                        LabelNode nonEmpty = new LabelNode();
+                        InsnList guard = new InsnList();
+                        guard.add(new VarInsnNode(Opcodes.ALOAD, mapSlot));
+                        guard.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, o2fCls, "isEmpty", "()Z", true));
+                        guard.add(new JumpInsnNode(Opcodes.IFEQ, nonEmpty));
+                        guard.add(new VarInsnNode(Opcodes.FLOAD, 1));
+                        guard.add(new InsnNode(Opcodes.FRETURN));
+                        guard.add(nonEmpty);
+                        int localLen = Math.max(5, mapSlot + 1);
+                        Object[] locals = new Object[localLen];
+                        java.util.Arrays.fill(locals, Opcodes.TOP);
+                        locals[0] = "java/lang/String";
+                        locals[1] = Opcodes.FLOAT;
+                        locals[2] = "traben/entity_model_features/models/animation/state/EMFEntityRenderState";
+                        locals[mapSlot] = o2fCls;
+                        if (mapSlot != 4) {
+                            locals[4] = "java/util/Map";
+                        }
+                        guard.add(new FrameNode(Opcodes.F_NEW, localLen, locals, 0, new Object[0]));
+                        mn.instructions.insertBefore(p3, guard);
+                        patched = true;
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Optimizes EMF {@code ASMAnimationHandler}:
+     * <ul>
+     *   <li>Replaces {@code lambda$finishAndValidate$2}'s 2x {@code List.forEach(capturingLambda)}
+     *       with zero-allocation indexed loops.</li>
+     *   <li>Interns variable names passed to {@code EMFMath.setEntityVariable} in
+     *       {@code buildFloatConsumers} so lookups hit {@code String ==} fast paths.</li>
+     * </ul>
+     */
+    public static byte[] transformEmfAsmAnimationHandler(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String animVarsCls = EMF_ASM_ANIM_HANDLER_CLS + "$AnimVars";
+        final String floatConsCls = EMF_ASM_ANIM_HANDLER_CLS + "$FloatConsumerAsm";
+        final String boolConsCls = EMF_ASM_ANIM_HANDLER_CLS + "$BoolConsumerAsm";
+        final String finishDesc = "(Ljava/util/List;Ljava/util/List;L" + animVarsCls + ";Z)V";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("lambda$finishAndValidate$2".equals(mn.name) && finishDesc.equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                LabelNode loopF = new LabelNode();
+                LabelNode afterF = new LabelNode();
+                LabelNode loopB = new LabelNode();
+                LabelNode done = new LabelNode();
+
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 4));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new JumpInsnNode(Opcodes.IFEQ, afterF));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, animVarsCls, "floats", "()[F", false));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 5));
+                il.add(new InsnNode(Opcodes.ICONST_0));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 6));
+                il.add(loopF);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW, 7,
+                        new Object[] {"java/util/List", "java/util/List", animVarsCls, Opcodes.INTEGER, Opcodes.INTEGER, "[F", Opcodes.INTEGER},
+                        0, new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new JumpInsnNode(Opcodes.IF_ICMPGE, afterF));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+                il.add(new TypeInsnNode(Opcodes.CHECKCAST, floatConsCls));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, floatConsCls, "accept", "([FZ)V", true));
+                il.add(new IincInsnNode(6, 1));
+                il.add(new JumpInsnNode(Opcodes.GOTO, loopF));
+
+                il.add(afterF);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW, 4,
+                        new Object[] {"java/util/List", "java/util/List", animVarsCls, Opcodes.INTEGER},
+                        0, new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 4));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new JumpInsnNode(Opcodes.IFEQ, done));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, animVarsCls, "bools", "()[Z", false));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 5));
+                il.add(new InsnNode(Opcodes.ICONST_0));
+                il.add(new VarInsnNode(Opcodes.ISTORE, 6));
+                il.add(loopB);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW, 7,
+                        new Object[] {"java/util/List", "java/util/List", animVarsCls, Opcodes.INTEGER, Opcodes.INTEGER, "[Z", Opcodes.INTEGER},
+                        0, new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                il.add(new JumpInsnNode(Opcodes.IF_ICMPGE, done));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+                il.add(new TypeInsnNode(Opcodes.CHECKCAST, boolConsCls));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+                il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, boolConsCls, "accept", "([ZZ)V", true));
+                il.add(new IincInsnNode(6, 1));
+                il.add(new JumpInsnNode(Opcodes.GOTO, loopB));
+
+                il.add(done);
+                il.add(new FrameNode(
+                        Opcodes.F_NEW, 4,
+                        new Object[] {"java/util/List", "java/util/List", animVarsCls, Opcodes.INTEGER},
+                        0, new Object[0]));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patched = true;
+            } else if ("buildFloatConsumers".equals(mn.name) && "()Ljava/util/List;".equals(mn.desc) && mn.instructions != null) {
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn instanceof InvokeDynamicInsnNode indy
+                            && "accept".equals(indy.name)
+                            && ("(Ljava/lang/String;I)L" + floatConsCls + ";").equals(indy.desc)) {
+                        AbstractInsnNode prevInt = prevRealInsn(indy);
+                        AbstractInsnNode prevStr = prevRealInsn(prevInt);
+                        if (prevStr instanceof VarInsnNode vStr && vStr.getOpcode() == Opcodes.ALOAD) {
+                            mn.instructions.insert(prevStr, new MethodInsnNode(
+                                    Opcodes.INVOKEVIRTUAL, "java/lang/String", "intern", "()Ljava/lang/String;", false));
+                            patched = true;
+                        }
+                    }
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Adds in-place memoized supplier and primitive double storage to GeckoLib {@code LazyVariable},
+     * eliminating ~140MB of per-frame {@code MolangParser$1} and {@code set(double)} lambda allocations.
+     */
+    public static byte[] transformGeckoLibLazyVariable(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String self = GECKOLIB_LAZY_VAR_CLS;
+        final String supCls = "java/util/function/DoubleSupplier";
+        final String supDesc = "L" + supCls + ";";
+        final String varCls = "com/eliotlash/mclib/math/Variable";
+        for (FieldNode fn : cn.fields) {
+            if ("sunlit$memo".equals(fn.name)) {
+                return null;
+            }
+        }
+        boolean patchedCtor = false;
+        boolean patchedSetD = false;
+        boolean patchedSetS = false;
+        boolean patchedGet = false;
+        for (MethodNode mn : cn.methods) {
+            if ("<init>".equals(mn.name) && "(Ljava/lang/String;D)V".equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new InsnNode(Opcodes.DCONST_0));
+                il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, varCls, "<init>", "(Ljava/lang/String;D)V", false));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.DLOAD, 2));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$val", "D"));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedCtor = true;
+            } else if ("set".equals(mn.name) && "(D)V".equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new InsnNode(Opcodes.ACONST_NULL));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "valueSupplier", supDesc));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new InsnNode(Opcodes.ACONST_NULL));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$memo", supDesc));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$val", "D"));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedSetD = true;
+            } else if ("set".equals(mn.name) && ("(" + supDesc + ")V").equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "valueSupplier", supDesc));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new InsnNode(Opcodes.ACONST_NULL));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$memo", supDesc));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedSetS = true;
+            } else if ("get".equals(mn.name) && "()D".equals(mn.desc) && mn.instructions != null) {
+                InsnList il = new InsnList();
+                LabelNode checkMemo = new LabelNode();
+                LabelNode retMemo = new LabelNode();
+                LabelNode retVal = new LabelNode();
+
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, self, "valueSupplier", supDesc));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new JumpInsnNode(Opcodes.IFNULL, checkMemo));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, supCls, "getAsDouble", "()D", true));
+                il.add(new InsnNode(Opcodes.DRETURN));
+
+                il.add(checkMemo);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 2, new Object[] {self, supCls}, 0, new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, self, "sunlit$memo", supDesc));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new JumpInsnNode(Opcodes.IFNULL, retVal));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, self, "sunlit$val", "D"));
+                il.add(new VarInsnNode(Opcodes.DSTORE, 3));
+                il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                il.add(new LdcInsnNode(Double.MIN_VALUE));
+                il.add(new InsnNode(Opcodes.DCMPL));
+                il.add(new JumpInsnNode(Opcodes.IFNE, retMemo));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, supCls, "getAsDouble", "()D", true));
+                il.add(new VarInsnNode(Opcodes.DSTORE, 3));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$val", "D"));
+
+                il.add(retMemo);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 4, new Object[] {self, supCls, supCls, Opcodes.DOUBLE}, 0, new Object[0]));
+                il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                il.add(new InsnNode(Opcodes.DRETURN));
+
+                il.add(retVal);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 3, new Object[] {self, supCls, supCls}, 0, new Object[0]));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new FieldInsnNode(Opcodes.GETFIELD, self, "sunlit$val", "D"));
+                il.add(new InsnNode(Opcodes.DRETURN));
+
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedGet = true;
+            }
+        }
+        if (!patchedCtor || !patchedSetD || !patchedSetS || !patchedGet) {
+            return null;
+        }
+        cn.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "sunlit$memo", supDesc, null, null));
+        cn.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "sunlit$val", "D", null, null));
+
+        MethodNode setMemo = new MethodNode(Opcodes.ACC_PUBLIC, "sunlit$setMemoized", "(" + supDesc + ")V", null, null);
+        setMemo.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        setMemo.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        setMemo.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "valueSupplier", supDesc));
+        setMemo.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        setMemo.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        setMemo.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$memo", supDesc));
+        setMemo.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        setMemo.instructions.add(new LdcInsnNode(Double.MIN_VALUE));
+        setMemo.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "sunlit$val", "D"));
+        setMemo.instructions.add(new InsnNode(Opcodes.RETURN));
+        cn.methods.add(setMemo);
+
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Routes GeckoLib {@code MolangParser.setMemoizedValue} through {@code LazyVariable.sunlit$setMemoized}
+     * (zero {@code MolangParser$1} allocations) and adds a fast {@code Map.get} path to {@code getVariable}.
+     */
+    public static byte[] transformGeckoLibMolangParser(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String self = GECKOLIB_MOLANG_PARSER_CLS;
+        final String lazyCls = GECKOLIB_LAZY_VAR_CLS;
+        final String supDesc = "Ljava/util/function/DoubleSupplier;";
+        boolean patchedSetMemo = false;
+        boolean patchedGetVar = false;
+        for (MethodNode mn : cn.methods) {
+            if ("setMemoizedValue".equals(mn.name)
+                    && ("(Ljava/lang/String;" + supDesc + ")V").equals(mn.desc)
+                    && mn.instructions != null) {
+                InsnList il = new InsnList();
+                il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEVIRTUAL, self, "getVariable",
+                        "(Ljava/lang/String;)L" + lazyCls + ";", false));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEVIRTUAL, lazyCls, "sunlit$setMemoized",
+                        "(" + supDesc + ")V", false));
+                il.add(new InsnNode(Opcodes.RETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedSetMemo = true;
+            } else if ("getVariable".equals(mn.name)
+                    && ("(Ljava/lang/String;)L" + lazyCls + ";").equals(mn.desc)
+                    && mn.instructions != null) {
+                InsnList il = new InsnList();
+                LabelNode miss = new LabelNode();
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "VARIABLES", "Ljava/util/Map;"));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEINTERFACE, "java/util/Map", "get",
+                        "(Ljava/lang/Object;)Ljava/lang/Object;", true));
+                il.add(new TypeInsnNode(Opcodes.CHECKCAST, lazyCls));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new JumpInsnNode(Opcodes.IFNULL, miss));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new InsnNode(Opcodes.ARETURN));
+                il.add(miss);
+                il.add(new FrameNode(
+                        Opcodes.F_FULL, 3, new Object[] {self, "java/lang/String", lazyCls}, 0, new Object[0]));
+                il.add(new TypeInsnNode(Opcodes.NEW, lazyCls));
+                il.add(new InsnNode(Opcodes.DUP));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new InsnNode(Opcodes.DCONST_0));
+                il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, lazyCls, "<init>", "(Ljava/lang/String;D)V", false));
+                il.add(new VarInsnNode(Opcodes.ASTORE, 2));
+                il.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "VARIABLES", "Ljava/util/Map;"));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new MethodInsnNode(
+                        Opcodes.INVOKEINTERFACE, "java/util/Map", "put",
+                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true));
+                il.add(new InsnNode(Opcodes.POP));
+                il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                il.add(new InsnNode(Opcodes.ARETURN));
+                mn.instructions = il;
+                if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+                if (mn.localVariables != null) mn.localVariables.clear();
+                patchedGetVar = true;
+            }
+        }
+        if (!patchedSetMemo || !patchedGetVar) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Adds a batched Iris extended-format fast path at the entry of Emberbium's mixed-in
+     * {@code ItemRenderer.renderBakedItemQuads}, collapsing per-quad {@code writer.push()},
+     * {@code CapturedRenderingState}, and matrix/determinant work into one call per quad list.
+     */
+    public static byte[] transformItemRenderer(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String targetDesc = "(Lcom/mojang/blaze3d/vertex/PoseStack$Pose;"
+                + "Lnet/caffeinemc/mods/sodium/api/vertex/buffer/VertexBufferWriter;"
+                + "Ljava/util/List;Lnet/minecraft/world/item/ItemStack;"
+                + "Lnet/minecraft/client/color/item/ItemColor;II)V";
+        final String helperDesc = targetDesc.substring(0, targetDesc.length() - 1) + "Z";
+        final String perfCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if ("renderBakedItemQuads".equals(mn.name) && targetDesc.equals(mn.desc) && mn.instructions != null) {
+                LabelNode cont = new LabelNode();
+                InsnList pre = new InsnList();
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 3));
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 4));
+                pre.add(new VarInsnNode(Opcodes.ALOAD, 5));
+                pre.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                pre.add(new VarInsnNode(Opcodes.ILOAD, 7));
+                pre.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC, perfCls, "tryRenderIrisBakedItemQuadsBatch", helperDesc, false));
+                pre.add(new JumpInsnNode(Opcodes.IFEQ, cont));
+                pre.add(new InsnNode(Opcodes.RETURN));
+                pre.add(cont);
+                pre.add(new FrameNode(
+                        Opcodes.F_NEW, 8,
+                        new Object[] {
+                            cn.name,
+                            "com/mojang/blaze3d/vertex/PoseStack$Pose",
+                            "net/caffeinemc/mods/sodium/api/vertex/buffer/VertexBufferWriter",
+                            "java/util/List",
+                            "net/minecraft/world/item/ItemStack",
+                            "net/minecraft/client/color/item/ItemColor",
+                            Opcodes.INTEGER,
+                            Opcodes.INTEGER
+                        },
+                        0, new Object[0]));
+                mn.instructions.insert(pre);
+                patched = true;
+                break;
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Optimizes {@code net.minecraft.world.entity.Entity}:
+     * <ul>
+     *   <li>Guards Horseman's {@code onGetBoundingBox} with {@code AbstractHorse && Boat} BEFORE
+     *       querying {@code ForgeConfigSpec$BooleanValue.get()}.</li>
+     *   <li>Adds a zero-allocation fast path at the top of {@code m_6783_} ({@code shouldRenderAtSqrDistance})
+     *       when {@code entityJs$builder == null}, bypassing EntityJS's per-call
+     *       {@code CallbackInfoReturnable} allocation so C2 can inline distance culling.</li>
+     *   <li>Replaces EMF's per-entity {@code Object2FloatOpenHashMap} variable map allocations
+     *       with lazy-allocated {@code EmfRenderPerf$FastEmfVarMap} (client-only when EMF is woven).</li>
+     * </ul>
+     */
+    public static byte[] transformEntity(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String aabbDesc = "(Lnet/minecraft/world/phys/AABB;)Lnet/minecraft/world/phys/AABB;";
+        final String horseCls = "net/minecraft/world/entity/animal/horse/AbstractHorse";
+        final String boatCls = "net/minecraft/world/entity/vehicle/Boat";
+        final String o2fCls = "it/unimi/dsi/fastutil/objects/Object2FloatOpenHashMap";
+        final String fastVarCls = "dev/sunlit/bettersunlit/client/EmfRenderPerf$FastEmfVarMap";
+        boolean hasEntityJsBuilder = false;
+        boolean hasEmfVarMap = false;
+        for (FieldNode fn : cn.fields) {
+            if ("entityJs$builder".equals(fn.name) && "Ljava/lang/Object;".equals(fn.desc)) {
+                hasEntityJsBuilder = true;
+            } else if ("emf$variableMap".equals(fn.name) && "Ljava/util/Map;".equals(fn.desc)) {
+                hasEmfVarMap = true;
+            }
+        }
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null) {
+                continue;
+            }
+            // 1. Horseman onGetBoundingBox guard
+            if (mn.name != null
+                    && mn.name.endsWith("$onGetBoundingBox")
+                    && aabbDesc.equals(mn.desc)
+                    && (mn.access & Opcodes.ACC_STATIC) == 0) {
+                boolean hasHorsemanConfig = false;
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn instanceof FieldInsnNode fin
+                            && "io/github/mortuusars/horseman/Config$Common".equals(fin.owner)
+                            && "HORSE_IN_BOAT".equals(fin.name)) {
+                        hasHorsemanConfig = true;
+                        break;
+                    }
+                }
+                if (hasHorsemanConfig) {
+                    LabelNode fastReturn = new LabelNode();
+                    LabelNode proceed = new LabelNode();
+                    InsnList pre = new InsnList();
+                    pre.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    pre.add(new TypeInsnNode(Opcodes.INSTANCEOF, horseCls));
+                    pre.add(new JumpInsnNode(Opcodes.IFEQ, fastReturn));
+                    pre.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    pre.add(new MethodInsnNode(
+                            Opcodes.INVOKEVIRTUAL, cn.name, "m_20202_",
+                            "()Lnet/minecraft/world/entity/Entity;", false));
+                    pre.add(new TypeInsnNode(Opcodes.INSTANCEOF, boatCls));
+                    pre.add(new JumpInsnNode(Opcodes.IFNE, proceed));
+                    pre.add(fastReturn);
+                    pre.add(new FrameNode(
+                            Opcodes.F_NEW, 2,
+                            new Object[] {cn.name, "net/minecraft/world/phys/AABB"},
+                            0, new Object[0]));
+                    pre.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    pre.add(new InsnNode(Opcodes.ARETURN));
+                    pre.add(proceed);
+                    pre.add(new FrameNode(
+                            Opcodes.F_NEW, 2,
+                            new Object[] {cn.name, "net/minecraft/world/phys/AABB"},
+                            0, new Object[0]));
+                    mn.instructions.insert(pre);
+                    patched = true;
+                }
+            }
+            // 2. EntityJS shouldRenderAtSqrDistance (m_6783_) fast path when entityJs$builder == null
+            if (hasEntityJsBuilder
+                    && "m_6783_".equals(mn.name)
+                    && "(D)Z".equals(mn.desc)
+                    && (mn.access & Opcodes.ACC_STATIC) == 0) {
+                boolean hasEntityJsHook = false;
+                boolean hasOtherMixinHook = false;
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn instanceof MethodInsnNode min && cn.name.equals(min.owner)) {
+                        if (min.name.contains("shouldRenderAtSqrDistance")) {
+                            hasEntityJsHook = true;
+                        } else if (min.name.startsWith("handler$")
+                                || min.name.startsWith("redirect$")
+                                || min.name.startsWith("modify")
+                                || min.name.startsWith("wrapOperation$")) {
+                            hasOtherMixinHook = true;
+                        }
+                    }
+                }
+                if (hasEntityJsHook && !hasOtherMixinHook) {
+                    LabelNode slowPath = new LabelNode();
+                    LabelNode notNan = new LabelNode();
+                    LabelNode retFalse = new LabelNode();
+                    InsnList pre = new InsnList();
+                    // if (this.entityJs$builder != null) goto slowPath;
+                    pre.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    pre.add(new FieldInsnNode(Opcodes.GETFIELD, cn.name, "entityJs$builder", "Ljava/lang/Object;"));
+                    pre.add(new JumpInsnNode(Opcodes.IFNONNULL, slowPath));
+                    // double d0 = this.m_20191_().m_82309_();
+                    pre.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    pre.add(new MethodInsnNode(
+                            Opcodes.INVOKEVIRTUAL, cn.name, "m_20191_",
+                            "()Lnet/minecraft/world/phys/AABB;", false));
+                    pre.add(new MethodInsnNode(
+                            Opcodes.INVOKEVIRTUAL, "net/minecraft/world/phys/AABB", "m_82309_",
+                            "()D", false));
+                    pre.add(new VarInsnNode(Opcodes.DSTORE, 3));
+                    // if (Double.isNaN(d0)) d0 = 1.0D;
+                    pre.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                    pre.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Double", "isNaN", "(D)Z", false));
+                    pre.add(new JumpInsnNode(Opcodes.IFEQ, notNan));
+                    pre.add(new InsnNode(Opcodes.DCONST_1));
+                    pre.add(new VarInsnNode(Opcodes.DSTORE, 3));
+                    pre.add(notNan);
+                    pre.add(new FrameNode(
+                            Opcodes.F_NEW, 3,
+                            new Object[] {cn.name, Opcodes.DOUBLE, Opcodes.DOUBLE},
+                            0, new Object[0]));
+                    // d0 *= 64.0D * Entity.f_19846_; return distSqr < d0 * d0;
+                    pre.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                    pre.add(new LdcInsnNode(64.0D));
+                    pre.add(new FieldInsnNode(Opcodes.GETSTATIC, cn.name, "f_19846_", "D"));
+                    pre.add(new InsnNode(Opcodes.DMUL));
+                    pre.add(new InsnNode(Opcodes.DMUL));
+                    pre.add(new VarInsnNode(Opcodes.DSTORE, 3));
+                    pre.add(new VarInsnNode(Opcodes.DLOAD, 1));
+                    pre.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                    pre.add(new VarInsnNode(Opcodes.DLOAD, 3));
+                    pre.add(new InsnNode(Opcodes.DMUL));
+                    pre.add(new InsnNode(Opcodes.DCMPG));
+                    pre.add(new JumpInsnNode(Opcodes.IFGE, retFalse));
+                    pre.add(new InsnNode(Opcodes.ICONST_1));
+                    pre.add(new InsnNode(Opcodes.IRETURN));
+                    pre.add(retFalse);
+                    pre.add(new FrameNode(
+                            Opcodes.F_NEW, 3,
+                            new Object[] {cn.name, Opcodes.DOUBLE, Opcodes.DOUBLE},
+                            0, new Object[0]));
+                    pre.add(new InsnNode(Opcodes.ICONST_0));
+                    pre.add(new InsnNode(Opcodes.IRETURN));
+                    pre.add(slowPath);
+                    pre.add(new FrameNode(
+                            Opcodes.F_NEW, 2,
+                            new Object[] {cn.name, Opcodes.DOUBLE},
+                            0, new Object[0]));
+                    mn.instructions.insert(pre);
+                    patched = true;
+                }
+            }
+            // 3. Replace EMF's per-entity Object2FloatOpenHashMap allocations with FastEmfVarMap
+            if (hasEmfVarMap
+                    && ("<init>".equals(mn.name) || "emf$getVariableMap".equals(mn.name))) {
+                for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                    if (insn instanceof TypeInsnNode tin
+                            && tin.getOpcode() == Opcodes.NEW
+                            && o2fCls.equals(tin.desc)) {
+                        // Scan ahead up to 8 real insns for matching <init> + PUTFIELD emf$variableMap*
+                        MethodInsnNode ctor = null;
+                        FieldInsnNode putf = null;
+                        AbstractInsnNode cur = nextRealInsn(tin);
+                        for (int steps = 0; cur != null && steps < 8; steps++, cur = nextRealInsn(cur)) {
+                            if (ctor == null
+                                    && cur instanceof MethodInsnNode min
+                                    && min.getOpcode() == Opcodes.INVOKESPECIAL
+                                    && o2fCls.equals(min.owner)
+                                    && "<init>".equals(min.name)
+                                    && ("()V".equals(min.desc) || "(Ljava/util/Map;)V".equals(min.desc))) {
+                                ctor = min;
+                            } else if (ctor != null
+                                    && cur instanceof FieldInsnNode fin
+                                    && fin.getOpcode() == Opcodes.PUTFIELD
+                                    && cn.name.equals(fin.owner)
+                                    && fin.name != null
+                                    && fin.name.startsWith("emf$variableMap")) {
+                                putf = fin;
+                                break;
+                            }
+                        }
+                        if (ctor != null && putf != null) {
+                            tin.desc = fastVarCls;
+                            ctor.owner = fastVarCls;
+                            patched = true;
+                        }
+                    }
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Replaces O(N^2) {@code ArrayList.Iterator.remove()} compaction in ParticleRain's
+     * {@code WindManager.tick(ClientLevel)} with an O(N) in-place write-cursor compaction and
+     * single {@code subList(w, size).clear()}.
+     */
+    public static byte[] transformParticleRainWindManager(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String self = PARTICLERAIN_WIND_MGR_CLS;
+        final String trackedCls = self + "$Tracked";
+        final String levelCls = MC_CLIENT_LEVEL_CLS;
+        final String partCls = "net/minecraft/client/particle/Particle";
+        final String dataCls = "pigcart/particlerain/config/ParticleData";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"tick".equals(mn.name)
+                    || !("(L" + levelCls + ";)V").equals(mn.desc)
+                    || mn.instructions == null) {
+                continue;
+            }
+            InsnList il = new InsnList();
+            LabelNode loop = new LabelNode();
+            LabelNode nextIter = new LabelNode();
+            LabelNode afterLoop = new LabelNode();
+            LabelNode done = new LabelNode();
+
+            // List list = TRACKED; int size = list.size(); if (size == 0) return;
+            il.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "TRACKED", "Ljava/util/List;"));
+            il.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "size", "()I", true));
+            il.add(new VarInsnNode(Opcodes.ISTORE, 2));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            il.add(new JumpInsnNode(Opcodes.IFEQ, done));
+
+            // int w = 0; for (int i = 0; i < size; i++)
+            il.add(new InsnNode(Opcodes.ICONST_0));
+            il.add(new VarInsnNode(Opcodes.ISTORE, 3));
+            il.add(new InsnNode(Opcodes.ICONST_0));
+            il.add(new VarInsnNode(Opcodes.ISTORE, 4));
+
+            il.add(loop);
+            il.add(new FrameNode(
+                    Opcodes.F_FULL, 5,
+                    new Object[] {levelCls, "java/util/List", Opcodes.INTEGER, Opcodes.INTEGER, Opcodes.INTEGER},
+                    0, new Object[0]));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            il.add(new JumpInsnNode(Opcodes.IF_ICMPGE, afterLoop));
+
+            // Tracked t = (Tracked) list.get(i);
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true));
+            il.add(new TypeInsnNode(Opcodes.CHECKCAST, trackedCls));
+            il.add(new VarInsnNode(Opcodes.ASTORE, 5));
+
+            // if (!t.particle.m_107276_() || ++t.ticks > 6000) continue;
+            il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, trackedCls, "particle", "L" + partCls + ";"));
+            il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, partCls, "m_107276_", "()Z", false));
+            il.add(new JumpInsnNode(Opcodes.IFEQ, nextIter));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            il.add(new InsnNode(Opcodes.DUP));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, trackedCls, "ticks", "I"));
+            il.add(new InsnNode(Opcodes.ICONST_1));
+            il.add(new InsnNode(Opcodes.IADD));
+            il.add(new InsnNode(Opcodes.DUP_X1));
+            il.add(new FieldInsnNode(Opcodes.PUTFIELD, trackedCls, "ticks", "I"));
+            il.add(new IntInsnNode(Opcodes.SIPUSH, 6000));
+            il.add(new JumpInsnNode(Opcodes.IF_ICMPGT, nextIter));
+
+            // if (w != i) list.set(w, t); w++;
+            LabelNode skipSet = new LabelNode();
+            il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 4));
+            il.add(new JumpInsnNode(Opcodes.IF_ICMPEQ, skipSet));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "set", "(ILjava/lang/Object;)Ljava/lang/Object;", true));
+            il.add(new InsnNode(Opcodes.POP));
+            il.add(skipSet);
+            il.add(new FrameNode(
+                    Opcodes.F_FULL, 6,
+                    new Object[] {levelCls, "java/util/List", Opcodes.INTEGER, Opcodes.INTEGER, Opcodes.INTEGER, trackedCls},
+                    0, new Object[0]));
+            il.add(new IincInsnNode(3, 1));
+
+            // applyWind(t.particle, t.data, level);
+            il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, trackedCls, "particle", "L" + partCls + ";"));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            il.add(new FieldInsnNode(Opcodes.GETFIELD, trackedCls, "data", "L" + dataCls + ";"));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            il.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC, self, "applyWind",
+                    "(L" + partCls + ";L" + dataCls + ";L" + levelCls + ";)V", false));
+
+            il.add(nextIter);
+            il.add(new FrameNode(
+                    Opcodes.F_FULL, 5,
+                    new Object[] {levelCls, "java/util/List", Opcodes.INTEGER, Opcodes.INTEGER, Opcodes.INTEGER},
+                    0, new Object[0]));
+            il.add(new IincInsnNode(4, 1));
+            il.add(new JumpInsnNode(Opcodes.GOTO, loop));
+
+            // if (w < size) list.subList(w, size).clear();
+            il.add(afterLoop);
+            il.add(new FrameNode(
+                    Opcodes.F_FULL, 4,
+                    new Object[] {levelCls, "java/util/List", Opcodes.INTEGER, Opcodes.INTEGER},
+                    0, new Object[0]));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            il.add(new JumpInsnNode(Opcodes.IF_ICMPGE, done));
+            il.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            il.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "subList", "(II)Ljava/util/List;", true));
+            il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "clear", "()V", true));
+
+            il.add(done);
+            il.add(new FrameNode(
+                    Opcodes.F_FULL, 3,
+                    new Object[] {levelCls, "java/util/List", Opcodes.INTEGER},
+                    0, new Object[0]));
+            il.add(new InsnNode(Opcodes.RETURN));
+
+            mn.instructions = il;
+            if (mn.tryCatchBlocks != null) mn.tryCatchBlocks.clear();
+            if (mn.localVariables != null) mn.localVariables.clear();
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Adds a 512-slot Render-thread ring pool ({@code sunlit$obtain}) to GeckoLib's
+     * {@code AnimationPoint}, eliminating ~430MB of ephemeral per-frame record allocations.
+     */
+    public static byte[] transformGeckoLibAnimationPoint(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String self = GECKOLIB_ANIM_POINT_CLS;
+        final String selfDesc = "L" + self + ";";
+        final String arrDesc = "[" + selfDesc;
+        final String kfDesc = "Lsoftware/bernie/geckolib/core/keyframe/Keyframe;";
+        final String ctorDesc = "(" + kfDesc + "DDDD)V";
+        final String obtainDesc = "(" + kfDesc + "DDDD)" + selfDesc;
+        for (FieldNode fn : cn.fields) {
+            if ("SUNLIT_RING".equals(fn.name)) {
+                return null;
+            }
+        }
+        int clearedFields = 0;
+        for (FieldNode fn : cn.fields) {
+            if ("keyFrame".equals(fn.name)
+                    || "currentTick".equals(fn.name)
+                    || "transitionLength".equals(fn.name)
+                    || "animationStartValue".equals(fn.name)
+                    || "animationEndValue".equals(fn.name)) {
+                fn.access &= ~Opcodes.ACC_FINAL;
+                clearedFields++;
+            }
+        }
+        if (clearedFields != 5) {
+            return null;
+        }
+        cn.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                "SUNLIT_RING", arrDesc, null, null));
+        cn.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
+                "sunlitRingIdx", "I", null, null));
+        cn.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                "sunlitRenderThread", "Ljava/lang/Thread;", null, null));
+
+        MethodNode clinit = null;
+        for (MethodNode mn : cn.methods) {
+            if ("<clinit>".equals(mn.name) && "()V".equals(mn.desc)) {
+                clinit = mn;
+                break;
+            }
+        }
+        InsnList initRing = new InsnList();
+        initRing.add(new IntInsnNode(Opcodes.SIPUSH, 512));
+        initRing.add(new TypeInsnNode(Opcodes.ANEWARRAY, self));
+        initRing.add(new FieldInsnNode(Opcodes.PUTSTATIC, self, "SUNLIT_RING", arrDesc));
+        if (clinit == null) {
+            clinit = new MethodNode(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+            clinit.instructions.add(initRing);
+            clinit.instructions.add(new InsnNode(Opcodes.RETURN));
+            cn.methods.add(clinit);
+        } else {
+            clinit.instructions.insert(initRing);
+        }
+
+        MethodNode obtain = new MethodNode(
+                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "sunlit$obtain", obtainDesc, null, null);
+        InsnList il = obtain.instructions;
+        LabelNode useRing = new LabelNode();
+        LabelNode allocFresh = new LabelNode();
+        LabelNode allocSlot = new LabelNode();
+
+        // Thread cur = Thread.currentThread(); Thread rt = sunlitRenderThread;
+        il.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "java/lang/Thread", "currentThread", "()Ljava/lang/Thread;", false));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 9));
+        il.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "sunlitRenderThread", "Ljava/lang/Thread;"));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 10));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 9));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 10));
+        il.add(new JumpInsnNode(Opcodes.IF_ACMPEQ, useRing));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 10));
+        il.add(new JumpInsnNode(Opcodes.IFNONNULL, allocFresh));
+        il.add(new LdcInsnNode("Render thread"));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 9));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/Thread", "getName", "()Ljava/lang/String;", false));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals", "(Ljava/lang/Object;)Z", false));
+        il.add(new JumpInsnNode(Opcodes.IFEQ, allocFresh));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 9));
+        il.add(new FieldInsnNode(Opcodes.PUTSTATIC, self, "sunlitRenderThread", "Ljava/lang/Thread;"));
+
+        // useRing:
+        il.add(useRing);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 5,
+                new Object[] {"software/bernie/geckolib/core/keyframe/Keyframe",
+                        Opcodes.DOUBLE, Opcodes.DOUBLE, Opcodes.DOUBLE, Opcodes.DOUBLE},
+                0, new Object[0]));
+        il.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "sunlitRingIdx", "I"));
+        il.add(new VarInsnNode(Opcodes.ISTORE, 9));
+        il.add(new VarInsnNode(Opcodes.ILOAD, 9));
+        il.add(new InsnNode(Opcodes.ICONST_1));
+        il.add(new InsnNode(Opcodes.IADD));
+        il.add(new IntInsnNode(Opcodes.SIPUSH, 511));
+        il.add(new InsnNode(Opcodes.IAND));
+        il.add(new FieldInsnNode(Opcodes.PUTSTATIC, self, "sunlitRingIdx", "I"));
+        il.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "SUNLIT_RING", arrDesc));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 10));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 10));
+        il.add(new VarInsnNode(Opcodes.ILOAD, 9));
+        il.add(new InsnNode(Opcodes.AALOAD));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 11));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new JumpInsnNode(Opcodes.IFNULL, allocSlot));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "keyFrame", kfDesc));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+        il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "currentTick", "D"));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+        il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "transitionLength", "D"));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 5));
+        il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "animationStartValue", "D"));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 7));
+        il.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "animationEndValue", "D"));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new InsnNode(Opcodes.ARETURN));
+
+        // allocSlot:
+        il.add(allocSlot);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 7,
+                new Object[] {"software/bernie/geckolib/core/keyframe/Keyframe",
+                        Opcodes.DOUBLE, Opcodes.DOUBLE, Opcodes.DOUBLE, Opcodes.DOUBLE,
+                        Opcodes.INTEGER, arrDesc},
+                0, new Object[0]));
+        il.add(new TypeInsnNode(Opcodes.NEW, self));
+        il.add(new InsnNode(Opcodes.DUP));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 5));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 7));
+        il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, self, "<init>", ctorDesc, false));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 11));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 10));
+        il.add(new VarInsnNode(Opcodes.ILOAD, 9));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new InsnNode(Opcodes.AASTORE));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 11));
+        il.add(new InsnNode(Opcodes.ARETURN));
+
+        // allocFresh:
+        il.add(allocFresh);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 5,
+                new Object[] {"software/bernie/geckolib/core/keyframe/Keyframe",
+                        Opcodes.DOUBLE, Opcodes.DOUBLE, Opcodes.DOUBLE, Opcodes.DOUBLE},
+                0, new Object[0]));
+        il.add(new TypeInsnNode(Opcodes.NEW, self));
+        il.add(new InsnNode(Opcodes.DUP));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 1));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 3));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 5));
+        il.add(new VarInsnNode(Opcodes.DLOAD, 7));
+        il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, self, "<init>", ctorDesc, false));
+        il.add(new InsnNode(Opcodes.ARETURN));
+
+        cn.methods.add(obtain);
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Rewrites {@code new AnimationPoint(kf, tick, len, start, end)} sites in GeckoLib
+     * {@code AnimationController} and {@code BoneAnimationQueue} to call
+     * {@code AnimationPoint.sunlit$obtain(...)}.
+     */
+    public static byte[] transformGeckoLibAnimationPointCallers(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        final String apCls = GECKOLIB_ANIM_POINT_CLS;
+        final String kfDesc = "Lsoftware/bernie/geckolib/core/keyframe/Keyframe;";
+        final String ctorDesc = "(" + kfDesc + "DDDD)V";
+        final String obtainDesc = "(" + kfDesc + "DDDD)L" + apCls + ";";
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof TypeInsnNode tin
+                        && tin.getOpcode() == Opcodes.NEW
+                        && apCls.equals(tin.desc)) {
+                    AbstractInsnNode dup = nextRealInsn(tin);
+                    if (dup == null || dup.getOpcode() != Opcodes.DUP) {
+                        continue;
+                    }
+                    // Find matching INVOKESPECIAL <init> with no nested NEW or control-flow labels
+                    MethodInsnNode init = null;
+                    boolean safe = true;
+                    for (AbstractInsnNode cur = dup.getNext(); cur != null; cur = cur.getNext()) {
+                        if (cur instanceof LabelNode || cur instanceof FrameNode || cur instanceof JumpInsnNode) {
+                            safe = false;
+                            break;
+                        }
+                        if (cur instanceof TypeInsnNode nested && nested.getOpcode() == Opcodes.NEW) {
+                            safe = false;
+                            break;
+                        }
+                        if (cur instanceof MethodInsnNode min
+                                && min.getOpcode() == Opcodes.INVOKESPECIAL
+                                && apCls.equals(min.owner)
+                                && "<init>".equals(min.name)
+                                && ctorDesc.equals(min.desc)) {
+                            init = min;
+                            break;
+                        }
+                    }
+                    if (safe && init != null) {
+                        mn.instructions.remove(tin);
+                        mn.instructions.remove(dup);
+                        mn.instructions.set(init, new MethodInsnNode(
+                                Opcodes.INVOKESTATIC, apCls, "sunlit$obtain", obtainDesc, false));
+                        patched = true;
+                    }
+                }
+            }
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Smooths Embeddium {@code ChunkBuilder.getSchedulingBudget()} during the first 5s post-join
+     * and whenever chunk uploads are backlogged via {@code StartupLoadPerf.clampChunkSchedulingBudget}.
+     */
+    public static byte[] transformSodiumChunkBuilder(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean hasQueue = false;
+        String queueDesc = "Lme/jellysquid/mods/sodium/client/render/chunk/compile/executor/ChunkJobQueue;";
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("queue".equals(fn.name) && queueDesc.equals(fn.desc)) {
+                    hasQueue = true;
+                    break;
+                }
+            }
+        }
+        if (!hasQueue) {
+            return null;
+        }
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"getSchedulingBudget".equals(mn.name) || !"()I".equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn.getOpcode() == Opcodes.IRETURN) {
+                    InsnList clamp = new InsnList();
+                    clamp.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    clamp.add(new FieldInsnNode(Opcodes.GETFIELD, SODIUM_CHUNK_BUILDER_CLS, "queue", queueDesc));
+                    clamp.add(new MethodInsnNode(
+                            Opcodes.INVOKEVIRTUAL,
+                            "me/jellysquid/mods/sodium/client/render/chunk/compile/executor/ChunkJobQueue",
+                            "size",
+                            "()I",
+                            false));
+                    clamp.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            "dev/sunlit/bettersunlit/client/StartupLoadPerf",
+                            "clampChunkSchedulingBudget",
+                            "(II)I",
+                            false));
+                    mn.instructions.insertBefore(insn, clamp);
+                    patched = true;
+                }
+            }
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Caps per-frame chunk mesh uploads inside {@code RenderSectionManager.uploadChunks()} using
+     * {@code StartupLoadPerf.getChunkUploadBudget()} while leaving {@code destroy()}'s
+     * {@code collectChunkBuildResults()} completely uncapped so no native buffers ever leak.
+     */
+    public static byte[] transformSodiumRenderSectionManager(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, 0);
+        boolean hasBuildResults = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("buildResults".equals(fn.name)
+                        && "Ljava/util/concurrent/ConcurrentLinkedDeque;".equals(fn.desc)) {
+                    hasBuildResults = true;
+                    break;
+                }
+            }
+        }
+        if (!hasBuildResults) {
+            return null;
+        }
+        for (MethodNode mn : cn.methods) {
+            if ("sunlit$collectChunkBuildResultsCapped".equals(mn.name)) {
+                return null;
+            }
+        }
+        boolean patchedUpload = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"uploadChunks".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKEVIRTUAL
+                        && SODIUM_RENDER_SECTION_MGR_CLS.equals(min.owner)
+                        && "collectChunkBuildResults".equals(min.name)
+                        && "()Ljava/util/ArrayList;".equals(min.desc)) {
+                    min.name = "sunlit$collectChunkBuildResultsCapped";
+                    patchedUpload = true;
+                }
+            }
+            break;
+        }
+        if (!patchedUpload) {
+            return null;
+        }
+
+        final String self = SODIUM_RENDER_SECTION_MGR_CLS;
+        final String dequeCls = "java/util/concurrent/ConcurrentLinkedDeque";
+        final String jobResultCls = "me/jellysquid/mods/sodium/client/render/chunk/compile/executor/ChunkJobResult";
+        final String buildOutputCls = "me/jellysquid/mods/sodium/client/render/chunk/compile/ChunkBuildOutput";
+        final String startupPerfCls = "dev/sunlit/bettersunlit/client/StartupLoadPerf";
+
+        MethodNode capped = new MethodNode(
+                Opcodes.ACC_PRIVATE,
+                "sunlit$collectChunkBuildResultsCapped",
+                "()Ljava/util/ArrayList;",
+                null,
+                null);
+        InsnList il = capped.instructions;
+        LabelNode loopHead = new LabelNode();
+        LabelNode tryStart = new LabelNode();
+        LabelNode tryEnd = new LabelNode();
+        LabelNode catchHandler = new LabelNode();
+        LabelNode suppressExisting = new LabelNode();
+        LabelNode afterLoop = new LabelNode();
+        LabelNode hasBacklogFalse = new LabelNode();
+        LabelNode setBacklog = new LabelNode();
+        LabelNode cleanLoop = new LabelNode();
+        LabelNode cleanDone = new LabelNode();
+        LabelNode returnOk = new LabelNode();
+
+        capped.tryCatchBlocks.add(new TryCatchBlockNode(
+                tryStart, tryEnd, catchHandler, "java/lang/RuntimeException"));
+
+        // int cap = StartupLoadPerf.getChunkUploadBudget();
+        il.add(new MethodInsnNode(Opcodes.INVOKESTATIC, startupPerfCls, "getChunkUploadBudget", "()I", false));
+        il.add(new VarInsnNode(Opcodes.ISTORE, 1));
+        // ArrayList results = new ArrayList();
+        il.add(new TypeInsnNode(Opcodes.NEW, "java/util/ArrayList"));
+        il.add(new InsnNode(Opcodes.DUP));
+        il.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 2));
+        // RuntimeException suppressed = null;
+        il.add(new InsnNode(Opcodes.ACONST_NULL));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 3));
+
+        // while (results.size() < cap)
+        il.add(loopHead);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 4,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException"},
+                0, new Object[0]));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false));
+        il.add(new VarInsnNode(Opcodes.ILOAD, 1));
+        il.add(new JumpInsnNode(Opcodes.IF_ICMPGE, afterLoop));
+
+        // ChunkJobResult job = (ChunkJobResult) this.buildResults.poll();
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new FieldInsnNode(Opcodes.GETFIELD, self, "buildResults", "L" + dequeCls + ";"));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, dequeCls, "poll", "()Ljava/lang/Object;", false));
+        il.add(new TypeInsnNode(Opcodes.CHECKCAST, jobResultCls));
+        il.add(new InsnNode(Opcodes.DUP));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 4));
+        il.add(new JumpInsnNode(Opcodes.IFNULL, afterLoop));
+
+        // try { results.add((ChunkBuildOutput) job.unwrap()); }
+        il.add(tryStart);
+        il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 4));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, jobResultCls, "unwrap", "()Ljava/lang/Object;", false));
+        il.add(new TypeInsnNode(Opcodes.CHECKCAST, buildOutputCls));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add", "(Ljava/lang/Object;)Z", false));
+        il.add(new InsnNode(Opcodes.POP));
+        il.add(tryEnd);
+        il.add(new JumpInsnNode(Opcodes.GOTO, loopHead));
+
+        // catch (RuntimeException e)
+        il.add(catchHandler);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 5,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException", jobResultCls},
+                1, new Object[] {"java/lang/RuntimeException"}));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 5));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+        il.add(new JumpInsnNode(Opcodes.IFNONNULL, suppressExisting));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 3));
+        il.add(new JumpInsnNode(Opcodes.GOTO, loopHead));
+
+        il.add(suppressExisting);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 6,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException",
+                        jobResultCls, "java/lang/RuntimeException"},
+                0, new Object[0]));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 5));
+        il.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL, "java/lang/RuntimeException", "addSuppressed", "(Ljava/lang/Throwable;)V", false));
+        il.add(new JumpInsnNode(Opcodes.GOTO, loopHead));
+
+        // StartupLoadPerf.setChunkUploadBacklogged(this.buildResults.peek() != null);
+        il.add(afterLoop);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 4,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException"},
+                0, new Object[0]));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        il.add(new FieldInsnNode(Opcodes.GETFIELD, self, "buildResults", "L" + dequeCls + ";"));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, dequeCls, "peek", "()Ljava/lang/Object;", false));
+        il.add(new JumpInsnNode(Opcodes.IFNULL, hasBacklogFalse));
+        il.add(new InsnNode(Opcodes.ICONST_1));
+        il.add(new JumpInsnNode(Opcodes.GOTO, setBacklog));
+
+        il.add(hasBacklogFalse);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 4,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException"},
+                0, new Object[0]));
+        il.add(new InsnNode(Opcodes.ICONST_0));
+
+        il.add(setBacklog);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 4,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException"},
+                1, new Object[] {Opcodes.INTEGER}));
+        il.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC, startupPerfCls, "setChunkUploadBacklogged", "(Z)V", false));
+
+        // if (suppressed != null) { for (ChunkBuildOutput out : results) out.delete(); throw suppressed; }
+        il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+        il.add(new JumpInsnNode(Opcodes.IFNULL, returnOk));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "iterator", "()Ljava/util/Iterator;", false));
+        il.add(new VarInsnNode(Opcodes.ASTORE, 4));
+
+        il.add(cleanLoop);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 5,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException", "java/util/Iterator"},
+                0, new Object[0]));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 4));
+        il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true));
+        il.add(new JumpInsnNode(Opcodes.IFEQ, cleanDone));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 4));
+        il.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true));
+        il.add(new TypeInsnNode(Opcodes.CHECKCAST, buildOutputCls));
+        il.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, buildOutputCls, "delete", "()V", false));
+        il.add(new JumpInsnNode(Opcodes.GOTO, cleanLoop));
+
+        il.add(cleanDone);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 5,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException", "java/util/Iterator"},
+                0, new Object[0]));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 3));
+        il.add(new InsnNode(Opcodes.ATHROW));
+
+        il.add(returnOk);
+        il.add(new FrameNode(
+                Opcodes.F_FULL, 4,
+                new Object[] {self, Opcodes.INTEGER, "java/util/ArrayList", "java/lang/RuntimeException"},
+                0, new Object[0]));
+        il.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        il.add(new InsnNode(Opcodes.ARETURN));
+
+        cn.methods.add(capped);
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
+    /**
+     * Caches the immutable baked {@code ModelPart} in SmallShips {@code CannonModel.<init>()} so
+     * {@code ShipRenderer.renderCannon()} does not rebuild {@code LayerDefinition} + {@code ModelPart}
+     * (~100+ MB/min) on every rendered ship cannon every frame.
+     */
+    public static byte[] transformSmallShipsCannonModel(byte[] bytes) {
+        ClassNode cn = new ClassNode();
+        new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
+        final String self = SMALLSHIPS_CANNON_MODEL_CLS;
+        final String mpDesc = "Lnet/minecraft/client/model/geom/ModelPart;";
+        boolean hasCannonField = false;
+        if (cn.fields != null) {
+            for (FieldNode fn : cn.fields) {
+                if ("sunlit$cachedCannon".equals(fn.name)) {
+                    return null;
+                }
+                if ("Cannon".equals(fn.name) && mpDesc.equals(fn.desc)) {
+                    hasCannonField = true;
+                }
+            }
+        }
+        if (!hasCannonField) {
+            return null;
+        }
+        boolean patched = false;
+        for (MethodNode mn : cn.methods) {
+            if (!"<init>".equals(mn.name) || !"()V".equals(mn.desc) || mn.instructions == null) {
+                continue;
+            }
+            AbstractInsnNode superInit = null;
+            FieldInsnNode putCannon = null;
+            for (AbstractInsnNode insn : mn.instructions.toArray()) {
+                if (superInit == null
+                        && insn instanceof MethodInsnNode min
+                        && min.getOpcode() == Opcodes.INVOKESPECIAL
+                        && "<init>".equals(min.name)
+                        && "()V".equals(min.desc)) {
+                    superInit = min;
+                } else if (insn instanceof FieldInsnNode fin
+                        && fin.getOpcode() == Opcodes.PUTFIELD
+                        && self.equals(fin.owner)
+                        && "Cannon".equals(fin.name)
+                        && mpDesc.equals(fin.desc)) {
+                    putCannon = fin;
+                }
+            }
+            if (superInit == null || putCannon == null) {
+                continue;
+            }
+            LabelNode missLabel = new LabelNode();
+            InsnList fast = new InsnList();
+            fast.add(new FieldInsnNode(Opcodes.GETSTATIC, self, "sunlit$cachedCannon", mpDesc));
+            fast.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            fast.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            fast.add(new JumpInsnNode(Opcodes.IFNULL, missLabel));
+            fast.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            fast.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            fast.add(new FieldInsnNode(Opcodes.PUTFIELD, self, "Cannon", mpDesc));
+            fast.add(new InsnNode(Opcodes.RETURN));
+            fast.add(missLabel);
+            fast.add(new FrameNode(
+                    Opcodes.F_FULL, 2,
+                    new Object[] {self, "net/minecraft/client/model/geom/ModelPart"},
+                    0, new Object[0]));
+            mn.instructions.insert(superInit, fast);
+
+            InsnList storeCache = new InsnList();
+            storeCache.add(new InsnNode(Opcodes.DUP));
+            storeCache.add(new FieldInsnNode(Opcodes.PUTSTATIC, self, "sunlit$cachedCannon", mpDesc));
+            mn.instructions.insertBefore(putCannon, storeCache);
+            patched = true;
+            break;
+        }
+        if (!patched) {
+            return null;
+        }
+        cn.fields.add(new FieldNode(
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_VOLATILE,
+                "sunlit$cachedCannon",
+                mpDesc,
+                null,
+                null));
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);
         return cw.toByteArray();

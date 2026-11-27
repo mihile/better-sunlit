@@ -1,0 +1,15 @@
+{
+  "build": 2026112701,
+  "label": "2026.11.27.1",
+  "title": "기능 개선 및 오류 수정",
+  "changes": [
+    {
+      "title": "첫 접속·시야 회전 끊김 및 프레임 드랍 개선",
+      "detail": "EMF·GeckoLib·Iris·Embeddium 렌더링·정렬·프러스텀·버퍼 할당과 워커 경합, 접속 초반 청크 업로드·틱 급증을 최적화하여 서버 첫 접속 및 시야 회전 시 끊김을 크게 줄였습니다."
+    },
+    {
+      "title": "/bettersunlit optimize 명령어 추가",
+      "detail": "클라이언트 명령어 /bettersunlit optimize <on|off|toggle>로 접속 초반 청크 로딩 억제(업로드 페이싱·스케줄링 백프레셔·틱 제한)를 재시작 없이 즉시 켜고 끌 수 있으며 설정이 자동 저장됩니다."
+    }
+  ]
+}
