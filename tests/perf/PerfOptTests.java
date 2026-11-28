@@ -4024,6 +4024,36 @@ public final class PerfOptTests {
             }
         });
         assertEquals(0L, allocSodium, "Warm EmfRenderPerf.emitCompiledQuadsNative must allocate 0 bytes, got " + allocSodium);
+
+        var renderTask = new java.util.concurrent.FutureTask<Void>(() -> {
+            var first = new RecordingWriterConsumer(true, 300, mockModelFormat);
+            var second = new RecordingWriterConsumer(true, 300, mockModelFormat);
+            net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter dualWriter =
+                    (nativeStack, ptr, count, format) -> {
+                        net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter.copyInto(
+                                first, nativeStack, ptr, count, format);
+                        net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter.copyInto(
+                                second, nativeStack, ptr, count, format);
+                    };
+            try (var nativeStack = org.lwjgl.system.MemoryStack.stackPush()) {
+                int before = nativeStack.getPointer();
+                for (int i = 0; i < 16; i++) {
+                    first.reset();
+                    second.reset();
+                    assertTrue(EmfRenderPerf.emitCompiledQuadsNative(
+                            compiledLarge, poses[1], dualWriter, mockModelFormat, 240, 0, 1f, 1f, 1f, 1f),
+                            "Composite writer must render all native batches");
+                    assertEquals(before, nativeStack.getPointer(), "Batch must release temporary vertex copies");
+                    assertEquals(280, first.vertexCount, "First writer must receive every vertex");
+                    assertEquals(280, second.vertexCount, "Second writer must receive every vertex");
+                    assertTrue(java.util.Arrays.equals(largeSodiumVc.x, first.x), "First copy must preserve positions");
+                    assertTrue(java.util.Arrays.equals(largeSodiumVc.x, second.x), "Second copy must preserve positions");
+                }
+            }
+            return null;
+        });
+        new Thread(renderTask, "Render thread").start();
+        renderTask.get(20, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     private static void testParticleRainWhitelistPaletteAndAirRay() throws Exception {
