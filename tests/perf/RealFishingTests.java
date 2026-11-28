@@ -321,13 +321,13 @@ public final class RealFishingTests {
                         "Client dispatcher must forward '" + serverSub + "' to server, got: " + type);
             }
         }
-        // Verify OP notification messages contain command and restart warning
+        // The update disconnects players. The launcher controls whether the server restarts.
         var availMsg = dev.sunlit.bettersunlit.ServerUpdateManager.buildAvailableMessage("2026.11.26.6", "2026.11.26.7").getString();
         var promptMsg = dev.sunlit.bettersunlit.ServerUpdateManager.buildPromptMessage().getString();
         check(availMsg.contains("2026.11.26.6") && availMsg.contains("2026.11.26.7"),
                 "Update notification must display current and latest version");
-        check(promptMsg.contains("/bettersunlit update") && promptMsg.toLowerCase(java.util.Locale.ROOT).contains("restart"),
-                "Update prompt must mention /bettersunlit update and server restart warning");
+        check(promptMsg.contains("/bettersunlit update") && promptMsg.contains("disconnected"),
+                "Update prompt must show the command and warn about disconnection");
         System.out.println("PASS: RealFishing defaults, saved settings, custom fish models, unified /bettersunlit commands + server update, and protocol 3 catch packets");
     }
 
