@@ -1,4 +1,4 @@
-"""Build, verify and publish one or both Better Sunlit channels."""
+"""Build, verify and publish one Better Sunlit release containing all three editions."""
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
@@ -14,8 +14,8 @@ import sys
 import tempfile
 import time
 from publication_guard import check_worktree, check_git_tree
-from publish import release_feed_metadata
-from downloads import ASSETS, publish_downloads
+from publish import ASSETS, release_feed_metadata, require, sha256
+from downloads import prepare_bundle, releases, verify_downloads, verify_latest
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTANCE = ROOT.parents[1]
@@ -103,11 +103,12 @@ def known_remote_builds():
     tags.extend(line.split('refs/tags/', 1)[1] for line in refs.splitlines() if 'refs/tags/' in line)
     builds = {side: 0 for side in SIDES}
     for tag in tags:
-        match = re.fullmatch(r'(client|server)-build-(\d{4})\.(\d{2})\.(\d{2})\.(\d+)', tag)
+        match = re.fullmatch(r'(?:(client|server)-)?build-(\d{4})\.(\d{2})\.(\d{2})\.(\d+)', tag)
         if match:
             side, year, month, day, sequence = match.groups()
             number = int(year + month + day + sequence.zfill(2))
-            builds[side] = max(builds[side], number)
+            for channel in (side,) if side else SIDES:
+                builds[channel] = max(builds[channel], number)
     return builds
 
 
@@ -127,7 +128,7 @@ def needs_release(side):
     if git('diff', '--name-only', f'{ref}^{{commit}}', 'HEAD', '--', *paths):
         return True
 
-    print(f'{side}: 공개 릴리스 {tag} 이후 JAR 빌드 입력 변경 없음. 배포를 건너뜁니다.', flush=True)
+
     return False
 
 
@@ -296,17 +297,6 @@ def assert_shared_equal(first, second):
         raise RuntimeError('양쪽 브랜치의 공통 소스가 달라 검증한 산출물을 재사용할 수 없습니다.')
 
 
-def publish_side(side, changes):
-    if git('branch', '--show-current') != side:
-        run(['git', 'checkout', side])
-    # Even an apparently up-to-date local tracking ref can be stale while the
-    # tests run. A normal push detects a concurrent remote change safely.
-    check_git_tree(ROOT, remote=f'origin/{side}')
-    run(['git', 'push', 'origin', side])
-    step(f'{side} 서명 및 공개 검증', run,
-         [sys.executable, '-X', 'utf8', 'tools/publish.py', '--side', side, '--changes', changes])
-
-
 def local_build_inputs(release_path):
     inputs = [
         ROOT / 'build.py',
@@ -368,11 +358,69 @@ def local_build(side, force=False):
     print(f'로컬 클라이언트 모드 적용 완료: {target_jar}', flush=True)
 
 
+def prepare_or_resume(folder, sources, standalone, changes, data, existing):
+    plan_file = folder/'plan.json'
+    if plan_file.is_file():
+        plan = json.loads(plan_file.read_text(encoding='utf8'))
+        same_input = (plan['client-only'] == standalone and plan['build'] == data['build']
+                      and plan['notesSha256'] == sha256(changes))
+        same_sources = all(not git('diff', '--name-only', plan['sources'][side], sources[side],
+                                   '--', '.', ':(exclude)feed/update.properties') for side in SIDES)
+        if same_input and same_sources:
+            require({name: sha256(folder/name) for name in ASSETS.values()} == plan['hashes'],
+                    '재시도할 로컬 JAR이 원래 배포 파일과 다릅니다.')
+            return plan
+    require(existing is None, '이미 같은 태그의 릴리스가 있습니다. 처음 준비한 소스와 build/unified 산출물을 확인하세요.')
+    build_both(data)
+    step('전체 검사', run, [sys.executable, '-X', 'utf8', 'tools/test.py'])
+    verify_artifacts(data)
+    return step('서명 및 클라이언트 전용 빌드', prepare_bundle, folder, sources, standalone, changes, data)
+
+
+def publish_bundle(initial, folder, tag, plan, data, existing):
+    refs = [f'{side}:refs/heads/{side}' for side in SIDES]
+    for side in SIDES:
+        check_git_tree(ROOT, side, f'origin/{side}')
+    feeds = {side: folder/f'{side}.properties' for side in SIDES}
+    target = plan['sources']['client']
+    if existing is None:
+        # Publish only the prepared source commits, never any staged feed commits.
+        run(['git', 'push', '--atomic', 'origin',
+             *(f"{plan['sources'][side]}:refs/heads/{side}" for side in SIDES)])
+        run(['gh', 'release', 'create', tag, '--repo', REPOSITORY, '--target', target,
+             '--title', f"Better Sunlit {data['label']}", '--notes-file', folder/'notes.md',
+             '--draft', '--latest=false', *(folder/name for name in ASSETS.values())])
+    if existing is None or existing['draft']:
+        verify_downloads(folder, tag, target, data, feeds, plan['hashes'])
+        run(['gh', 'release', 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest'])
+    verify_downloads(folder, tag, target, data, feeds, plan['hashes'])
+    require(out(['gh', 'api', f'repos/{REPOSITORY}/releases/latest', '--jq', '.tag_name']) == tag,
+            '통합 릴리스가 공개 Latest로 표시되지 않습니다.')
+
+    # No live updater points at the new files until all three pass verification.
+    try:
+        for side in SIDES:
+            run(['git', 'checkout', side])
+            feed = ROOT/'feed/update.properties'
+            if not feed.is_file() or feed.read_bytes() != feeds[side].read_bytes():
+                feed.write_bytes(feeds[side].read_bytes())
+                run(['git', 'add', 'feed/update.properties'])
+                run(['git', 'commit', '-m', f"Publish {side} feed {data['label']}"])
+            check_git_tree(ROOT, side, f'origin/{side}')
+    finally:
+        if git('branch', '--show-current') != initial:
+            run(['git', 'checkout', initial])
+    run(['git', 'push', '--atomic', 'origin', *refs])
+    step('공개 릴리스와 두 업데이트 피드 재검증', verify_latest)
+
+
 def release(requested, prepare_only=False):
     release_day = korea_today()
     initial = git('branch', '--show-current')
     if initial not in SIDES:
         raise RuntimeError('client 또는 server 브랜치에서 실행하세요.')
+    if requested != 'both':
+        print('모든 배포 BAT는 세 가지 JAR을 한 릴리스에 게시합니다.', flush=True)
     step('원격 브랜치 확인', run, ['git', 'fetch', '--no-tags', 'origin'])
     save_work()
     update_local_branches(initial)
@@ -380,52 +428,44 @@ def release(requested, prepare_only=False):
     if shared_changes(initial, other):
         step('공통 변경 동기화', sync_from, other)
 
-    candidates = [initial, other] if requested == 'both' else [requested]
-    sides = [side for side in candidates if needs_release(side)]
-    if not sides:
-        if not prepare_only:
-            step('세 가지 용도의 다운로드 묶음', publish_downloads)
+    changes, data = latest_release_meta()
+    used = step('공개 릴리스 및 태그 확인', known_remote_builds)
+    tag = f"build-{data['label']}"
+    existing = next((item for item in releases() if item['tag_name'] == tag), None)
+    folder = ROOT/'build/unified'/tag
+    if existing and not existing['draft'] and all(
+            release_feed_metadata(side, git('show', f'origin/{side}:feed/update.properties'))['tag'] == tag
+            for side in SIDES):
+        if any(needs_release(side) for side in SIDES):
+            raise RuntimeError('배포한 소스 이후 변경 사항을 tools/add_release_change.py로 기록하세요.')
+        step('이미 게시된 통합 릴리스 재검증', verify_latest)
         return
-
-    remote_builds = step('공개 릴리스 및 태그 확인', known_remote_builds)
-    if sides[0] != initial:
-        run(['git', 'checkout', sides[0]])
-        step('대상 브랜치 동기화', sync_from, initial)
-    changes, data = choose_release(sides, remote_builds, release_day)
-    print(f"릴리스: {data['label']} (build {data['build']}) / {', '.join(sides)}", flush=True)
+    if existing is None:
+        if data['build'] <= max(used.values()) and not any(needs_release(side) for side in SIDES):
+            print('배포할 새 변경 내역이 없습니다.', flush=True)
+            return
+        changes, data = choose_release(SIDES, used, release_day)
+        tag = f"build-{data['label']}"
+        folder = ROOT/'build/unified'/tag
     save_work()
-    if len(sides) == 2:
-        run(['git', 'checkout', sides[1]])
-        step('두 번째 브랜치 동기화', sync_from, sides[0])
-        assert_shared_equal(sides[0], sides[1])
-        run(['git', 'checkout', sides[0]])
+    if shared_changes(initial, other):
+        run(['git', 'checkout', other])
+        try:
+            step('다른 채널에 공통 소스 동기화', sync_from, initial)
+        finally:
+            run(['git', 'checkout', initial])
+    assert_shared_equal('client', 'server')
 
-    # Both JARs and the full cross-channel tests run exactly once per invocation.
-    build_both(data)
-    step('전체 검사', run, [sys.executable, '-X', 'utf8', 'tools/test.py'])
-    verify_artifacts(data)
-    for side in sides:
-        step(f'{side} 서명 사전 검증', run, [sys.executable, '-X', 'utf8', 'tools/publish.py',
-                                             '--side', side, '--changes', changes, '--prepare-only'])
+    standalone = git('ls-remote', '--exit-code', '--heads', 'origin', 'refs/heads/client-only').split()[0]
+    require(bool(re.fullmatch(r'[a-f0-9]{40}', standalone)), 'client-only 원격 브랜치를 확인하세요.')
+    run(['git', 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', standalone])
+    sources = {side: git('rev-parse', side) for side in SIDES}
+    print(f"통합 릴리스: {data['label']} (build {data['build']})", flush=True)
+    plan = prepare_or_resume(folder, sources, standalone, changes, data, existing)
     if prepare_only:
-        print(f"\n=== 게시 전 준비 및 검증 완료: {', '.join(sides)} / {data['label']} ===", flush=True)
+        print(f'세 가지 JAR 게시 전 준비 및 서명 검증 완료: {folder}', flush=True)
         return
-
-    completed = []
-    try:
-        for side in sides:
-            if side != sides[0]:
-                run(['git', 'checkout', side])
-            verify_artifacts(data)
-            publish_side(side, changes)
-            completed.append(side)
-        step('세 가지 용도의 다운로드 묶음', publish_downloads)
-    except Exception:
-        if completed:
-            print('이미 공개 완료된 채널: ' + ', '.join(completed) +
-                  '. 나머지는 오류 해결 후 다시 배포하세요.', file=sys.stderr, flush=True)
-        raise
-    print(f"\n=== 배포 완료: {', '.join(completed)} / {data['label']} ===", flush=True)
+    step('단일 GitHub 릴리스 게시', publish_bundle, initial, folder, tag, plan, data, existing)
 
 
 def main():
@@ -440,10 +480,7 @@ def main():
         parser.error('--local-only, --prepare-only and --verify-only cannot be combined')
     with release_lock():
         if args.verify_only:
-            sides = SIDES if args.side == 'both' else (args.side,)
-            for side in sides:
-                step(f'{side} 기존 공개 빌드 재검증', run, [sys.executable, '-X', 'utf8', 'tools/publish.py',
-                    '--side', side, '--verify-only'])
+            step('공개 통합 릴리스 확인', verify_latest)
         elif args.local_only:
             local_build(args.side, force=args.force)
         else:

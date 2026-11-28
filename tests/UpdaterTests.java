@@ -26,7 +26,7 @@ public final class UpdaterTests {
         byte[] bytes=properties(p);var s=Signature.getInstance("Ed25519");s.initSign(pair.getPrivate());s.update(bytes);Properties outer=new Properties();outer.setProperty("payload",Base64.getEncoder().encodeToString(bytes));outer.setProperty("signature",Base64.getEncoder().encodeToString(s.sign()));return properties(outer);
     }
     static Properties metadata()throws Exception {
-        Properties p=new Properties();p.setProperty("schema","1");p.setProperty("channel",SIDE);p.setProperty("pack","sunlit-valley");p.setProperty("mod","better_sunlit");p.setProperty("version","1.0.0");p.setProperty("filename",SignedRelease.FILE);p.setProperty("build","2026102502");p.setProperty("label","2026.10.25-2");p.setProperty("title","테스트 업데이트");p.setProperty("tag",SIDE+"-build-20261025.2");p.setProperty("url","https://github.com/"+SignedRelease.REPO+"/releases/download/"+SIDE+"-build-20261025.2/"+SignedRelease.FILE);p.setProperty("size",Integer.toString(jar.length));Path file=work.resolve("hash.jar");Files.write(file,jar);p.setProperty("sha256",UpdateFiles.sha(file));p.setProperty("notes.0","변경 내역은 바로 표시됩니다.");return p;
+        Properties p=new Properties();p.setProperty("schema","1");p.setProperty("channel",SIDE);p.setProperty("pack","sunlit-valley");p.setProperty("mod","better_sunlit");p.setProperty("version","1.0.0");p.setProperty("filename",SignedRelease.ASSET_FILE);p.setProperty("build","2026102502");p.setProperty("label","2026.10.25.2");p.setProperty("title","테스트 업데이트");p.setProperty("tag","build-2026.10.25.2");p.setProperty("url","https://github.com/"+SignedRelease.REPO+"/releases/download/build-2026.10.25.2/"+SignedRelease.ASSET_FILE);p.setProperty("size",Integer.toString(jar.length));Path file=work.resolve("hash.jar");Files.write(file,jar);p.setProperty("sha256",UpdateFiles.sha(file));p.setProperty("notes.0","변경 내역은 바로 표시됩니다.");return p;
     }
     static byte[] jar(long build,String channel)throws Exception {
         var out=new ByteArrayOutputStream();try(var z=new JarOutputStream(out)){
@@ -64,6 +64,10 @@ public final class UpdaterTests {
         var wrong=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();rejects(()->SignedRelease.verify(envelope,wrong.getPublic()),"Accepted wrong signing key");
         rejects(()->SignedRelease.verify(new byte[131073],pair.getPublic()),"Accepted oversized manifest");
         for(String[] m:new String[][]{{"channel",OTHER},{"pack","4.1.2"},{"mod","other"},{"schema","2"},{"version","2.0.0"},{"filename","../other.jar"},{"build","0"},{"size","0"},{"size","67108865"},{"sha256","bad"},{"tag","../latest"},{"url","https://evil.example/file.jar"},{"title","bad\nline"},{"label","x".repeat(81)}})mutation(m[0],m[1]);
+        ok(valid.page().toString().endsWith("/releases/tag/build-2026.10.25.2"), "Updates must open the unified release");
+        mutation("filename", "better-sunlit-" + OTHER + ".jar");
+        mutation("filename", "better-sunlit-client-only.jar");
+        mutation("url", valid.asset().toString().replace(DOWNLOAD_NAME, "better-sunlit-" + OTHER + ".jar"));
         var noNotes=metadata();noNotes.remove("notes.0");rejects(()->SignedRelease.verify(signed(noNotes),pair.getPublic()),"Accepted missing notes");
         for(String uri:List.of("http://github.com/file","https://github.com.evil.example/file","https://user@github.com/file","https://github.com:444/file","https://localhost/file","file:///tmp/test"))rejects(()->SafeHttp.trusted(URI.create(uri)),"Accepted untrusted URL");
         SafeHttp.trusted(URI.create("https://release-assets.githubusercontent.com/file?temporary-token=test"));checks++;

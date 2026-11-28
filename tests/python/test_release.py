@@ -59,11 +59,8 @@ class ReleaseGitTests(unittest.TestCase):
         self.git('push', '-u', 'origin', 'client', 'server')
         self.root_patch = mock.patch.object(release, 'ROOT', self.root)
         self.root_patch.start()
-        self.bundle_patch = mock.patch.object(release, 'publish_downloads')
-        self.publish_downloads = self.bundle_patch.start()
 
     def tearDown(self):
-        self.bundle_patch.stop()
         self.root_patch.stop()
         self.temp.cleanup()
 
@@ -86,63 +83,20 @@ class ReleaseGitTests(unittest.TestCase):
         self.commit(f'Publish {side} feed')
         self.git('push', 'origin', side, f'refs/tags/{side}-build-{label}')
 
-    def test_maintenance_and_feed_changes_skip_both_channels_before_build_or_push(self):
+    def test_no_changes_leave_publication_alone(self):
         self.publish_snapshot('client', '2026.11.14.1')
         self.git('checkout', 'server')
         self.publish_snapshot('server', '2026.11.14.1')
         self.git('checkout', 'client')
-        self.write('tools/release.py', '# maintenance change\n')
-        self.write('releases/20261114.2.json', '{"build": 2026111402, "label": "2026.11.14.2"}\n')
-        self.commit('Unpublished maintenance and metadata')
         refs = self.git('ls-remote', 'origin')
-        with mock.patch.object(release, 'known_remote_builds') as versions, \
-             mock.patch.object(release, 'choose_release') as choose, \
-             mock.patch.object(release, 'build_both') as build, \
-             mock.patch.object(release, 'publish_side') as publish_side:
+        with mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026111401, 'server': 2026111401}), \
+             mock.patch.object(release, 'releases', return_value=[]), \
+             mock.patch.object(release, 'prepare_or_resume') as prepare, \
+             mock.patch.object(release, 'publish_bundle') as publish:
             release.release('both')
-        versions.assert_not_called()
-        choose.assert_not_called()
-        build.assert_not_called()
-        publish_side.assert_not_called()
-        self.publish_downloads.assert_called_once_with()
+        prepare.assert_not_called()
+        publish.assert_not_called()
         self.assertEqual(self.git('ls-remote', 'origin'), refs)
-
-    def test_partial_publication_retries_only_channel_with_unreleased_source(self):
-        self.git('checkout', 'server')
-        self.publish_snapshot('server', '2026.11.14.1')
-        self.git('checkout', 'client')
-        self.write('src/main/resources/pack.mcmeta', '{}\n')
-        metadata = json.loads((self.root/'releases/20261114.1.json').read_text(encoding='utf8'))
-        metadata.update(build=2026111402, label='2026.11.14.2')
-        metadata['changes'][0]['title'] = 'Update pack resources'
-        self.write('releases/20261114.2.json', json.dumps(metadata))
-        self.commit('Production resource change')
-        self.publish_snapshot('client', '2026.11.14.2')
-        actual_run = release.run
-
-        def run_stub(command, *, check=True):
-            if str(command[0]) == sys.executable:
-                return subprocess.CompletedProcess(command, 0)
-            return actual_run(command, check=check)
-
-        published_notes = self.git('show', 'client:releases/20261114.2.json')
-        with mock.patch.object(release, 'korea_today', return_value=date(2026, 11, 15)), \
-             mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026111402, 'server': 2026111401}), \
-             mock.patch.object(release, 'build_both') as build, \
-             mock.patch.object(release, 'verify_artifacts'), \
-             mock.patch.object(release, 'run', side_effect=run_stub), \
-             mock.patch.object(release, 'publish_side') as publish_side:
-            release.release('both')
-        build.assert_called_once()
-        publish_side.assert_called_once()
-        self.publish_downloads.assert_called_once_with()
-        dated_path = self.root/'releases/20261115.1.json'
-        self.assertEqual(publish_side.call_args.args, ('server', dated_path))
-        self.assertEqual(self.git('show', 'server:releases/20261114.2.json'), published_notes)
-        self.assertEqual(json.loads(dated_path.read_text(encoding='utf8'))['changes'],
-                         json.loads(published_notes)['changes'])
-        self.assertEqual(build.call_args.args[0]['build'], 2026111501)
-        self.assertEqual(self.git('show', 'server:src/main/resources/pack.mcmeta'), '{}')
 
     def test_client_only_sources_do_not_trigger_server(self):
         self.publish_snapshot('client', '2026.11.14.1')
@@ -191,112 +145,38 @@ class ReleaseGitTests(unittest.TestCase):
         self.assertEqual(self.git('status', '--porcelain'), '')
         self.assertEqual(self.git('show', 'server:src/main/resources/shared.mcmeta'), 'server version')
 
-    def test_both_build_and_test_once_before_either_publish(self):
-        self.write('src/main/resources/client-added.mcmeta', 'client feature\n')
-        self.commit('client change')
-        self.git('checkout', 'server')
-        self.write('src/main/resources/server-added.mcmeta', 'server feature\n')
-        self.commit('server change')
-        self.git('checkout', 'client')
-        events = []
+    def test_every_deploy_entry_point_prepares_the_same_complete_release(self):
+        self.git('branch', 'client-only')
+        self.git('push', 'origin', 'client-only')
+        snapshot = self.git('rev-parse', 'client-only')
+        for requested in ('client', 'server', 'both'):
+            with self.subTest(requested=requested), \
+                 mock.patch.object(release, 'korea_today', return_value=date(2026, 11, 14)), \
+                 mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
+                 mock.patch.object(release, 'releases', return_value=[]), \
+                 mock.patch.object(release, 'prepare_or_resume', return_value=mock.sentinel.plan) as prepare, \
+                 mock.patch.object(release, 'publish_bundle') as publish:
+                release.release(requested, prepare_only=True)
+                self.assertEqual(set(prepare.call_args.args[1]), {'client', 'server'})
+                self.assertEqual(prepare.call_args.args[2], snapshot)
+                self.assertEqual(prepare.call_args.args[4]['build'], 2026111401)
+                publish.assert_not_called()
+
+    def test_test_failure_stops_before_signing_or_publication(self):
         actual_run = release.run
-        self.publish_downloads.side_effect = lambda: events.append('bundle')
-
-        def run_stub(command, *, check=True):
-            if str(command[0]) == sys.executable:
-                if 'tools/test.py' in command:
-                    events.append('test')
-                elif 'tools/publish.py' in command and '--prepare-only' in command:
-                    events.append('prepare-' + command[command.index('--side') + 1])
-                else:
-                    self.fail(f'Unexpected command: {command}')
-                return subprocess.CompletedProcess(command, 0)
-            return actual_run(command, check=check)
-
-        def publish_stub(side, changes):
-            self.assertEqual(events[:4], ['build', 'test', 'prepare-client', 'prepare-server'])
-            self.assertEqual(self.git('branch', '--show-current'), side)
-            self.assertEqual(changes.name, '20261125.1.json')
-            self.assertEqual(json.loads(changes.read_text(encoding='utf8'))['build'], 2026112501)
-            events.append('publish-' + side)
-            self.write('feed/update.properties', side + '-new\n')
-            self.commit('Publish ' + side)
-
-        with mock.patch.object(release, 'korea_today', return_value=date(2026, 11, 25)), \
-             mock.patch.object(release, 'needs_release', return_value=True), \
-             mock.patch.object(release, 'known_remote_builds', return_value={'client': 2026110804, 'server': 2026110804}), \
-             mock.patch.object(release, 'build_both', side_effect=lambda data: events.append('build')), \
-             mock.patch.object(release, 'verify_artifacts'), \
-             mock.patch.object(release, 'run', side_effect=run_stub), \
-             mock.patch.object(release, 'publish_side', side_effect=publish_stub):
-            release.release('both')
-
-        self.assertEqual(events, ['build', 'test', 'prepare-client', 'prepare-server',
-                                  'publish-client', 'publish-server', 'bundle'])
-        self.assertEqual(self.git('show', 'client:feed/update.properties'), 'client-new')
-        self.assertEqual(self.git('show', 'server:feed/update.properties'), 'server-new')
-        self.assertEqual(self.git('show', 'server:release-channel.properties'), 'channel=server')
-        release.assert_shared_equal('client', 'server')
-        self.assertFalse((self.root/'releases/20261114.1.json').exists())
-
-    def test_test_failure_stops_before_publication(self):
-        actual_run = release.run
-        published = []
 
         def run_stub(command, *, check=True):
             if str(command[0]) == sys.executable and 'tools/test.py' in command:
                 raise subprocess.CalledProcessError(1, command)
             return actual_run(command, check=check)
 
-        with mock.patch.object(release, 'needs_release', return_value=True), \
-             mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
-             mock.patch.object(release, 'build_both'), \
+        with mock.patch.object(release, 'build_both') as build, \
              mock.patch.object(release, 'run', side_effect=run_stub), \
-             mock.patch.object(release, 'publish_side', side_effect=lambda *args: published.append(args)):
+             mock.patch.object(release, 'prepare_bundle') as sign:
             with self.assertRaises(subprocess.CalledProcessError):
-                release.release('both')
-        self.assertEqual(published, [])
-        self.publish_downloads.assert_not_called()
-        self.assertEqual(self.git('show', 'origin/client:feed/update.properties'), 'client-old')
-        self.assertEqual(self.git('show', 'origin/server:feed/update.properties'), 'server-old')
-
-    def check_single_channel_from_opposite_branch(self, side, initial):
-        self.git('checkout', initial)
-        events = []
-        actual_run = release.run
-        self.publish_downloads.side_effect = lambda: events.append('bundle')
-
-        def run_stub(command, *, check=True):
-            if str(command[0]) == sys.executable:
-                if 'tools/test.py' in command:
-                    events.append('test')
-                elif 'tools/publish.py' in command and '--prepare-only' in command:
-                    events.append('prepare-' + command[command.index('--side') + 1])
-                else:
-                    self.fail(f'Unexpected command: {command}')
-                return subprocess.CompletedProcess(command, 0)
-            return actual_run(command, check=check)
-
-        def publish_stub(selected, changes):
-            self.assertEqual(self.git('branch', '--show-current'), side)
-            events.append('publish-' + selected)
-
-        with mock.patch.object(release, 'needs_release', return_value=True), \
-             mock.patch.object(release, 'known_remote_builds', return_value={'client': 0, 'server': 0}), \
-             mock.patch.object(release, 'build_both', side_effect=lambda data: events.append('build')), \
-             mock.patch.object(release, 'verify_artifacts'), \
-             mock.patch.object(release, 'run', side_effect=run_stub), \
-             mock.patch.object(release, 'publish_side', side_effect=publish_stub):
-            release.release(side)
-        self.assertEqual(events, ['build', 'test', 'prepare-' + side, 'publish-' + side, 'bundle'])
-        self.assertEqual((self.root/'feed/update.properties').read_text(), side + '-old\n')
-        self.assertEqual((self.root/'release-channel.properties').read_text(), 'channel=' + side + '\n')
-
-    def test_client_only_from_server_branch(self):
-        self.check_single_channel_from_opposite_branch('client', 'server')
-
-    def test_server_only_from_client_branch(self):
-        self.check_single_channel_from_opposite_branch('server', 'client')
+                release.prepare_or_resume(self.root/'stage', {}, 'standalone', self.root/'notes', {}, None)
+        build.assert_called_once()
+        sign.assert_not_called()
 
     def test_local_client_build_preserves_the_installed_download_name(self):
         instance = self.root.parent / 'instance'
@@ -372,16 +252,6 @@ class ReleaseGitTests(unittest.TestCase):
         with mock.patch.object(release, 'out', side_effect=[json.dumps(pages), refs]):
             self.assertEqual(release.known_remote_builds(), {'client': 2026111401, 'server': 2026111502})
 
-    def test_publish_rejects_old_build_number_before_signing(self):
-        build = self.root / 'build/client'
-        build.mkdir(parents=True)
-        (build/'build-report.json').write_text(json.dumps(
-            {'build': 2026110801, 'label': '2026.11.08.1', 'side': 'client'}), encoding='utf8')
-        args = SimpleNamespace(side='client', changes=self.root/'releases/20261114.1.json')
-        with mock.patch.object(publish, 'ROOT', self.root):
-            with self.assertRaisesRegex(RuntimeError, '빌드 번호'):
-                publish.prepare(args)
-
     def test_public_feed_must_match_signed_bytes(self):
         destination = self.root / 'public-feed.properties'
         expected = b'payload=correct\nsignature=correct\n'
@@ -418,44 +288,14 @@ class ReleaseGitTests(unittest.TestCase):
 
 
 class RecoveryModeTests(unittest.TestCase):
-    def test_publish_verification_never_prepares_or_signs(self):
-        with mock.patch.object(sys, 'argv', ['publish.py', '--side', 'client', '--verify-only']), \
-             mock.patch.object(publish, 'prepare') as prepare, \
-             mock.patch.object(publish, 'verification_inputs', return_value=mock.sentinel.saved), \
-             mock.patch.object(publish, 'verify_public_release') as verify:
-            publish.main()
-        prepare.assert_not_called()
-        self.assertIs(verify.call_args.args[1], mock.sentinel.saved)
-
-    def test_both_verification_only_dispatches_saved_release_checks(self):
+    def test_verification_only_checks_the_complete_public_release(self):
         with mock.patch.object(sys, 'argv', ['release.py', '--side', 'both', '--verify-only']), \
              mock.patch.object(release, 'release_lock', return_value=contextlib.nullcontext()), \
              mock.patch.object(release, 'release') as publish_new, \
-             mock.patch.object(release, 'run') as run:
+             mock.patch.object(release, 'verify_latest') as verify:
             release.main()
         publish_new.assert_not_called()
-        self.assertEqual(run.call_count, 2)
-        for call, side in zip(run.call_args_list, ('client', 'server')):
-            command = call.args[0]
-            self.assertIn('--verify-only', command)
-            self.assertEqual(command[command.index('--side')+1], side)
-
-    def test_verification_uses_saved_channel_release_after_a_rebuild(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            build = root/'build/server'
-            saved = build/'release'
-            saved.mkdir(parents=True)
-            jar = saved/'better-sunlit.jar'
-            jar.write_bytes(b'published server')
-            (saved/'update.properties').write_text(feed_envelope('server', '2026.11.14.1', publish.sha256(jar)),
-                                                  encoding='utf8')
-            (build/'better-sunlit.jar').write_bytes(b'later build')
-            args = SimpleNamespace(side='server', changes=None, java_home=Path('jdk'))
-            with mock.patch.object(publish, 'ROOT', root), mock.patch.object(publish, 'run'):
-                _, _, _, verified_jar, tag, *_ = publish.verification_inputs(args)
-            self.assertEqual(verified_jar, jar)
-            self.assertEqual(tag, 'server-build-2026.11.14.1')
+        verify.assert_called_once_with()
 
 
 class ParallelRunnerTests(unittest.TestCase):
