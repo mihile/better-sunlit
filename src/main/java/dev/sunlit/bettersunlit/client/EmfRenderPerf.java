@@ -457,25 +457,28 @@ public final class EmfRenderPerf {
         private static final int MODEL_VERTEX_STRIDE = 36;
         private static final int IRIS_ENTITY_STRIDE = 56;
         private static final long SCRATCH_PTR;
-        private static final MemoryStack DUMMY_STACK;
         private static volatile Thread renderThread;
 
         static {
             long ptr = 0L;
-            MemoryStack stack = null;
             try {
                 ptr = org.lwjgl.system.MemoryUtil.nmemAlignedAlloc(
                         64L, (long) (SODIUM_BATCH_QUADS << 2) * IRIS_ENTITY_STRIDE);
-                stack = MemoryStack.create(64);
             } catch (Throwable ignored) {
                 ptr = 0L;
-                stack = null;
             }
             SCRATCH_PTR = ptr;
-            DUMMY_STACK = stack;
         }
 
         private SodiumFastPath() {
+        }
+
+        private static void pushScratch(
+                VertexBufferWriter writer, long ptr, int vertexCount, VertexFormatDescription format) {
+            // Composite writers can allocate a copy of the whole batch on the supplied stack.
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                writer.push(stack, ptr, vertexCount, format);
+            }
         }
 
         private static boolean isRenderThread() {
@@ -675,7 +678,7 @@ public final class EmfRenderPerf {
             float detFlip = det3 < 0.0F ? -1.0F : 1.0F;
 
             VertexFormatDescription irisFmt = IrisEntityFormatHolder.IRIS_ENTITY_DESC;
-            boolean useScratch = SCRATCH_PTR != 0L && DUMMY_STACK != null && isRenderThread();
+            boolean useScratch = SCRATCH_PTR != 0L && isRenderThread();
             for (int qStart = 0; qStart < quadCount; qStart += SODIUM_BATCH_QUADS) {
                 int batchQuads = Math.min(SODIUM_BATCH_QUADS, quadCount - qStart);
                 int vertexCount = batchQuads << 2;
@@ -685,7 +688,7 @@ public final class EmfRenderPerf {
                             m00, m01, m02, m10, m11, m12, m20, m21, m22, m30, m31, m32,
                             n00, n01, n02, n10, n11, n12, n20, n21, n22,
                             detFlip, colorAbgr, packedOverlay, packedLight, entityId, beId, itemId);
-                    writer.push(DUMMY_STACK, SCRATCH_PTR, vertexCount, irisFmt);
+                    pushScratch(writer, SCRATCH_PTR, vertexCount, irisFmt);
                 } else {
                     try (MemoryStack stack = MemoryStack.stackPush()) {
                         long ptr = stack.nmalloc(vertexCount * IRIS_ENTITY_STRIDE);
@@ -779,7 +782,7 @@ public final class EmfRenderPerf {
             float n10 = normMat.m10(), n11 = normMat.m11(), n12 = normMat.m12();
             float n20 = normMat.m20(), n21 = normMat.m21(), n22 = normMat.m22();
 
-            boolean useScratch = SCRATCH_PTR != 0L && DUMMY_STACK != null && isRenderThread();
+            boolean useScratch = SCRATCH_PTR != 0L && isRenderThread();
             for (int qStart = 0; qStart < quadCount; qStart += SODIUM_BATCH_QUADS) {
                 int batchQuads = Math.min(SODIUM_BATCH_QUADS, quadCount - qStart);
                 int vertexCount = batchQuads << 2;
@@ -789,7 +792,7 @@ public final class EmfRenderPerf {
                             m00, m01, m02, m10, m11, m12, m20, m21, m22, m30, m31, m32,
                             n00, n01, n02, n10, n11, n12, n20, n21, n22,
                             colorAbgr, packedOverlay, packedLight);
-                    writer.push(DUMMY_STACK, SCRATCH_PTR, vertexCount, format);
+                    pushScratch(writer, SCRATCH_PTR, vertexCount, format);
                 } else {
                     try (MemoryStack stack = MemoryStack.stackPush()) {
                         long ptr = stack.nmalloc(vertexCount * MODEL_VERTEX_STRIDE);
@@ -1819,15 +1822,13 @@ public final class EmfRenderPerf {
                     float nz = org.joml.Math.fma(n02, onx, org.joml.Math.fma(n12, ony, n22 * onz));
                     int normPacked = NormI8.pack(nx, ny, nz);
 
-                    if (SodiumFastPath.SCRATCH_PTR != 0L
-                            && SodiumFastPath.DUMMY_STACK != null
-                            && SodiumFastPath.isRenderThread()) {
+                    if (SodiumFastPath.SCRATCH_PTR != 0L && SodiumFastPath.isRenderThread()) {
                         long ptr = SodiumFastPath.SCRATCH_PTR;
                         writeBakedQuadVerts(
                                 ptr, verts,
                                 m00, m01, m02, m10, m11, m12, m20, m21, m22, m30, m31, m32,
                                 color, overlay, light, normPacked, entityId, beId, itemId, midU, midV, tangent);
-                        writer.push(SodiumFastPath.DUMMY_STACK, ptr, 4, irisFmt);
+                        SodiumFastPath.pushScratch(writer, ptr, 4, irisFmt);
                     } else {
                         try (MemoryStack stack = MemoryStack.stackPush()) {
                             long ptr = stack.nmalloc(4 * 56);
@@ -1842,16 +1843,14 @@ public final class EmfRenderPerf {
                 } else {
                     net.minecraft.core.Direction d = quad.getLightFace();
                     float dx = d.m_122429_(), dy = d.m_122430_(), dz = d.m_122431_();
-                    if (SodiumFastPath.SCRATCH_PTR != 0L
-                            && SodiumFastPath.DUMMY_STACK != null
-                            && SodiumFastPath.isRenderThread()) {
+                    if (SodiumFastPath.SCRATCH_PTR != 0L && SodiumFastPath.isRenderThread()) {
                         long ptr = SodiumFastPath.SCRATCH_PTR;
                         writeBakedQuadVertsPerVertNorm(
                                 ptr, verts, dx, dy, dz,
                                 m00, m01, m02, m10, m11, m12, m20, m21, m22, m30, m31, m32,
                                 n00, n01, n02, n10, n11, n12, n20, n21, n22,
                                 color, overlay, light, entityId, beId, itemId, midU, midV, tangent);
-                        writer.push(SodiumFastPath.DUMMY_STACK, ptr, 4, irisFmt);
+                        SodiumFastPath.pushScratch(writer, ptr, 4, irisFmt);
                     } else {
                         try (MemoryStack stack = MemoryStack.stackPush()) {
                             long ptr = stack.nmalloc(4 * 56);
@@ -1958,13 +1957,13 @@ public final class EmfRenderPerf {
         int l2 = me.jellysquid.mods.sodium.client.util.ModelQuadUtil.mergeBakedLight(quad.getLight(2), light);
         int l3 = me.jellysquid.mods.sodium.client.util.ModelQuadUtil.mergeBakedLight(quad.getLight(3), light);
 
-        if (SodiumFastPath.SCRATCH_PTR != 0L && SodiumFastPath.DUMMY_STACK != null && SodiumFastPath.isRenderThread()) {
+        if (SodiumFastPath.SCRATCH_PTR != 0L && SodiumFastPath.isRenderThread()) {
             long ptr = SodiumFastPath.SCRATCH_PTR;
             writeIrisQuadVert(ptr, wx0, wy0, wz0, c0, u0, v0, overlay, l0, np0, entityId, beId, itemId, midU, midV, tangent);
             writeIrisQuadVert(ptr + 56L, wx1, wy1, wz1, c1, u1, v1, overlay, l1, np1, entityId, beId, itemId, midU, midV, tangent);
             writeIrisQuadVert(ptr + 112L, wx2, wy2, wz2, c2, u2, v2, overlay, l2, np2, entityId, beId, itemId, midU, midV, tangent);
             writeIrisQuadVert(ptr + 168L, wx3, wy3, wz3, c3, u3, v3, overlay, l3, np3, entityId, beId, itemId, midU, midV, tangent);
-            writer.push(SodiumFastPath.DUMMY_STACK, ptr, 4, irisFmt);
+            SodiumFastPath.pushScratch(writer, ptr, 4, irisFmt);
         } else {
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 long ptr = stack.nmalloc(4 * 56);
@@ -2088,7 +2087,6 @@ public final class EmfRenderPerf {
                 || IrisEntityFormatHolder.IS_SHADER_IN_USE == null
                 || IrisEntityFormatHolder.GET_EXTENDED_VF == null
                 || SodiumFastPath.SCRATCH_PTR == 0L
-                || SodiumFastPath.DUMMY_STACK == null
                 || !SodiumFastPath.isRenderThread()) {
             return false;
         }
@@ -2184,7 +2182,7 @@ public final class EmfRenderPerf {
                 }
                 cur += 224L;
                 if (++batchQuads == SODIUM_BATCH_QUADS) {
-                    writer.push(SodiumFastPath.DUMMY_STACK, basePtr, batchQuads << 2, irisFmt);
+                    SodiumFastPath.pushScratch(writer, basePtr, batchQuads << 2, irisFmt);
                     batchQuads = 0;
                     cur = basePtr;
                 }
@@ -2192,7 +2190,7 @@ public final class EmfRenderPerf {
                 continue;
             }
             if (batchQuads > 0) {
-                writer.push(SodiumFastPath.DUMMY_STACK, basePtr, batchQuads << 2, irisFmt);
+                SodiumFastPath.pushScratch(writer, basePtr, batchQuads << 2, irisFmt);
                 batchQuads = 0;
                 cur = basePtr;
             }
@@ -2201,7 +2199,7 @@ public final class EmfRenderPerf {
         }
 
         if (batchQuads > 0) {
-            writer.push(SodiumFastPath.DUMMY_STACK, basePtr, batchQuads << 2, irisFmt);
+            SodiumFastPath.pushScratch(writer, basePtr, batchQuads << 2, irisFmt);
         }
         return true;
     }
