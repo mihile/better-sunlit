@@ -20,7 +20,7 @@ common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
 assert len(common_mixins) == 39 and "DewDropSprinklerMixin" in common_mixins, common_mixins
 assert {"PerfQuarkSharedChatMixin", "PerfJourneyMapResetMixin", "PerfQuickPackMixin", "PerfObjTokenizerMixin", "PerfCodepointMapMixin"}.issubset(client_mixins)
-assert len(client_mixins) == 149 and {
+assert len(client_mixins) == 151 and {
     "EmiItemLookupMixin", "EmiCraftingSpecAccessor", "EmiSpecRecipeFillerMixin",
     "PerfBlockModelShaperMixin", "LegacySpriteContentsTransparencyMixin",
     "PerfMysticalOakTreeLoreMixin", "RottenCreaturesModelCompatMixin", "SnowPigModelCompatMixin",
