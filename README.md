@@ -2,7 +2,7 @@
 
 선릿 밸리를 위한 개인 기능·호환 모드입니다. Minecraft 1.20.1 / Forge 47.4 / Stardew Fishing 3.7에서 사용합니다.
 
-소스와 업데이트는 이 저장소의 **[client](https://github.com/mihile/better-sunlit/tree/client)** · **[server](https://github.com/mihile/better-sunlit/tree/server)** 브랜치로 나눕니다. 각 환경은 자기 브랜치의 서명된 업데이트만 받습니다. 두 JAR을 같은 환경에 동시에 넣지 않습니다.
+일반 클라이언트와 서버는 같은 GitHub 릴리스에서 각자 필요한 JAR을 내려받고 서명을 확인합니다.
 
 [최신 다운로드](https://github.com/mihile/better-sunlit/releases/latest)의 Assets에서 서버용, 일반 클라이언트용, 서버에 Better Sunlit을 설치하지 않을 때 쓰는 [클라이언트 전용판](https://github.com/mihile/better-sunlit/tree/client-only) 중 하나를 받으세요. 이 버전부터는 받은 이름 그대로 `mods` 폴더에 넣을 수 있습니다. 일반판의 인게임 업데이트는 설치된 이름으로 파일을 교체합니다.
 
@@ -127,13 +127,15 @@ Carry On으로 든 생물의 위치·회전 보간과 모델을 유지해 Fresh 
 
 ## 설치
 
-- **클라이언트**는 [최신 클라이언트 릴리스](https://github.com/mihile/better-sunlit/releases/latest)에서 `better-sunlit.jar`을 받습니다.
-- **전용 서버**는 [서버 릴리스 목록](https://github.com/mihile/better-sunlit/releases?q=server-build-&expanded=true)에서 최신 `server-build-*`의 `better-sunlit.jar`을 받습니다.
-- 각 릴리스의 `SHA256SUMS.txt`에서 다운로드 파일의 해시를 확인할 수 있습니다. 기존 `sunlit-fishing-visuals-*.jar`은 게임 종료 후 별도 보관하고 `mods`에는 한 버전만 둡니다.
+- **전용 서버**에는 `better-sunlit-server.jar`를 넣습니다. 해골 광산 엘리베이터 등 서버 연동 기능을 제공합니다.
+- **일반 클라이언트**에는 `better-sunlit-client.jar`를 넣습니다. Better Sunlit이 설치된 서버에 접속하거나 싱글플레이할 때 사용합니다.
+- **클라이언트 전용**은 `better-sunlit-client-only.jar`를 넣습니다. 서버에 Better Sunlit이 없어도 플레이어만 쓸 수 있으며 게임 내 자동 업데이트를 제공하지 않습니다.
+
+[최신 다운로드](https://github.com/mihile/better-sunlit/releases/latest)에서 해당 JAR을 받고, 게임을 종료한 뒤 기존 Better Sunlit JAR을 교체하세요. 받은 파일명 그대로 설치합니다.
 
 Minecraft와 선릿밸리의 비공식 애드온입니다. 이 저장소에는 애드온만 있으며, 필요한 게임·모드팩·의존 모드는 각 공식 배포처에서 설치합니다. 클라이언트는 자동 업데이트 확인을 끌 수 있고, 다운로드와 교체는 사용자가 선택합니다.
 
-낚시 연출을 보려면 서버와 클라이언트 양쪽에 설치합니다. 네트워크 프로토콜은 기존 1.2.4와 같은 `3`을 유지합니다. 기존 설정·데이터를 보존하기 위해 Forge mod ID `sunlit_fish_visuals`를 유지하며 표시 이름과 배포 파일 이름은 Better Sunlit입니다.
+일반판의 서버 연동 낚시 연출은 서버와 클라이언트 양쪽에 설치합니다. 네트워크 프로토콜은 기존 1.2.4와 같은 `3`을 유지합니다. 기존 설정·데이터를 보존하기 위해 Forge mod ID `sunlit_fish_visuals`를 사용합니다.
 
 서버 업데이트는 배포 소스의 `scripts/Update-Server.ps1`을 서버의 `tools/better-sunlit/`에 두고, 시작 BAT에서 Minecraft 실행 전에 호출합니다. 서명 검증 키는 JAR에 포함되고 개인 서명 키는 배포하지 않습니다.
 

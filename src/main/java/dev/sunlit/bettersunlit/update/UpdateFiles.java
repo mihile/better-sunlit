@@ -72,11 +72,7 @@ public final class UpdateFiles {
             throw new IOException("Linked mods directory is not supported");
         }
         Path canonical = mods.resolve(SignedRelease.FILE);
-        String downloadName = switch (Build.CHANNEL) {
-            case "client" -> "better-sunlit-client.jar";
-            case "server" -> "better-sunlit-server.jar";
-            default -> throw new IOException("Unknown Better Sunlit channel");
-        };
+        String downloadName = SignedRelease.ASSET_FILE;
         Path downloaded = mods.resolve(downloadName);
         boolean hasCanonical = Files.exists(canonical, LinkOption.NOFOLLOW_LINKS);
         boolean hasDownloaded = Files.exists(downloaded, LinkOption.NOFOLLOW_LINKS);

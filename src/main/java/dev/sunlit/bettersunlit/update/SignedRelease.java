@@ -11,6 +11,7 @@ import java.util.*;
 public record SignedRelease(long build,String label,String title,String sha256,long size,URI asset,String tag,List<String> notes,byte[] envelope) {
     public static final String REPO="mihile/better-sunlit";
     public static final String FILE="better-sunlit.jar";
+    public static final String ASSET_FILE="better-sunlit-"+Build.CHANNEL+".jar";
     public static final URI FEED=URI.create("https://raw.githubusercontent.com/"+REPO+"/"+Build.CHANNEL+"/feed/update.properties");
     public static final long MAX_JAR=64L*1024*1024;
     public static Properties properties(byte[] bytes)throws IOException {
@@ -31,17 +32,20 @@ public record SignedRelease(long build,String label,String title,String sha256,l
             Signature verifier=Signature.getInstance("Ed25519");verifier.initVerify(key);verifier.update(payload);
             if(!verifier.verify(signature))throw new SignatureException("Invalid update signature");
             Properties p=properties(payload);
-            if(!required(p,"schema").equals("1") || !required(p,"channel").equals(Build.CHANNEL) || !required(p,"mod").equals("better_sunlit") || !required(p,"pack").equals("sunlit-valley") || !required(p,"version").equals("1.0.0") || !required(p,"filename").equals(FILE))throw new IOException("Incompatible update metadata");
+            if(!required(p,"schema").equals("1") || !required(p,"channel").equals(Build.CHANNEL) || !required(p,"mod").equals("better_sunlit") || !required(p,"pack").equals("sunlit-valley") || !required(p,"version").equals("1.0.0") || !required(p,"filename").equals(ASSET_FILE))throw new IOException("Incompatible update metadata");
             long build=Long.parseLong(required(p,"build")),size=Long.parseLong(required(p,"size"));
             String hash=required(p,"sha256"),tag=required(p,"tag");
-            if(build<1 || size<1024 || size>MAX_JAR || !hash.matches("[a-f0-9]{64}") || (!tag.matches("[A-Za-z0-9._-]{1,80}") || !tag.startsWith(Build.CHANNEL+"-")))throw new IOException("Invalid update bounds");
+            String label = bounded(p, "label", 80);
+            if(build<1 || size<1024 || size>MAX_JAR || !hash.matches("[a-f0-9]{64}")
+                    || !label.matches("[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}\\.[1-9][0-9]?")
+                    || !tag.equals("build-" + label))throw new IOException("Invalid update bounds");
             URI asset=URI.create(required(p,"url"));
-            URI expected=URI.create("https://github.com/"+REPO+"/releases/download/"+tag+"/"+FILE);
+            URI expected=URI.create("https://github.com/"+REPO+"/releases/download/"+tag+"/"+ASSET_FILE);
             if(!asset.equals(expected))throw new IOException("Unexpected release asset");
             List<String> notes=new ArrayList<>();
             for(int i=0;i<40 && p.containsKey("notes."+i);i++)notes.add(bounded(p,"notes."+i,1200));
             if(notes.isEmpty())throw new IOException("Missing update notes");
-            return new SignedRelease(build,bounded(p,"label",80),bounded(p,"title",100),hash,size,asset,tag,List.copyOf(notes),envelope.clone());
+            return new SignedRelease(build,label,bounded(p,"title",100),hash,size,asset,tag,List.copyOf(notes),envelope.clone());
         }catch(IllegalArgumentException e){throw new IOException("Malformed update metadata",e);}
     }
     private static String bounded(Properties p,String key,int max)throws IOException {
