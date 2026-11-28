@@ -324,6 +324,20 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "PlatformRendererRegistryMixin" -> switch (target) {
+                case "com.blackgear.platform.client.v2.render.ItemRendererRegistry" ->
+                    matchesLegacy(target,"b48448746c2335cffe6eb2b708fb9f674529d2b8fe5a231c4d17a78221ee4e9e")
+                    || matchesLegacy(target,"1300cad6a3182095275bcb1d329bbf93211a8ae4d88e10b50527682ab45ed916");
+                case "com.blackgear.platform.client.v2.render.DynamicItemRenderer" ->
+                    matchesLegacy(target,"e5e3693f15cefd3c6448d15d412be65687951c6a3399da29cf5553d76c6a2ace")
+                    || matchesLegacy(target,"9fb0b950daba588acb6540f0a8d714c4ee381d5ab01899546842aca21bf739e1");
+                case "com.blackgear.platform.client.v2.render.BlockRendererRegistry" ->
+                    matchesLegacy(target,"fea603206394e5d6b3ae70ca6a372adf825d1bc23e7d2e491c01ff2f1ab0649b");
+                case "com.blackgear.platform.client.v2.render.forge.BuiltinItemRendererRegistryImpl" ->
+                    matchesLegacy(target,"f0672bc0a4abea32f7cabf0e48b3a47b16380016850534b8c0873fe52529e4cb")
+                    || matchesLegacy(target,"69227d7d3b1aef96f40a97255e504035604d4a8eb8a5ab4be43e832afc324147");
+                default -> false;
+            };
             case "EmiItemLookupMixin" ->
                 matchesLegacy(target,"5055a0d9c6b97bfdf46ed04f6175ab152b28ac19dfdb0be5e7b69e3bf77e2e04");
             case "EmiCraftingSpecAccessor" ->
