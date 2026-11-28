@@ -1,7 +1,7 @@
 # Better Sunlit 작업 규칙
 
 - 기능 추가는 이 모드와 이 GitHub 저장소에 누적한다. 클라이언트·서버마다 별도 저장소나 기능별 새 JAR을 만들지 않는다.
-- 브랜치는 `client`, `server`다. 각 브랜치의 `release-channel.properties`와 서명된 feed를 유지한다. 공통 로직 수정은 양쪽에 반영한다.
+- 이 체크아웃의 변경은 `client-only` 브랜치에 기록한다. 기존 `client`, `server` 브랜치는 각자의 `release-channel.properties`와 서명된 feed로 배포한다.
 - 기존 `sunlit_fish_visuals` mod ID, 낚시 설정 파일과 저장 데이터 이름을 유지한다. 이름은 Better Sunlit으로 표시한다.
 - 릴리스 설명은 `releases/<label>.json`의 `changes`에 해당 버전의 변경 사항과 버그 수정을 간결하게 기록한다. 클라이언트 Better Sunlit 화면은 최신 체인지로그를 표시하며, 같은 내용을 GitHub 릴리스에도 사용한다. 기존 `features` 형식은 과거 기록 호환용으로만 지원한다.
 - 작업을 마칠 때마다 커밋 전에 `python -X utf8 tools/add_release_change.py --title "변경 제목" --detail "사용자가 체감할 변화"`로 이번 내용을 기록하고, 반환된 릴리스 JSON을 작업 파일과 같은 커밋에 포함한다. 수정은 미배포 JSON의 `changes`에 누적한다. 배포 BAT가 실행되면 한국 날짜로 버전을 확정한다. 한 채널이라도 버전을 게시하거나 태그를 등록했다면 해당 JSON을 보존한다.

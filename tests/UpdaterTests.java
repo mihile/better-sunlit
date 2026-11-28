@@ -50,7 +50,19 @@ public final class UpdaterTests {
         ok(!ReleaseNotes.read(new Properties()).get(0).contains("낚시"), "no evergreen feature fallback");
 
         ok(SignedRelease.FEED.toString().equals("https://raw.githubusercontent.com/"+SignedRelease.REPO+"/"+SIDE+"/feed/update.properties"),"Feed was initialized before channel identity");
-        if(SIDE.equals("client"))try(var in=UpdaterTests.class.getResourceAsStream("/dev/sunlit/bettersunlit/client/UpdateClient.class")){ok(in!=null,"Missing UpdateClient class");String cls=new String(in.readAllBytes(),java.nio.charset.StandardCharsets.ISO_8859_1);ok(cls.contains("m_91265_")&&!cls.contains("m_91088_"),"UpdateClient must check getOverlay (m_91265_) and never invoke reloadResourcePacks (m_91088_)");}
+        if (SIDE.equals("client")) {
+            String clientPackage = "/dev/sunlit/bettersunlit/client/";
+            ok(UpdaterTests.class.getResource(clientPackage + "UpdateClient.class") == null,
+                    "The client-only JAR must not include the in-game updater");
+            ok(UpdaterTests.class.getResource(clientPackage + "BetterSunlitMenu.class") != null,
+                    "The Better Sunlit menu must remain available");
+            try (var in = UpdaterTests.class.getResourceAsStream(clientPackage + "UpdateScreen.class")) {
+                ok(in != null, "Missing changelog screen");
+                String screen = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.ISO_8859_1);
+                ok(screen.contains("ReleaseNotes") && !screen.contains("UpdateClient") && !screen.contains("SignedRelease"),
+                        "The changelog screen must only display packaged notes");
+            }
+        }
         work=Files.createTempDirectory("prominence-updater-tests-테스트-");pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();jar=jar(2026102502L,SIDE);
         byte[] envelope=signed(metadata());valid=SignedRelease.verify(envelope,pair.getPublic());ok(valid.notes().size()==1,"Missing readable notes");
         byte[] tampered=envelope.clone();tampered[tampered.length/3]^=1;rejects(()->SignedRelease.verify(tampered,pair.getPublic()),"Accepted altered manifest");

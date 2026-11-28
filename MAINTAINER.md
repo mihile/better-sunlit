@@ -2,6 +2,8 @@
 
 ## 브랜치
 
+`client-only` 브랜치는 클라이언트판 소스를 보관합니다. `build.py --side client`로 JAR을 만든 뒤 수동 설치합니다. 아래의 서명된 피드와 GitHub 릴리스 배포는 기존 `client`, `server` 브랜치에 적용됩니다.
+
 하나의 저장소에서 `client`와 `server` 브랜치를 사용합니다. 브랜치마다 `release-channel.properties`의 `channel`이 다릅니다. 공통 낚시 로직 변경은 양쪽에 반영하고 패킷 프로토콜을 함께 검토합니다. 서버 산출물에는 클라이언트 전용 클래스와 클라이언트 Mixin을 포함하지 않습니다.
 
 업데이트 주소는 `https://raw.githubusercontent.com/mihile/better-sunlit/<client|server>/feed/update.properties`입니다. GitHub의 저장소 전체 `latest` 릴리스에 의존하지 않습니다. 릴리스 태그는 `client-build-2026.11.08.1`, `server-build-2026.11.08.1` 형식입니다.

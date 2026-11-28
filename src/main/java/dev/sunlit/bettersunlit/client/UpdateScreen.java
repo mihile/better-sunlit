@@ -1,10 +1,10 @@
 package dev.sunlit.bettersunlit.client;
 
-import dev.sunlit.bettersunlit.update.*;
+import dev.sunlit.bettersunlit.update.Build;
+import dev.sunlit.bettersunlit.update.ReleaseNotes;
 import java.util.*;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
@@ -15,9 +15,7 @@ public final class UpdateScreen extends Screen {
 
     final Screen parent;
     final UpdateBackdrop backdrop;
-    int x, y, boxW, boxH, notesTop, notesBottom, notesHeadingWidth, buttonsY, btnW, scroll;
-    Button apply, retry, close, automatic;
-    List<String> displayed = List.of();
+    int x, y, boxW, boxH, notesTop, notesBottom, scroll;
     List<Row> cachedRows;
     private static final List<String> INSTALLED_NOTES = ReleaseNotes.read(Build.META);
 
@@ -27,23 +25,11 @@ public final class UpdateScreen extends Screen {
         this.backdrop = UpdateBackdrop.capture();
     }
 
-    static List<String> installedNotes() {
-        return INSTALLED_NOTES;
-    }
-
-    List<String> notes() {
-        SignedRelease release = UpdateClient.release;
-        return ReleaseNotes.latest(Build.NUMBER, installedNotes(),
-                release == null ? -1 : release.build(), release == null ? null : release.notes());
-    }
-
     private List<Row> rows() {
-        List<String> current = notes();
-        if (cachedRows != null && current.equals(displayed)) return cachedRows;
-        displayed = current;
+        if (cachedRows != null) return cachedRows;
         List<Row> out = new ArrayList<>();
         int wrapWidth = Math.max(80, boxW - 38);
-        for (String note : current) {
+        for (String note : INSTALLED_NOTES) {
             String[] parts = note.split(" :: ", 2);
             String titlePart = note.equals(ReleaseNotes.EMPTY_NOTE)
                     ? tr("better_sunlit.update.notes.empty", ReleaseNotes.EMPTY_NOTE)
@@ -68,33 +54,12 @@ public final class UpdateScreen extends Screen {
         x = (f_96543_ - boxW) / 2;
         y = (f_96544_ - boxH) / 2;
         notesTop = y + 71;
-        notesBottom = y + boxH - 58;
-        buttonsY = y + boxH - 28;
-        btnW = (boxW - 36) / 3;
+        notesBottom = y + boxH - 36;
         cachedRows = null;
 
-        automatic = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.auto_check", "Auto Check"), b -> UpdateClient.toggleAuto())
-            .m_252987_(x + boxW - 106, y + 7, 94, 20).m_253136_());
-        String popupLabel = tr("better_sunlit.update.auto_popup", "Auto-open update popup");
-        int checkboxWidth = 24 + f_96547_.m_92895_(popupLabel);
-        int checkboxX = x + boxW - 12 - checkboxWidth;
-        notesHeadingWidth = checkboxX - (x + 14) - 8;
-        m_142416_(new Checkbox(checkboxX, y + 50, checkboxWidth, 20,
-                Component.m_237113_(popupLabel), UpdateClient.autoPopup()) {
-            @Override
-            public void m_5691_() {
-                super.m_5691_();
-                UpdateClient.setAutoPopup(m_93840_());
-            }
-        });
-        apply = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.update", "Update"), b -> {
-            if (UpdateClient.queued) f_96541_.m_91395_();
-            else UpdateClient.prepare();
-        }).m_252987_(x + 12, buttonsY, btnW, 20).m_253136_());
-        retry = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.retry", "Check Again"), b -> UpdateClient.check())
-            .m_252987_(x + 18 + btnW, buttonsY, btnW, 20).m_253136_());
-        close = m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.close", "Close"), b -> m_7379_())
-            .m_252987_(x + 24 + btnW * 2, buttonsY, btnW, 20).m_253136_());
+        int closeWidth = Math.min(96, boxW - 24);
+        m_142416_(Button.m_253074_(Component.m_264642_("better_sunlit.update.button.close", "Close"), b -> m_7379_())
+                .m_252987_(x + boxW - 12 - closeWidth, y + boxH - 28, closeWidth, 20).m_253136_());
     }
 
     @Override
@@ -109,14 +74,11 @@ public final class UpdateScreen extends Screen {
         g.m_280509_(x, y, x + boxW, y + 3, 0xFFB59BE0);
 
         g.m_280430_(f_96547_, f_96539_, x + 14, y + 13, 0xFFF1E7FF);
-        SignedRelease rel = UpdateClient.release;
-        boolean hasUpdate = rel != null && rel.build() > Build.NUMBER;
-        if (hasUpdate) UpdateClient.markViewed(rel);
-        String verLine = hasUpdate ? (Build.LABEL + "  →  " + rel.label()) : tr("better_sunlit.update.current_version", "Current version %s", Build.LABEL);
+        String verLine = tr("better_sunlit.update.current_version", "Current version %s", Build.LABEL);
         g.m_280488_(f_96547_, verLine, x + 14, y + 31, 0xFFACA6B8);
         g.m_280509_(x + 12, y + 49, x + boxW - 12, y + 50, 0xFF494153);
-        String notesLabel = tr("better_sunlit.update.changelog_for", "%s Changelog", hasUpdate ? rel.label() : Build.LABEL);
-        if (f_96547_.m_92895_(notesLabel) > notesHeadingWidth) notesLabel = tr("better_sunlit.update.changelog", "Changelog");
+        String notesLabel = tr("better_sunlit.update.changelog_for", "%s Changelog", Build.LABEL);
+        if (f_96547_.m_92895_(notesLabel) > boxW - 28) notesLabel = tr("better_sunlit.update.changelog", "Changelog");
         g.m_280488_(f_96547_, notesLabel, x + 14, y + 55, 0xFFB8A6D2);
 
         List<Row> list = rows();
@@ -139,29 +101,6 @@ public final class UpdateScreen extends Screen {
             g.m_280509_(x + boxW - 12, notesTop, x + boxW - 10, notesBottom, 0xFF3C3548);
             g.m_280509_(x + boxW - 12, notesTop + offset, x + boxW - 10, notesTop + offset + thumb, 0xFFB39AD8);
         }
-
-        g.m_280488_(f_96547_, tr(UpdateClient.statusKey, UpdateClient.statusFallback), x + 14, buttonsY - 18, UpdateClient.failed ? 0xFFE8A0A0 : 0xFFB8A6D2);
-        if (UpdateClient.BUSY.get() && hasUpdate && rel.size() > 0 && UpdateClient.downloaded > 0) {
-            int bar = boxW - 28;
-            int filled = (int) Math.min(bar, bar * UpdateClient.downloaded / Math.max(1L, rel.size()));
-            g.m_280509_(x + 14, buttonsY - 6, x + 14 + bar, buttonsY - 4, 0xFF40364C);
-            g.m_280509_(x + 14, buttonsY - 6, x + 14 + filled, buttonsY - 4, 0xFFB59BE0);
-        }
-
-        automatic.m_93666_(Component.m_264642_("better_sunlit.update.auto_check_state", "Auto Check: %s",
-                UpdateClient.auto
-                        ? Component.m_264642_("better_sunlit.update.state.on", "ON")
-                        : Component.m_264642_("better_sunlit.update.state.off", "OFF")));
-        apply.f_93623_ = UpdateClient.queued || (!UpdateClient.BUSY.get() && hasUpdate);
-        apply.m_93666_(UpdateClient.queued
-                ? Component.m_264642_("better_sunlit.update.button.quit", "Quit Game")
-                : hasUpdate
-                ? Component.m_264642_("better_sunlit.update.button.update", "Update")
-                : Component.m_264642_("better_sunlit.update.button.up_to_date", "Up to Date"));
-        retry.f_93623_ = !UpdateClient.BUSY.get() && !UpdateClient.queued;
-        close.m_93666_(hasUpdate && !UpdateClient.queued
-                ? Component.m_264642_("better_sunlit.update.button.later", "Later")
-                : Component.m_264642_("better_sunlit.update.button.close", "Close"));
 
         super.m_88315_(g, mx, my, dt);
         g.m_280262_();

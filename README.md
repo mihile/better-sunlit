@@ -6,7 +6,7 @@
 
 선릿 밸리를 위한 개인 기능·호환 모드입니다. Minecraft 1.20.1 / Forge 47.4 / Stardew Fishing 3.7에서 사용합니다.
 
-기존 배포판은 **[client](https://github.com/mihile/better-sunlit/tree/client)** · **[server](https://github.com/mihile/better-sunlit/tree/server)**에서 관리합니다. 이 클라이언트판은 별도의 체크아웃에서 빌드합니다. 설치할 때 기존 Better Sunlit 클라이언트 JAR을 교체합니다.
+클라이언트 전용판은 **[client-only](https://github.com/mihile/better-sunlit/tree/client-only)**에서 관리합니다. 기존 배포판은 **[client](https://github.com/mihile/better-sunlit/tree/client)** · **[server](https://github.com/mihile/better-sunlit/tree/server)**에서 제공됩니다. 설치할 때 기존 Better Sunlit 클라이언트 JAR을 교체합니다.
 
 ## 프레임 최적화
 
@@ -75,10 +75,10 @@ JEI 아이템 후보 생성 중 같은 후보 목록을 제한된 범위에서 �
 ## 편의성
 
 <details>
-<summary>업데이트·아이템 조회·입력과 표시 개선</summary>
+<summary>버전 정보·아이템 조회·입력과 표시 개선</summary>
 
-### 클라이언트 업데이트
-메인 메뉴의 Better Sunlit 화면에서 설치 버전과 변경 내역을 볼 수 있습니다. 이 실험판은 이 체크아웃에서 다시 빌드해 업데이트합니다.
+### 설치 버전과 변경 내역
+메인 메뉴의 Better Sunlit 화면에서 설치된 JAR에 포함된 버전과 변경 내역을 볼 수 있습니다. 새 버전은 이 브랜치에서 빌드해 수동으로 설치합니다.
 
 ### EMI 레시피와 사용처 조회
 사용·염색 등으로 데이터가 붙은 배낭과 보관함, 독 대나무 가시·양조 플라스크도 대응하는 레시피와 사용처를 조회합니다. 배낭·보관함의 특수 조합법은 실제 재료와 배치를 확인해 EMI의 + 버튼으로 조합대를 채웁니다.
