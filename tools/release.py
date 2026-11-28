@@ -15,6 +15,7 @@ import tempfile
 import time
 from publication_guard import check_worktree, check_git_tree
 from publish import release_feed_metadata
+from downloads import publish_downloads
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTANCE = ROOT.parents[1]
@@ -373,6 +374,8 @@ def release(requested, prepare_only=False):
     candidates = [initial, other] if requested == 'both' else [requested]
     sides = [side for side in candidates if needs_release(side)]
     if not sides:
+        if not prepare_only:
+            step('세 가지 용도의 다운로드 묶음', publish_downloads)
         return
 
     remote_builds = step('공개 릴리스 및 태그 확인', known_remote_builds)
@@ -407,6 +410,7 @@ def release(requested, prepare_only=False):
             verify_artifacts(data)
             publish_side(side, changes)
             completed.append(side)
+        step('세 가지 용도의 다운로드 묶음', publish_downloads)
     except Exception:
         if completed:
             print('이미 공개 완료된 채널: ' + ', '.join(completed) +
