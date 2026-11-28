@@ -33,7 +33,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Dedicated-server self-updater: periodically checks the signed server feed, notifies OP players
  * whenever they log in (with restart warning), and handles /bettersunlit update by verifying the
- * download, staging the detached ApplyUpdate helper, and gracefully restarting the server.
+ * download and staging the detached ApplyUpdate helper before shutting down the server.
+ * The launcher controls whether the server starts again.
  */
 @Mod.EventBusSubscriber(modid = SunlitFishVisuals.ID)
 public final class ServerUpdateManager {
@@ -88,7 +89,7 @@ public final class ServerUpdateManager {
     public static Component buildAvailableMessage(String currentLabel, String latestLabel) {
         return Component.m_264642_(
                 "better_sunlit.server_update.available",
-                "[Better Sunlit] A new server update is available (%s -> %s).",
+                "[Better Sunlit] Server update available (%s → %s).",
                 currentLabel, latestLabel
         ).m_130940_(ChatFormatting.GOLD);
     }
@@ -101,7 +102,7 @@ public final class ServerUpdateManager {
                         .m_131142_(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/bettersunlit update")));
         return Component.m_264642_(
                 "better_sunlit.server_update.prompt",
-                "[Better Sunlit] Run %s to update. Warning: the server will restart to apply the update.",
+                "[Better Sunlit] Run %s to install it. Players will be disconnected during the update.",
                 cmd
         ).m_130940_(ChatFormatting.YELLOW);
     }
@@ -118,7 +119,7 @@ public final class ServerUpdateManager {
                 notifyOp(player, release);
             }
         }
-        SunlitFishVisuals.LOG.info("Better Sunlit server update available: {} -> {}. Run /bettersunlit update (server will restart).",
+        SunlitFishVisuals.LOG.info("Better Sunlit server update available: {} -> {}. Run /bettersunlit update to install it. Players will be disconnected.",
                 Build.LABEL, release.label());
     }
 
@@ -163,7 +164,7 @@ public final class ServerUpdateManager {
             if (remaining == 60 || remaining == 20) {
                 broadcast(server, Component.m_264642_(
                         "better_sunlit.server_update.restarting",
-                        "[Better Sunlit] Applying server update %s. Server will restart in %s seconds!",
+                        "[Better Sunlit] Installing server version %s. Server shuts down in %s seconds.",
                         pendingRestartLabel, Integer.toString(remaining / 20)
                 ).m_130940_(ChatFormatting.RED));
             }
@@ -171,7 +172,7 @@ public final class ServerUpdateManager {
                 restartTicksRemaining = -1;
                 broadcast(server, Component.m_264642_(
                         "better_sunlit.server_update.stopping",
-                        "[Better Sunlit] Stopping server now to apply update %s...",
+                        "[Better Sunlit] Shutting down the server to install version %s.",
                         pendingRestartLabel
                 ).m_130940_(ChatFormatting.RED));
                 server.m_7570_(false);
@@ -224,7 +225,7 @@ public final class ServerUpdateManager {
         if (restartTicksRemaining > 0) {
             source.m_288197_(() -> Component.m_264642_(
                     "better_sunlit.server_update.restarting",
-                    "[Better Sunlit] Applying server update %s. Server will restart in %s seconds!",
+                    "[Better Sunlit] Installing server version %s. Server shuts down in %s seconds.",
                     pendingRestartLabel, Integer.toString(Math.max(1, (restartTicksRemaining + 19) / 20))
             ).m_130940_(ChatFormatting.RED), false);
             return 1;
@@ -266,7 +267,7 @@ public final class ServerUpdateManager {
                 availableRelease = next;
                 server.execute(() -> source.m_288197_(() -> Component.m_264642_(
                         "better_sunlit.server_update.downloading",
-                        "[Better Sunlit] Downloading & verifying server update %s... Warning: the server will restart once ready.",
+                        "[Better Sunlit] Downloading and verifying server version %s…",
                         next.label()
                 ).m_130940_(ChatFormatting.GOLD), true));
 
@@ -277,7 +278,7 @@ public final class ServerUpdateManager {
                     restartTicksRemaining = RESTART_COUNTDOWN_TICKS;
                     broadcast(server, Component.m_264642_(
                             "better_sunlit.server_update.restarting",
-                            "[Better Sunlit] Applying server update %s. Server will restart in %s seconds!",
+                            "[Better Sunlit] Installing server version %s. Server shuts down in %s seconds.",
                             next.label(), Integer.toString(RESTART_COUNTDOWN_TICKS / 20)
                     ).m_130940_(ChatFormatting.RED));
                 });
@@ -286,7 +287,7 @@ public final class ServerUpdateManager {
                 String reason = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : "");
                 server.execute(() -> source.m_81352_(Component.m_264642_(
                         "better_sunlit.server_update.failed",
-                        "[Better Sunlit] Server update failed (%s). Keeping current version running.",
+                        "[Better Sunlit] Could not prepare the server update (%s). The current version is still running.",
                         reason)));
             } finally {
                 BUSY.set(false);

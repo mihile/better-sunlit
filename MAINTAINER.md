@@ -64,11 +64,11 @@ python -X utf8 tools/add_release_change.py --title "변경 제목" --detail "사
 
 ## 교체와 복원
 
-일반 클라이언트용 `better-sunlit-client.jar`과 서버용 `better-sunlit-server.jar`는 다운로드한 이름으로 설치할 수 있습니다. 기존 `better-sunlit.jar`도 지원합니다. 같은 환경에는 JAR 하나만 두세요. 서버 시작 전 자동 업데이트에서 다운로드 이름을 사용하려면 이 버전의 `Update-Server.ps1`을 적용합니다.
+일반 클라이언트용 `better-sunlit-client.jar`과 서버용 `better-sunlit-server.jar`는 다운로드한 이름으로 설치할 수 있습니다. 기존 `better-sunlit.jar`도 지원합니다. 같은 환경에는 JAR 하나만 두세요.
 
 클라이언트는 다운로드 완료 후 별도의 Java 보조 프로세스가 승인한 게임 PID와 시작 시각을 확인해 종료를 기다립니다. 설치된 JAR의 해시가 승인 당시와 다르면 수동 변경을 보존하고 중단합니다. 검증된 파일만 원자적으로 교체하고 원본은 `.better-sunlit-update/backups/`에 남깁니다.
 
-서버 시작 스크립트는 `Update-Server.ps1`이 JAR 내부 보조 프로그램을 검증해 별도 파일로 꺼낸 뒤 실행합니다. Minecraft JVM에서 사용 중인 JAR을 덮어쓰지 않습니다. 서버 시작 실패 후 다음 실행에서 원래 해시가 맞는 백업만 복원합니다. `.better-sunlit-update/blocked.properties`에 실패한 빌드를 기록합니다. 원인을 해결하고 같은 빌드를 재시도하려면 서버를 종료한 상태에서 이 차단 기록을 별도 보관한 뒤 재시도합니다.
+서버용 JAR의 `/bettersunlit update`는 서명 검증이 끝난 뒤 보조 프로세스를 실행합니다. 보조 프로세스는 서버 JVM이 종료된 다음에 파일을 교체합니다. 자동 재시작은 서버 시작 스크립트의 `RESTART` 설정을 따릅니다. 기존 시작 전 업데이터인 `Update-Server.ps1`을 떼어낸 서버에서 시작에 실패하면 서버를 종료한 뒤 `.better-sunlit-update/backups/`에서 이전 JAR을 수동으로 복원합니다.
 
 배포 후 양쪽 공개 feed·JAR의 서명과 해시를 다시 확인합니다. 단위·보조 프로세스 테스트와 실제 인게임 확인은 따로 기록하고 미실행 항목을 통과했다고 표기하지 않습니다.
 
