@@ -107,9 +107,9 @@ def prepare(args):
     return build, report, changes, jar, tag, release, java, classpath
 
 
-def origin_feed(side):
+def origin_feed(side, ref=None):
     return subprocess.check_output(['gh', 'api', '-H', 'Accept: application/vnd.github.raw+json',
-        f'repos/{REPO}/contents/feed/update.properties?ref={side}'], cwd=ROOT)
+        f'repos/{REPO}/contents/feed/update.properties?ref={ref or side}'], cwd=ROOT)
 
 
 def verify_public_feed(side, expected, destination, commit=None):
@@ -223,8 +223,6 @@ def publish(args, prepared):
         feed_pushed = True
 
         verify_public_release(args, prepared, output(['git', '-C', ROOT, 'rev-parse', 'HEAD']))
-        if args.side == 'client':
-            run(['gh', 'release', 'edit', tag, '--repo', REPO, '--latest'])
     except Exception:
         if created:
             state = '피드는 push되었지만 공개 검증이 완료되지 않았습니다' if feed_pushed else '피드 push가 완료되지 않았을 수 있습니다'

@@ -68,6 +68,7 @@ class PublishFlowTests(unittest.TestCase):
             command = list(map(str, command))
             if command[:3] == ['gh', 'release', 'create']:
                 self.events.append('create')
+                self.assertIn('--latest=false', command)
                 self.assertEqual(self.git('show', 'origin/client:feed/update.properties'), 'old feed')
                 return subprocess.CompletedProcess(command, 0)
             if command[:3] == ['gh', 'release', 'edit']:
@@ -106,7 +107,7 @@ class PublishFlowTests(unittest.TestCase):
 
     def test_create_then_feed_push_then_redownload_and_verify(self):
         self.execute()
-        self.assertEqual(self.events, ['create', 'download', 'verify', 'public-feed', 'public-feed', 'verify', 'latest'])
+        self.assertEqual(self.events, ['create', 'download', 'verify', 'public-feed', 'public-feed', 'verify'])
         self.assertEqual(self.git('show', 'origin/client:feed/update.properties'), 'signed new feed')
         self.assertEqual(self.git('status', '--porcelain'), '')
 
