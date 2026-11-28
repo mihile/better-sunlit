@@ -20,6 +20,7 @@ PREFIX_TYPES = {
     'tests/': {'.java', '.py'}, 'tools/': {'.java', '.py'},
     'scripts/': {'.ps1'}, 'releases/': {'.json'},
     'localization/pack-files/': {'.json'},
+    'docs/showcase/': {'.gif'},
 }
 PATTERNS = {
     'private key header': rb'-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----',
