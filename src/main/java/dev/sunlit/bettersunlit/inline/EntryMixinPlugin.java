@@ -328,6 +328,11 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
     public boolean canApplyGate(String target,String mixin) {
         String shortName=mixin.substring(mixin.lastIndexOf('.')+1);
         return switch(shortName) {
+            case "ModernUiBitmapOverrideMixin", "ModernUiDefaultPackFontsMixin" ->
+                (target.equals("icyllis.modernui.mc.text.BitmapFont")
+                    || target.equals("icyllis.modernui.mc.text.TextLayoutEngine"))
+                && matchesLegacy("icyllis.modernui.mc.text.BitmapFont","efd589c83513b03c5892cd5af91d0b2b8d7f3290e43201b2584479f9ece44637")
+                && matchesLegacy("icyllis.modernui.mc.text.TextLayoutEngine","8a5e401609ff3a9dbd10876b221e3af59eae4ab07b312e2e1b7e431ecb32e23b");
             case "PlatformRendererRegistryMixin" -> switch (target) {
                 case "com.blackgear.platform.client.v2.render.ItemRendererRegistry" ->
                     matchesLegacy(target,"b48448746c2335cffe6eb2b708fb9f674529d2b8fe5a231c4d17a78221ee4e9e")

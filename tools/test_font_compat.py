@@ -47,7 +47,8 @@ with zipfile.ZipFile(bridge, 'w') as jar:
 subprocess.run([jdk / 'java.exe', '-Djava.awt.headless=true', '-cp', str(bridge), 'FontCompatTests'],
                cwd=root / 'build/client', check=True)
 with zipfile.ZipFile(root / 'build/server/better-sunlit.jar') as jar:
-    assert not any('/client/' in n or 'FontSetMixin' in n for n in jar.namelist())
+    assert not any('/client/' in n or 'FontSetMixin' in n or 'ModernUiBitmapOverrideMixin' in n
+                   or 'ModernUiDefaultPackFontsMixin' in n for n in jar.namelist())
 print('PASS: font helpers and mixins excluded from dedicated-server JAR')
 
 # Verify every injected descriptor against the installed, pinned binaries without
@@ -57,6 +58,10 @@ for mixin, target, jar in [
      next(p for p in original_paths if p.name.endswith('-srg.jar'))),
     ('StandardFontSetMixin', 'icyllis.modernui.mc.text.StandardFontSet',
      next(p for p in original_paths if p.name.startswith('ModernUI-'))),
+    ('ModernUiBitmapOverrideMixin', 'icyllis.modernui.mc.text.BitmapFont',
+     next(p for p in original_paths if p.name.startswith('ModernUI-'))),
+    ('ModernUiDefaultPackFontsMixin', 'icyllis.modernui.mc.text.TextLayoutEngine',
+     next(p for p in original_paths if p.name.startswith('ModernUI-'))),
 ]:
     binary = subprocess.run([jdk/'javap.exe', '-p', '-s', '-classpath', str(jar), target],
                             check=True, capture_output=True, text=True, encoding='utf8').stdout
@@ -65,4 +70,4 @@ for mixin, target, jar in [
     source = (root / 'src/main/java/dev/sunlit/fishvisuals/mixin' / (mixin + '.java')).read_text(encoding='utf8')
     for method in re.findall(r'@Inject\(method = "([^"]+)"', source):
         assert method in methods, f'{mixin}: target method missing: {method}'
-print('PASS: all six font injection targets match installed Minecraft/ModernUI descriptors')
+print('PASS: all font injection targets match installed Minecraft/ModernUI descriptors')
