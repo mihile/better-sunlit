@@ -56,11 +56,12 @@ def verify_channel(side, source, feed, metadata):
     with zipfile.ZipFile(jar) as bundle:
         require(bundle.read('assets/better_sunlit/update-public-key.der') == key.read_bytes(),
                 f'{side} JAR의 공개 검증 키가 저장소의 키와 다릅니다.')
+        named_install = 'namedInstall=true' in bundle.read(BUILD_META).decode('utf8').splitlines()
     bin_dir = JAVA_HOME / 'bin'
     run(bin_dir/'javac.exe', '--release', '17', '-cp', jar, '-d', source, ROOT/'tools/VerifyRelease.java')
     run(bin_dir/'java.exe', '-cp', str(source) + os.pathsep + str(jar),
         'VerifyRelease', source/'update.properties', jar)
-    return jar
+    return jar, named_install
 
 
 def build_client_only(commit, working):
@@ -90,6 +91,7 @@ def build_client_only(commit, working):
 def prepare_assets(tag, commit, feeds, releases):
     folder = ROOT / 'build/downloads' / tag
     folder.mkdir(parents=True, exist_ok=True)
+    rename_required = []
     with tempfile.TemporaryDirectory(prefix='bs-downloads-') as temporary:
         working = Path(temporary)
         for side in ('client', 'server'):
@@ -97,11 +99,17 @@ def prepare_assets(tag, commit, feeds, releases):
             source.mkdir()
             run('gh', 'release', 'download', releases[side]['tag'], '--repo', REPO,
                 '--dir', source, '--pattern', FILENAME, '--pattern', 'update.properties')
-            shutil.copyfile(verify_channel(side, source, feeds[side], releases[side]), folder/ASSETS[side])
+            jar, named_install = verify_channel(side, source, feeds[side], releases[side])
+            shutil.copyfile(jar, folder/ASSETS[side])
+            if not named_install:
+                rename_required.append(f'`{ASSETS[side]}`')
         jar, label = build_client_only(commit, working)
         shutil.copyfile(jar, folder/ASSETS['client-only'])
 
     hashes = {name: sha256(folder/name) for name in ASSETS.values()}
+    install = '사용하는 환경에 맞는 파일 하나를 골라 받은 이름 그대로 `mods` 폴더에 넣으세요.'
+    if rename_required:
+        install += '\n' + ', '.join(rename_required) + '의 경우 인게임 업데이트에 `better-sunlit.jar`라는 이름이 필요합니다.'
     notes = f"""## 다운로드
 
 | 파일 | 설치 대상 | 빌드 |
@@ -110,7 +118,7 @@ def prepare_assets(tag, commit, feeds, releases):
 | `{ASSETS['client']}` | 일반 클라이언트 | [{releases['client']['label']}](https://github.com/{REPO}/releases/tag/{releases['client']['tag']}) |
 | `{ASSETS['client-only']}` | 서버에 Better Sunlit을 설치하지 않고 클라이언트만 쓸 때 | [{label} ({commit[:7]})](https://github.com/{REPO}/tree/{commit}) |
 
-사용하는 환경에 맞는 파일 하나를 골라 `better-sunlit.jar`로 이름을 바꾸고 `mods` 폴더에 넣으세요.
+{install}
 클라이언트 전용판은 인게임 업데이트를 제공하지 않습니다.
 
 <details>

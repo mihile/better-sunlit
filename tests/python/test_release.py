@@ -298,6 +298,25 @@ class ReleaseGitTests(unittest.TestCase):
     def test_server_only_from_client_branch(self):
         self.check_single_channel_from_opposite_branch('server', 'client')
 
+    def test_local_client_build_preserves_the_installed_download_name(self):
+        instance = self.root.parent / 'instance'
+        mods = instance / 'minecraft/mods'
+        mods.mkdir(parents=True)
+        downloaded = mods / 'better-sunlit-client.jar'
+        legacy = mods / 'better-sunlit.jar'
+        downloaded.write_bytes(b'old client')
+        self.write('build/client/better-sunlit.jar', 'new client')
+
+        with mock.patch.object(release, 'INSTANCE', instance), \
+             mock.patch.object(release, 'is_client_build_current', return_value=True):
+            release.local_build('client')
+            self.assertEqual(downloaded.read_bytes(), b'new client')
+            self.assertFalse(legacy.exists())
+            legacy.write_bytes(b'duplicate')
+            with self.assertRaisesRegex(RuntimeError, 'JAR 한 개'):
+                release.local_build('client')
+            self.assertEqual(legacy.read_bytes(), b'duplicate')
+
     def test_concurrent_release_lock_is_rejected(self):
         with release.release_lock():
             with self.assertRaisesRegex(RuntimeError, '실행 중'):

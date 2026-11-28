@@ -87,6 +87,8 @@ python tools/publish.py --side client --changes releases/20261108.2.json
 
 ## 교체와 복원
 
+일반 클라이언트용 `better-sunlit-client.jar`과 서버용 `better-sunlit-server.jar`는 다운로드한 이름으로 설치할 수 있습니다. 기존 `better-sunlit.jar`도 지원합니다. 같은 환경에는 JAR 하나만 두세요. 서버 시작 전 자동 업데이트에서 다운로드 이름을 사용하려면 이 버전의 `Update-Server.ps1`을 적용합니다.
+
 클라이언트는 다운로드 완료 후 별도의 Java 보조 프로세스가 승인한 게임 PID와 시작 시각을 확인해 종료를 기다립니다. 설치된 JAR의 해시가 승인 당시와 다르면 수동 변경을 보존하고 중단합니다. 검증된 파일만 원자적으로 교체하고 원본은 `.better-sunlit-update/backups/`에 남깁니다.
 
 서버 시작 스크립트는 `Update-Server.ps1`이 JAR 내부 보조 프로그램을 검증해 별도 파일로 꺼낸 뒤 실행합니다. Minecraft JVM에서 사용 중인 JAR을 덮어쓰지 않습니다. 서버 시작 실패 후 다음 실행에서 원래 해시가 맞는 백업만 복원합니다. `.better-sunlit-update/blocked.properties`에 실패한 빌드를 기록합니다. 원인을 해결하고 같은 빌드를 재시도하려면 서버를 종료한 상태에서 이 차단 기록을 별도 보관한 뒤 재시도합니다.

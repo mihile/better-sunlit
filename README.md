@@ -4,7 +4,7 @@
 
 소스와 업데이트는 이 저장소의 **[client](https://github.com/mihile/better-sunlit/tree/client)** · **[server](https://github.com/mihile/better-sunlit/tree/server)** 브랜치로 나눕니다. 각 환경은 자기 브랜치의 서명된 업데이트만 받습니다. 두 JAR을 같은 환경에 동시에 넣지 않습니다.
 
-[최신 다운로드](https://github.com/mihile/better-sunlit/releases/latest)의 Assets에서 서버용, 일반 클라이언트용, 서버에 Better Sunlit을 설치하지 않을 때 쓰는 [클라이언트 전용판](https://github.com/mihile/better-sunlit/tree/client-only) 중 하나를 고르세요. 설치할 때 파일 이름을 `better-sunlit.jar`로 바꿉니다.
+[최신 다운로드](https://github.com/mihile/better-sunlit/releases/latest)의 Assets에서 서버용, 일반 클라이언트용, 서버에 Better Sunlit을 설치하지 않을 때 쓰는 [클라이언트 전용판](https://github.com/mihile/better-sunlit/tree/client-only) 중 하나를 받으세요. 이 버전부터는 받은 이름 그대로 `mods` 폴더에 넣을 수 있습니다. 일반판의 인게임 업데이트는 설치된 이름으로 파일을 교체합니다.
 
 ## 프레임 최적화
 

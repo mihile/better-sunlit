@@ -15,7 +15,7 @@ import tempfile
 import time
 from publication_guard import check_worktree, check_git_tree
 from publish import release_feed_metadata
-from downloads import publish_downloads
+from downloads import ASSETS, publish_downloads
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTANCE = ROOT.parents[1]
@@ -345,6 +345,16 @@ def is_client_build_current(release_path, data):
 def local_build(side, force=False):
     if side != 'client':
         raise RuntimeError('로컬 적용은 클라이언트만 지원합니다.')
+    mods = INSTANCE / 'minecraft' / 'mods'
+    canonical = mods / 'better-sunlit.jar'
+    downloaded = mods / ASSETS[side]
+    installed = [path for path in (canonical, downloaded, mods / ASSETS['client-only'], mods / ASSETS['server'])
+                 if path.exists() or path.is_symlink()]
+    if len(installed) > 1 or (installed and installed[0] not in (canonical, downloaded)):
+        raise RuntimeError('mods에 일반 Better Sunlit 클라이언트 JAR 한 개만 설치한 뒤 다시 실행하세요.')
+    target_jar = installed[0] if installed else canonical
+    if target_jar.is_symlink() or (target_jar.exists() and not target_jar.is_file()):
+        raise RuntimeError(f'일반 파일이 아닌 Better Sunlit JAR입니다: {target_jar}')
     release_path, data = latest_release_meta()
     built_jar = ROOT / 'build' / side / 'better-sunlit.jar'
     if not force and is_client_build_current(release_path, data):
@@ -353,7 +363,6 @@ def local_build(side, force=False):
         build_both(data)
         step('전체 검사', run, [sys.executable, '-X', 'utf8', 'tools/test.py'])
         verify_artifacts(data)
-    target_jar = INSTANCE / 'minecraft' / 'mods' / 'better-sunlit.jar'
     target_jar.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(built_jar, target_jar)
     print(f'로컬 클라이언트 모드 적용 완료: {target_jar}', flush=True)
