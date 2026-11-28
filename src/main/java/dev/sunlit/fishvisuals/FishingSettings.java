@@ -95,8 +95,17 @@ public final class FishingSettings {
     }
 
     public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, boolean includeServerUpdate) {
+        registerCommands(dispatcher, includeServerUpdate, false);
+    }
+
+    public static void registerClientCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        registerCommands(dispatcher, false, true);
+    }
+
+    private static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, boolean includeServerUpdate,
+                                         boolean local) {
         var root = Commands.m_82127_("bettersunlit")
-            .requires(source -> source.m_6761_(2) || source.m_81377_().m_129792_())
+            .requires(source -> local || source.m_6761_(2) || source.m_81377_().m_129792_())
             .executes(context -> {
                 context.getSource().m_288197_(() -> Component.m_264642_(
                         includeServerUpdate ? "better_sunlit.command.server_usage" : "better_sunlit.command.singleplayer_usage",

@@ -86,11 +86,14 @@ final class EntityDataOrder {
 
             List<Slot> slots = registrations.stream().map(Registration::slot).toList();
             int prefixCount = layout.prefix.size();
-            if (slots.size() != prefixCount + layout.server.size()
-                    || !slots.subList(0, prefixCount).equals(layout.prefix)) return false;
+            if (slots.size() < prefixCount || !slots.subList(0, prefixCount).equals(layout.prefix)) return false;
             List<Slot> modSlots = slots.subList(prefixCount, slots.size());
-            if (modSlots.equals(layout.server)
-                    || !new HashSet<>(modSlots).equals(Set.copyOf(layout.server))) return false;
+            // Society 4.2.2 has the same command and Species fields, without Backport's coat slots.
+            List<Slot> server = modSlots.size() == layout.server.size() ? layout.server
+                    : target.name.endsWith("/Wolf") ? List.of(COMMAND, BEWEREAGER, CURED_BEWEREAGER)
+                    : List.of(COMMAND, NATURAL_VARIANT);
+            if (modSlots.equals(server) || modSlots.size() != server.size()
+                    || !new HashSet<>(modSlots).equals(Set.copyOf(server))) return false;
             for (int i = prefixCount + 1; i < registrations.size(); i++) {
                 if (registrations.get(i).instructionIndex != registrations.get(i - 1).instructionIndex + 4) {
                     return false;
@@ -99,8 +102,8 @@ final class EntityDataOrder {
 
             // Each four-instruction registration has the same stack shape. Move the
             // serializer and its destination together so all getters retain their field.
-            for (int i = 0; i < layout.server.size(); i++) {
-                Slot slot = layout.server.get(i);
+            for (int i = 0; i < server.size(); i++) {
+                Slot slot = server.get(i);
                 Registration registration = registrations.get(prefixCount + i);
                 registration.field.name = slot.field;
                 registration.serializer.name = slot.serializer;

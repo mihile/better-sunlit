@@ -759,6 +759,7 @@
   "better_sunlit.inline.fba547c4617526e5": "입력하려면 클릭하세요...",
   "better_sunlit.inline.51b0ceb5cc08d4d9": "라벨 옵션",
   "better_sunlit.update.status.checking": "업데이트 확인 중…",
+  "better_sunlit.update.status.local_build": "클라이언트 전용 빌드 · 이 작업 폴더에서 업데이트",
   "better_sunlit.update.status.available": "새 업데이트가 있어요",
   "better_sunlit.update.status.latest": "최신 버전입니다",
   "better_sunlit.update.status.check_failed": "업데이트를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.",

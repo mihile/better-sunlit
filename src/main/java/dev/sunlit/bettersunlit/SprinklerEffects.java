@@ -1,6 +1,5 @@
 package dev.sunlit.bettersunlit;
 
-import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -20,7 +19,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
@@ -33,7 +31,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
-@Mod.EventBusSubscriber(modid = SunlitFishVisuals.ID)
 public final class SprinklerEffects {
     private static final int COLLECT_TICKS = 4;
     private static final int SPRAY_TICKS = 18;

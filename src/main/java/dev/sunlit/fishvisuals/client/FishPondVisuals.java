@@ -22,6 +22,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
@@ -238,19 +239,33 @@ public final class FishPondVisuals {
             PONDS.remove(removed);
         }
         for (FishPondSync.PondSnapshot snap : packet.updates()) {
-            if (snap.fishId() == null || snap.fishId().isEmpty() || snap.population() <= 0) {
-                PONDS.remove(snap.pos());
-                continue;
-            }
-            ResourceLocation rawId = ResourceLocation.m_135820_(snap.fishId());
-            ResourceLocation modelId = rawId == null ? null : CatchModelIds.resolve(rawId);
-            if (modelId == null) {
-                PONDS.remove(snap.pos());
-                continue;
-            }
-            PondVisual pond = PONDS.computeIfAbsent(snap.pos().m_7949_(), PondVisual::new);
-            pond.updateSpec(modelId, Math.min(MAX_VISIBLE_FISH, snap.population()), Math.max(1, snap.maxPopulation()));
+            updatePond(snap);
         }
+    }
+
+    /** Reuses a normal Jade response for a pond the player inspected. */
+    public static void receiveJadeData(CompoundTag tag) {
+        if (tag == null || !tag.m_128425_("x", 3) || !tag.m_128425_("y", 3) || !tag.m_128425_("z", 3)
+                || !tag.m_128425_("type", 8) || !tag.m_128441_("population")) return;
+        syncLevel();
+        if (currentLevel == null) return;
+        var pos = new BlockPos(tag.m_128451_("x"), tag.m_128451_("y"), tag.m_128451_("z"));
+        if (!currentLevel.m_46805_(pos)) return;
+        var block = currentLevel.m_8055_(pos).m_60734_();
+        if (FishPondSync.FISH_POND_BLOCK_ID.equals(ForgeRegistries.BLOCKS.getKey(block))) {
+            updatePond(FishPondSync.capturePond(pos, tag));
+        }
+    }
+
+    private static void updatePond(FishPondSync.PondSnapshot snap) {
+        ResourceLocation rawId = snap.fishId() == null ? null : ResourceLocation.m_135820_(snap.fishId());
+        ResourceLocation modelId = rawId == null ? null : CatchModelIds.resolve(rawId);
+        if (modelId == null || snap.population() <= 0) {
+            PONDS.remove(snap.pos());
+            return;
+        }
+        PondVisual pond = PONDS.computeIfAbsent(snap.pos().m_7949_(), PondVisual::new);
+        pond.updateSpec(modelId, Math.min(MAX_VISIBLE_FISH, snap.population()), Math.max(1, snap.maxPopulation()));
     }
 
     @SubscribeEvent

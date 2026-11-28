@@ -10,7 +10,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
@@ -81,11 +80,6 @@ public final class FishPondSync {
         registered = true;
         NetChannel.CHANNEL.registerMessage(0, PondPacket.class, PondPacket::encode, PondPacket::decode,
                 PondPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
-        MinecraftForge.EVENT_BUS.addListener(FishPondSync::onPlayerTick);
-        MinecraftForge.EVENT_BUS.addListener(FishPondSync::onRightClickBlock);
-        MinecraftForge.EVENT_BUS.addListener(FishPondSync::onBreakBlock);
-        MinecraftForge.EVENT_BUS.addListener(FishPondSync::onPlayerLogout);
-        MinecraftForge.EVENT_BUS.addListener(FishPondSync::onServerStopped);
     }
 
     private static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {

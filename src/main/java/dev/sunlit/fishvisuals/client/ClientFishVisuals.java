@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.sunlit.fishvisuals.CatchModelIds;
 import dev.sunlit.fishvisuals.SunlitFishVisuals;
 import dev.sunlit.fishvisuals.FishTiming;
+import dev.sunlit.fishvisuals.FishingSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -105,6 +106,7 @@ public final class ClientFishVisuals {
     }
 
     private static void syncClientMagnetLock(Entity entity, Visual visual, double localNow) {
+        if (visual.localOnly) return;
         boolean lock = visual.localLandedAt < 0 || (localNow - visual.localLandedAt) < visual.timing.freshTicks();
         var data = entity.getPersistentData();
         if (lock) {
@@ -120,6 +122,20 @@ public final class ClientFishVisuals {
 
     public static boolean hasVisual(Entity entity) {return entity!=null && VISUALS.containsKey(entity.m_20148_());}
 
+    public static void startLocalCatch(ItemEntity item) {
+        syncLevel();
+        ResourceLocation model = SunlitFishVisuals.modelFor(item.m_32055_());
+        if (model == null || currentLevel != item.m_9236_() || VISUALS.containsKey(item.m_20148_())) return;
+        Visual visual = new Visual(model);
+        visual.localOnly = true;
+        visual.timing = FishingSettings.current().timing();
+        visual.entityId = item.m_19879_();
+        visual.receivedAt = localTick;
+        Vec3 velocity = item.m_20184_();
+        visual.fromYaw = visual.yaw = (float) Math.toDegrees(Math.atan2(-velocity.f_82479_, velocity.f_82481_));
+        VISUALS.put(item.m_20148_(), visual);
+    }
+
     @SubscribeEvent
     public static void tick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -133,6 +149,24 @@ public final class ClientFishVisuals {
                 Visual visual = entry.getValue();
                 Entity entity = currentLevel.m_6815_(visual.entityId);
                 if (entity != null && entry.getKey().equals(entity.m_20148_())) {
+                    if (visual.localOnly && visual.localLandedAt < 0
+                            && ((entity.m_20096_() && !entity.m_20069_())
+                            || now - visual.receivedAt >= SunlitFishVisuals.MAX_AIR_TICKS)) {
+                        visual.localLandedAt = now;
+                        visual.nextLocalKick = now + 1;
+                    }
+                    if (visual.localOnly && visual.localLandedAt >= 0 && now >= visual.nextLocalKick) {
+                        long elapsed = now - (long) visual.localLandedAt;
+                        float strength = visual.timing.strength(elapsed);
+                        if (strength > 0 && visual.timing.totalTicks() - elapsed >= 7) {
+                            visual.localKickAt = now;
+                            visual.kickStrength = strength;
+                            visual.flopSide = -visual.flopSide;
+                            visual.nextLocalKick = now + 17 + Math.round((1 - strength) * 30);
+                        } else {
+                            visual.nextLocalKick = Long.MAX_VALUE;
+                        }
+                    }
                     syncClientMagnetLock(entity, visual, now);
                 }
                 return now - visual.receivedAt > 200 && (entity == null || !entry.getKey().equals(entity.m_20148_()));
@@ -172,6 +206,9 @@ public final class ClientFishVisuals {
             visual.lastAirAge = airAge;
             int side = (item.m_20148_().getLeastSignificantBits() & 1) == 0 ? 1 : -1;
             double sinceKick = visual.localKickAt < 0 ? -1 : now - visual.localKickAt;
+            if (visual.localOnly && sinceKick >= 0 && sinceKick < 8) {
+                pose.m_85837_(0, Math.sin(sinceKick * Math.PI / 8.0) * 0.16 * visual.kickStrength, 0);
+            }
             if (CustomFishModels.has(visual.model)) {
                 FishFlopMotion flop = FishFlopMotion.sample(landed, landed ? elapsed : airAge,
                         sinceKick, visual.localKickAt < 0 ? 0 : visual.kickStrength, remaining,
@@ -299,6 +336,8 @@ public final class ClientFishVisuals {
         final float geoGroundRoll;
         int entityId;
         long receivedAt;
+        boolean localOnly;
+        long nextLocalKick;
         long landedAt = -1;
         long kickAt = -1;
         double localLandedAt = -1;

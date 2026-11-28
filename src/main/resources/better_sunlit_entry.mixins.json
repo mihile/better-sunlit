@@ -5,7 +5,6 @@
   "plugin": "dev.sunlit.bettersunlit.inline.EntryMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "DewDropSprinklerMixin",
     "EntityDataOrderMixin",
     "PerfButterflyVariantMixin",
     "PerfButterflyEntityMixin",
@@ -46,6 +45,7 @@
     "PerfKubeJsScriptFileMixin"
   ],
   "client": [
+    "ClientJadePondDataMixin",
     "EmiItemLookupMixin",
     "EmiCraftingSpecAccessor",
     "EmiSpecRecipeFillerMixin",

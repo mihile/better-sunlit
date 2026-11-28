@@ -99,6 +99,11 @@ public final class UpdateClient {
  }
 
  static void check() {
+  if ("client-only".equals(Build.META.getProperty("track"))) {
+   lastCheckStarted = System.nanoTime();
+   setStatus("better_sunlit.update.status.local_build", "Client-only build · install updates from this checkout");
+   return;
+  }
   if (queued || !BUSY.compareAndSet(false, true)) return;
   lastCheckStarted = System.nanoTime();
   setStatus("better_sunlit.update.status.checking", "Checking for updates…");

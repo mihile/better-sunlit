@@ -67,13 +67,6 @@ public final class SunlitFishVisuals {
     public SunlitFishVisuals() {
         CHANNEL.registerMessage(0, CatchPacket.class, CatchPacket::encode, CatchPacket::decode,
                 CatchPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
-        MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::tick);
-        MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::stopped);
-        MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::joined);
-        MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::left);
-        MinecraftForge.EVENT_BUS.addListener(SunlitFishVisuals::tracking);
-        MinecraftForge.EVENT_BUS.addListener(EventPriority.HIGHEST, SunlitFishVisuals::onItemPickup);
-        MinecraftForge.EVENT_BUS.addListener(FishingSettings::register);
         MinecraftForge.EVENT_BUS.addListener(EventPriority.LOWEST,
                 dev.sunlit.bettersunlit.perf.BlockOcclusionPerf::onTagsUpdated);
         net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus()
@@ -83,7 +76,7 @@ public final class SunlitFishVisuals {
         dev.sunlit.bettersunlit.husbandry.AnimalStatusSync.register();
         FishPondSync.register();
         dev.sunlit.bettersunlit.cavern.SkullCavernElevator.register();
-        LOG.info("Sunlit Fishing Visuals 1.2.4: pickup allowed when fading begins; {}",FishingSettings.current().description());
+        LOG.info("Better Sunlit client edition: local fishing visuals; {}", FishingSettings.current().description());
     }
 
     public static ResourceLocation modelFor(ItemStack stack) {

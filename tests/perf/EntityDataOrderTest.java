@@ -61,6 +61,7 @@ public final class EntityDataOrderTest {
 
         assertAligned(plugin, WOLF, client, expected);
         assertAligned(plugin, WOLF, merge(WOLF, SPECIES, command, backport), expected);
+        assertAligned(plugin, WOLF, merge(WOLF, SPECIES, command), slots(merge(WOLF, command, SPECIES)));
         plugin.postApply(WOLF, server, MIXIN, null);
         check(slots(server).equals(expected), "server order is left intact");
         plugin.postApply(WOLF, client, MIXIN, null);
@@ -99,10 +100,7 @@ public final class EntityDataOrderTest {
         assertAligned(plugin, CAT, merge(CAT, backport, COPYCATS, command), expected);
         assertAligned(plugin, CAT, merge(CAT, backport, command, COPYCATS), expected);
 
-        ClassNode incomplete = merge(CAT, COPYCATS, command);
-        List<Slot> incompleteSlots = slots(incomplete);
-        plugin.postApply(CAT, incomplete, MIXIN, null);
-        check(slots(incomplete).equals(incompleteSlots), "Cat with a missing mod registration is left intact");
+        assertAligned(plugin, CAT, merge(CAT, COPYCATS, command), slots(merge(CAT, command, COPYCATS)));
         System.out.println("PASS: real Cat registrations align with server, preserving both variants and command");
     }
 

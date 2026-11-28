@@ -305,6 +305,10 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             } catch(java.io.IOException e) { return false; }
         });
     }
+    private boolean absentOrMatchesLegacy(String name, String hash) {
+        return EntryMixinPlugin.class.getClassLoader().getResource(name.replace('.', '/') + ".class") == null
+                || matchesLegacy(name, hash);
+    }
     public boolean matches(String name) {
         return checked.computeIfAbsent(name,n->{
             String expected=HASHES.get(n);
@@ -332,6 +336,8 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
             case "EmiSpecRecipeFillerMixin" ->
                 matchesLegacy(target,"b4d19841db882a09503705526a434fc83e31330989c4423eab88322137335f92")
                 && matchesLegacy("net.p3pp3rf1y.sophisticatedcore.compat.recipeviewers.emi.CraftingSpecEmiRecipe","d72324961bc8c1c0822d01b473978f3b2e82f5babab8284c4f6501dc3844233a");
+            case "ClientJadePondDataMixin" ->
+                matchesLegacy(target,"686ed9a928bc9a9424f6895ee8c486c795c4202c7b4bb73f33a80121b3dc72f1");
             case "DewDropSprinklerMixin" ->
                 matchesLegacy(target,"5bc6aebeaef89513ddbe04c028c12af43d3c95d6b64a6ab42f611f08f011ed67")
                 && matchesLegacy("cool.bot.dewdropfarmland.block.CustomFarmland","747375052dbae2fdf406a07d59cdd9a8161ee703d875ddb9cdb78747181ea028");
@@ -339,15 +345,15 @@ public final class EntryMixinPlugin implements IMixinConfigPlugin {
               case EntityDataOrder.WOLF ->
                 (matchesLegacy(target,"81da161e6f89c84e142fd5a8a93a51b4fadc186aa0248efa891550338b61b895")
                 || matchesLegacy(target,"14f702d4b3be8a2b7e5fa250ae524b558638638fefce00c90073dfe497f6e0b3"))
-                && matchesLegacy("com.blackgear.vanillabackport.core.mixin.common.entities.WolfMixin","8fab4d812f5ab3f071efac7d08e08078758a676b3d4c4b0f79cd8b793a78439c")
+                && absentOrMatchesLegacy("com.blackgear.vanillabackport.core.mixin.common.entities.WolfMixin","8fab4d812f5ab3f071efac7d08e08078758a676b3d4c4b0f79cd8b793a78439c")
                 && matchesLegacy("com.github.alexthe668.domesticationinnovation.mixin.WolfMixin","20e28be2c81011393e6838e240d615b2045b12c2e8bda52ea5013181274c9c31")
                 && matchesLegacy("com.ninni.species.mixin.WolfMixin","d1644902bcdfd1bc5c35d89d19d208fdeb0fa8517d76b8e07ba167065ed7dec2");
               case EntityDataOrder.CAT ->
                 (matchesLegacy(target,"bc11fc6949c6d6bd502f19bc9be8976cce9b33033f3bbcc9646414fba75269e7")
                 || matchesLegacy(target,"82de89b2aaa0d710cc2fd41416803d1182d52f765cec7f21c05805e79bb47c8e"))
-                && matchesLegacy("com.blackgear.vanillabackport.core.mixin.common.entities.CatMixin","4b3d382cb10af9a0b4210e8fd1846a59b28f05c32f56c63512cdbce3659983e0")
+                && absentOrMatchesLegacy("com.blackgear.vanillabackport.core.mixin.common.entities.CatMixin","4b3d382cb10af9a0b4210e8fd1846a59b28f05c32f56c63512cdbce3659983e0")
                 && matchesLegacy("com.github.alexthe668.domesticationinnovation.mixin.CatMixin","c0a492555b94e61bfe2baeb25d73d8635cd52595ef0a1e7dfe9722ea11df9a01")
-                && matchesLegacy("com.copycatsplus.copycats.mixin.entity.CatMixin","9755109e939eb98f95e4e709301e94e04c4a1c1bf297cddba1f37d0f7122a9b2");
+                && absentOrMatchesLegacy("com.copycatsplus.copycats.mixin.entity.CatMixin","9755109e939eb98f95e4e709301e94e04c4a1c1bf297cddba1f37d0f7122a9b2");
               default -> false;
             };
             case "CarryOnRenderPoseMixin" ->

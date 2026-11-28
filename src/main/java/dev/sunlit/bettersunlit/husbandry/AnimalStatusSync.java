@@ -16,7 +16,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
@@ -113,11 +112,6 @@ public final class AnimalStatusSync {
         registered = true;
         NetChannel.CHANNEL.registerMessage(0, StatusPacket.class, StatusPacket::encode, StatusPacket::decode,
                 StatusPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
-        MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerTick);
-        MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onEntityInteract);
-        MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerChangedDimension);
-        MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onPlayerLogout);
-        MinecraftForge.EVENT_BUS.addListener(AnimalStatusSync::onServerStopped);
     }
 
     public static boolean isWatchedTool(ItemStack stack) {
@@ -270,6 +264,14 @@ public final class AnimalStatusSync {
             return (int) Math.floor(secondary.m_128459_(key));
         }
         return 0;
+    }
+
+    public static boolean isMilkable(LivingEntity animal) {
+        return animal.m_6095_().m_204039_(EntityTags.MILKABLE);
+    }
+
+    public static boolean isHusbandry(LivingEntity animal) {
+        return animal.m_6095_().m_204039_(EntityTags.HUSBANDRY);
     }
 
     private static AnimalSnapshot captureSnapshot(LivingEntity animal, long dayTime, long currentDay) {

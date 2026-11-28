@@ -59,7 +59,8 @@ public final class AnimalCooldownRenderer {
     private static final int STAGE_HALF = 2;
     private static final int STAGE_READY = 4;
     private static final int STAGE_BLOCKED = 5;
-    private static final int FRAME_COUNT = STAGE_BLOCKED + 1;
+    private static final int STAGE_UNKNOWN = 6;
+    private static final int FRAME_COUNT = STAGE_UNKNOWN + 1;
     private static final long HALF_DAY_TICKS = AnimalStatusSync.TICKS_PER_DAY / 2;
 
     private static final ResourceLocation ICON_MILK = new ResourceLocation("society", "milk");
@@ -183,27 +184,33 @@ public final class AnimalCooldownRenderer {
             if (entity.m_20280_(player) > MAX_RENDER_DIST_SQ) continue;
 
             AnimalStatusSync.AnimalSnapshot snap = STATES.get(entity.m_19879_());
-            if (snap == null) continue;
-
             ResourceLocation iconItemId;
             int stage;
             int cooldownDays = 1;
             int milkProgress = 0;
             if (mode == ToolMode.MILK_PAIL) {
-                if (entity.m_6162_() || !snap.isMilkable()) continue;
+                if (entity.m_6162_() || !(snap == null ? AnimalStatusSync.isMilkable(entity) : snap.isMilkable())) continue;
                 MilkProduceInfo info = resolveMilkInfo(entity, snap);
                 iconItemId = info.iconId();
                 cooldownDays = info.cooldownDays();
-                milkProgress = computeMilkProgress(snap, cooldownDays, dayTime, currentDay);
-                stage = isFed(snap, currentDay) ? milkProgress : STAGE_BLOCKED;
+                if (snap != null) {
+                    milkProgress = computeMilkProgress(snap, cooldownDays, dayTime, currentDay);
+                    stage = isFed(snap, currentDay) ? milkProgress : STAGE_BLOCKED;
+                } else {
+                    stage = observedStage(level, entity, true, cooldownDays, dayTime);
+                    milkProgress = stage == STAGE_UNKNOWN ? 0 : stage;
+                }
             } else if (mode == ToolMode.MAGIC_SHEARS) {
-                if (!snap.isHusbandry()) continue;
+                if (!(snap == null ? AnimalStatusSync.isHusbandry(entity) : snap.isHusbandry())) continue;
                 iconItemId = ICON_MAGIC_SHEARS;
-                stage = computeMagicStage(snap, dayTime, currentDay);
+                stage = snap == null ? observedStage(level, entity, false, 1, dayTime)
+                        : computeMagicStage(snap, dayTime, currentDay);
             } else {
-                if (entity.m_6162_() || snap.ichorState() < 0) continue;
+                if (entity.m_6162_()) continue;
+                byte ichor = snap == null ? localIchor(entity) : snap.ichorState();
+                if (ichor < 0) continue;
                 iconItemId = ICON_ICHOR;
-                stage = computeIchorStage(snap.ichorState());
+                stage = computeIchorStage(ichor);
             }
 
             IconStrip strip = getOrBuildStrip(mc, iconItemId);
@@ -228,7 +235,7 @@ public final class AnimalCooldownRenderer {
             Matrix3f norm = poseStack.m_85850_().m_252943_();
             float s = ICON_HALF_SIZE;
             emitQuad(buffers.m_6299_(renderType), mat, norm, -s, -s, s, s, u1, u0, 0xFFFFFF);
-            if (cooldownDays > 1) {
+            if (cooldownDays > 1 && stage != STAGE_UNKNOWN) {
                 ensureWhiteTexture(mc);
                 RenderType dayType = RenderType.m_110473_(WHITE_TEXTURE);
                 usedRenderTypes.add(dayType);
@@ -296,11 +303,27 @@ public final class AnimalCooldownRenderer {
 
     private static MilkProduceInfo resolveMilkInfo(LivingEntity entity, AnimalStatusSync.AnimalSnapshot snap) {
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(entity.m_6095_());
-        if (typeId != null && AnimalStatusSync.WOOLY_COW_ID.equals(typeId) && snap.isWarped()) {
+        if (AnimalStatusSync.WOOLY_COW_ID.equals(typeId) && (snap == null
+                ? entity.m_20240_(new net.minecraft.nbt.CompoundTag()).m_128451_("Variant") == 2 : snap.isWarped())) {
             return new MilkProduceInfo(ICON_WARPED_MILK, 2);
         }
         MilkProduceInfo info = typeId != null ? MILK_PRODUCE_MAP.get(typeId.toString()) : null;
         return info != null ? info : new MilkProduceInfo(ICON_MILK, 1);
+    }
+
+    private static int observedStage(ClientLevel level, LivingEntity entity, boolean milk, int days, long dayTime) {
+        long action = LocalHusbandryStatus.lastHarvest(level, entity, milk);
+        int remaining = days - (int) (dayTime / AnimalStatusSync.TICKS_PER_DAY - action / AnimalStatusSync.TICKS_PER_DAY);
+        return action < 0 || action > dayTime || remaining <= 0
+                ? STAGE_UNKNOWN : stageFromCalendar(days, remaining, action, dayTime);
+    }
+
+    private static byte localIchor(LivingEntity entity) {
+        if (!AnimalStatusSync.MAMMUTILATION_ID.equals(ForgeRegistries.ENTITY_TYPES.getKey(entity.m_6095_()))) return -1;
+        var data = entity.m_20240_(new net.minecraft.nbt.CompoundTag());
+        int ticks = data.m_128451_("IchorCooldown");
+        return data.m_128451_("IchorCount") <= 0 ? 0 : ticks <= 0 ? AnimalStatusSync.ICHOR_READY
+                : ticks <= 10 ? AnimalStatusSync.ICHOR_HALF : 0;
     }
 
     public static int computeMilkDaysRemaining(AnimalStatusSync.AnimalSnapshot snap, int cooldownDays, long currentDay) {
@@ -451,7 +474,12 @@ public final class AnimalCooldownRenderer {
                         int ng;
                         int nb;
                         int na;
-                        if (stage == STAGE_BLOCKED) {
+                        if (stage == STAGE_UNKNOWN) {
+                            nr = clampByte((int) (lum * 0.35f) + 22);
+                            ng = clampByte((int) (lum * 0.50f) + 36);
+                            nb = clampByte((int) (lum * 0.72f) + 48);
+                            na = clampByte(Math.round(a * 0.85f));
+                        } else if (stage == STAGE_BLOCKED) {
                             nr = clampByte(Math.round(lum * 0.52f) + 28);
                             ng = clampByte(Math.round(lum * 0.28f));
                             nb = clampByte(Math.round(lum * 0.28f));

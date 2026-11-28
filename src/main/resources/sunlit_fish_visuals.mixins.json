@@ -3,17 +3,12 @@
   "minVersion": "0.8",
   "package": "dev.sunlit.fishvisuals.mixin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": [
-    "StardewRewardMixin",
-    "DirectFishingRewardMixin",
-    "ItemEntityMixin"
-  ],
-  "server": [
-    "BalloonTrackingRangeMixin"
-  ],
+  "mixins": [],
   "client": [
     "BalloonEntityRendererDistanceMixin",
     "ItemEntityRendererMixin",
+    "ClientFishingBiteAccessor",
+    "ClientFishingCompletionMixin",
     "EntityWaterStateAccessor",
     "CaughtFishModelPartMixin",
     "CaughtFishEmfMixin",

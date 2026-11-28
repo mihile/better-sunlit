@@ -145,7 +145,7 @@ if not secret.exists():
  subprocess.run([JDK/'java.exe','-cp',maint,'SignRelease','keygen',secret,pub],check=True)
 if not pub.exists():raise RuntimeError('Missing public key; do not silently rotate trust')
 shutil.copy2(pub,asset/'update-public-key.der')
-identity=f'build={args.build}\nlabel={args.label}\nchannel={side}\npack=sunlit-valley\ntrack=main\n'
+identity=f'build={args.build}\nlabel={args.label}\nchannel={side}\npack=sunlit-valley\ntrack=client-only\n'
 rel_notes=[]
 for rf in sorted((ROOT/'releases').glob('*.json')):
  data=json.loads(rf.read_text(encoding='utf8'))
