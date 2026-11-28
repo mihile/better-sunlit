@@ -8,6 +8,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 import zipfile
 
 from publication_guard import check_git_tree, check_release_jar
@@ -37,14 +40,30 @@ def read(*command):
 
 
 def downloads_inputs():
-    feeds = {side: origin_feed(side) for side in ('client', 'server')}
+    sides = ('client', 'server', 'client-only')
+    prefix = 'refs/heads/'
+    lines = read('git', 'ls-remote', '--exit-code', '--heads', 'origin',
+                 *(prefix + side for side in sides))
+    heads = {ref.removeprefix(prefix): commit for commit, ref in (line.split() for line in lines.splitlines())}
+    require(heads.keys() == set(sides) and all(re.fullmatch(r'[a-f0-9]{40}', value) for value in heads.values()),
+            '세 배포 브랜치의 커밋을 확인하지 못했습니다.')
+    feeds = {side: origin_feed(side, heads[side]) for side in ('client', 'server')}
     releases = {side: release_feed_metadata(side, data.decode('utf8')) for side, data in feeds.items()}
-    ref = 'refs/heads/client-only'
-    line = read('git', 'ls-remote', '--exit-code', '--heads', 'origin', ref)
-    commit, actual_ref = line.split()
-    require(actual_ref == ref and re.fullmatch(r'[a-f0-9]{40}', commit), 'client-only 브랜치 확인 실패')
+    commit = heads['client-only']
     tag = f"downloads-{releases['client']['label']}-{releases['server']['label']}-{commit[:12]}"
-    return tag, commit, feeds, releases
+    return tag, commit, heads, feeds, releases
+
+
+def release_commit(heads):
+    run('git', 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', *heads.values())
+    # GitHub uses the target commit's date for a release's created_at.
+    # Feed commits follow the creation of the channel release tags.
+    candidates = [heads['client-only']]
+    for side in ('client', 'server'):
+        commit = read('git', 'log', '-1', '--format=%H', heads[side], '--', 'feed/update.properties')
+        require(bool(commit), f'{side} 업데이트 피드의 커밋을 찾지 못했습니다.')
+        candidates.append(commit)
+    return max(candidates, key=lambda commit: int(read('git', 'show', '-s', '--format=%ct', commit)))
 
 
 def verify_channel(side, source, feed, metadata):
@@ -144,10 +163,35 @@ def verify_assets(tag, commit, folder):
             require(sha256(Path(temporary)/name) == digest, f'GitHub 다운로드 해시 불일치: {name}')
 
 
+def verify_list_order(tag):
+    url = f'https://github.com/{REPO}/releases'
+    first = None
+    for attempt in range(4):
+        if attempt:
+            time.sleep(3)
+        try:
+            request = urllib.request.Request(url, headers={'User-Agent': 'Better-Sunlit-Release',
+                                                            'Cache-Control': 'no-cache'})
+            with urllib.request.urlopen(request, timeout=8) as response:
+                listing = response.read().decode('utf8')
+            first = re.search(r'<section\b[^>]*\bid="release-([^"]+)"', listing)
+            if first and first[1] == tag:
+                return
+        except (urllib.error.URLError, TimeoutError):
+            continue
+    actual = first[1] if first else '확인 불가'
+    raise RuntimeError(f'{tag} 묶음은 공개됐으나 Releases 첫 항목을 확인하지 못했습니다. 현재 첫 항목: {actual}')
+
+
 def publish_downloads(prepare_only=False):
-    tag, commit, feeds, releases = downloads_inputs()
+    tag, commit, heads, feeds, releases = downloads_inputs()
     latest = read('gh', 'api', f'repos/{REPO}/releases/latest', '--jq', '.tag_name')
     if not prepare_only and latest == tag:
+        # A bundle published before release ordering was supported retains its original tag.
+        target = read('gh', 'release', 'view', tag, '--repo', REPO, '--json', 'targetCommitish',
+                      '--jq', '.targetCommitish')
+        if target != commit or release_commit(heads) == target:
+            verify_list_order(tag)
         print(f'최신 다운로드 묶음과 동일합니다: {tag}')
         return
 
@@ -156,22 +200,24 @@ def publish_downloads(prepare_only=False):
     existing = next((item for page in pages for item in page if item['tag_name'] == tag), None)
     if existing is None:
         newest_label = prepare_assets(tag, commit, feeds, releases)
+    target = existing['target_commitish'] if existing is not None else release_commit(heads)
     if prepare_only:
         if existing is not None:
-            verify_assets(tag, commit, folder)
+            verify_assets(tag, target, folder)
         print(f'다운로드 묶음 사전 검증 완료: {folder}')
         return
     if existing is None:
         title = f'Better Sunlit {newest_label} · 다운로드'
-        run('gh', 'release', 'create', tag, '--repo', REPO, '--target', commit,
+        run('gh', 'release', 'create', tag, '--repo', REPO, '--target', target,
             '--title', title, '--notes-file', folder/'notes.md', '--draft', '--latest=false',
             *(f'{folder/ASSETS[side]}#{LABELS[side]}' for side in ASSETS))
-    verify_assets(tag, commit, folder)
-    require(downloads_inputs()[0] == tag, '검증 중 배포 버전이 바뀌었습니다. 다운로드 묶음을 다시 실행하세요.')
+    verify_assets(tag, target, folder)
+    require(downloads_inputs()[:2] == (tag, commit), '검증 중 배포 버전이 바뀌었습니다. 다운로드 묶음을 다시 실행하세요.')
     run('gh', 'release', 'edit', tag, '--repo', REPO, '--draft=false', '--latest')
-    verify_assets(tag, commit, folder)
+    verify_assets(tag, target, folder)
     require(read('gh', 'api', f'repos/{REPO}/releases/latest', '--jq', '.tag_name') == tag,
             'GitHub 최신 릴리스가 다운로드 묶음을 가리키지 않습니다.')
+    verify_list_order(tag)
     print(f'공개 다운로드 묶음 및 재다운로드 검증 완료: https://github.com/{REPO}/releases/tag/{tag}')
 
 
