@@ -134,6 +134,8 @@
     "PerfWaterMediaCacheMixin",
     "PerfKubeJsClientPackMixin",
     "PlatformRendererRegistryMixin",
+    "ModernUiBitmapOverrideMixin",
+    "ModernUiDefaultPackFontsMixin",
     "PerfModelBakeryPrewarmMixin",
     "PerfModelBakeEventHelperMixin",
     "PerfBakedModelOverrideRegistryAccessor",
