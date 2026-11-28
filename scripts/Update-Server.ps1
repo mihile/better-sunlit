@@ -2,8 +2,20 @@ param([string]$ServerRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Pat
 $ErrorActionPreference = 'Stop'
 try {
     $ServerRoot = (Resolve-Path -LiteralPath $ServerRoot).Path
-    $modJar = Join-Path $ServerRoot 'mods\better-sunlit.jar'
-    if (!(Test-Path -LiteralPath $modJar)) { throw 'Better Sunlit is not installed.' }
+    $mods = Get-Item -LiteralPath (Join-Path $ServerRoot 'mods') -Force
+    if (!$mods.PSIsContainer -or ($mods.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Expected a local mods directory.'
+    }
+    $installed = @(
+        'better-sunlit.jar', 'better-sunlit-server.jar' | ForEach-Object {
+            Get-Item -LiteralPath (Join-Path $mods.FullName $_) -Force -ErrorAction SilentlyContinue
+        }
+    )
+    if ($installed.Count -ne 1) { throw 'Install exactly one of better-sunlit.jar and better-sunlit-server.jar.' }
+    if ($installed[0].PSIsContainer -or ($installed[0].Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Expected a regular Better Sunlit JAR.'
+    }
+    $modJar = $installed[0].FullName
     $helperDirectory = Join-Path $ServerRoot '.better-sunlit-update\helpers'
     New-Item -ItemType Directory -Force -Path $helperDirectory | Out-Null
     Add-Type -AssemblyName System.IO.Compression.FileSystem

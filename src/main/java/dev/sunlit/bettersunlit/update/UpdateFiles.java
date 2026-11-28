@@ -47,7 +47,7 @@ public final class UpdateFiles {
             if(entry==null)throw new IOException("Installed updater build metadata missing");
             try(var in=jar.getInputStream(entry)){
                 Properties m=SignedRelease.properties(in.readNBytes(8192));
-                if(!Build.CHANNEL.equals(m.getProperty("channel")))throw new IOException("Installed JAR is not a client build");
+                if(!Build.CHANNEL.equals(m.getProperty("channel")))throw new IOException("Installed JAR is not a " + Build.CHANNEL + " build");
                 try{return Long.parseLong(SignedRelease.required(m,"build"));}catch(NumberFormatException e){throw new IOException("Invalid installed build",e);}
             }
         }
@@ -66,10 +66,27 @@ public final class UpdateFiles {
         Files.createDirectories(p);return p.toRealPath();
     }
     public static Path target(Path game)throws IOException {
-        Path root=game.toRealPath();Path mods=root.resolve("mods");
-        if(Files.isSymbolicLink(game) || Files.isSymbolicLink(mods) || !mods.toRealPath().startsWith(root))throw new IOException("Linked mods directory is not supported");
-        Path target=mods.resolve(SignedRelease.FILE);
-        if(Files.isSymbolicLink(target) || !Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS))throw new IOException("Expected compatibility filename is missing");
+        Path root = game.toRealPath();
+        Path mods = root.resolve("mods");
+        if (Files.isSymbolicLink(game) || Files.isSymbolicLink(mods) || !mods.toRealPath().startsWith(root)) {
+            throw new IOException("Linked mods directory is not supported");
+        }
+        Path canonical = mods.resolve(SignedRelease.FILE);
+        String downloadName = switch (Build.CHANNEL) {
+            case "client" -> "better-sunlit-client.jar";
+            case "server" -> "better-sunlit-server.jar";
+            default -> throw new IOException("Unknown Better Sunlit channel");
+        };
+        Path downloaded = mods.resolve(downloadName);
+        boolean hasCanonical = Files.exists(canonical, LinkOption.NOFOLLOW_LINKS);
+        boolean hasDownloaded = Files.exists(downloaded, LinkOption.NOFOLLOW_LINKS);
+        if (hasCanonical && hasDownloaded) {
+            throw new IOException("Keep only one of " + SignedRelease.FILE + " and " + downloadName + " in mods");
+        }
+        Path target = hasDownloaded ? downloaded : canonical;
+        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Expected a regular " + SignedRelease.FILE + " or " + downloadName + " in mods");
+        }
         return target;
     }
     public static void replace(Path from,Path to)throws IOException {

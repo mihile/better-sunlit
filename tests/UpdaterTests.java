@@ -10,6 +10,7 @@ import java.util.jar.*;
 
 public final class UpdaterTests {
     static final String SIDE=Build.CHANNEL,OTHER=SIDE.equals("client")?"server":"client";
+    static final String DOWNLOAD_NAME = "better-sunlit-" + SIDE + ".jar";
     static int checks;
     static KeyPair pair;
     static Path work;
@@ -35,7 +36,13 @@ public final class UpdaterTests {
         }return out.toByteArray();
     }
     static Path fixture(String name)throws Exception {
-        Path game=work.resolve(name);Files.createDirectories(game.resolve("mods"));Files.write(game.resolve("mods").resolve(SignedRelease.FILE),jar(2026102501L,SIDE));return game;
+        return fixture(name, SignedRelease.FILE);
+    }
+    static Path fixture(String name, String filename)throws Exception {
+        Path game = work.resolve(name);
+        Path mods = Files.createDirectories(game.resolve("mods"));
+        Files.write(mods.resolve(filename), jar(2026102501L, SIDE));
+        return game;
     }
     static Path incoming(Path game)throws Exception {Path p=game.resolve(".better-sunlit-update/incoming").resolve(valid.sha256()+".jar");Files.createDirectories(p.getParent());Files.write(p,jar);return p;}
     static void mutation(String key,String value)throws Exception {Properties p=metadata();p.setProperty(key,value);rejects(()->SignedRelease.verify(signed(p),pair.getPublic()),"Accepted invalid "+key);}
@@ -72,9 +79,31 @@ public final class UpdaterTests {
         Path corrupt=fixture("corrupt-candidate");String original=UpdateFiles.sha(corrupt.resolve("mods").resolve(SignedRelease.FILE));Path broken=incoming(corrupt);Files.writeString(broken,"broken");rejects(()->ApplyUpdate.apply(corrupt,broken,valid,original),"Applied broken candidate");ok(UpdateFiles.sha(corrupt.resolve("mods").resolve(SignedRelease.FILE)).equals(original),"Damaged original after verification failure");
         Path symbolic=fixture("symlink");Path outside=work.resolve("outside-mods");Files.createDirectories(outside);
         try{Files.delete(symbolic.resolve("mods").resolve(SignedRelease.FILE));Files.delete(symbolic.resolve("mods"));Files.createSymbolicLink(symbolic.resolve("mods"),outside);rejects(()->UpdateFiles.target(symbolic),"Accepted linked mods");}catch(FileSystemException unsupported){System.out.println("SKIP: symbolic links require OS privilege");}
+        testDownloadNames();
         testAfterExit(args[0]);
         testChangedPlan(args[0]);
         System.out.println("PASS: "+checks+" updater checks; isolated filesystem and helper processes only; no Minecraft/server/world launched.");
+    }
+    static void testDownloadNames()throws Exception {
+        Path game = fixture("download name", DOWNLOAD_NAME);
+        Path named = game.resolve("mods").resolve(DOWNLOAD_NAME);
+        Path legacy = named.resolveSibling(SignedRelease.FILE);
+        Path staged = incoming(game);
+        String original = UpdateFiles.sha(named);
+        ok(UpdateFiles.target(game).equals(named.toRealPath()), "Updater did not select the downloaded filename");
+
+        Files.copy(named, legacy);
+        rejects(() -> ApplyUpdate.apply(game, staged, valid, original), "Accepted two installed compatibility JARs");
+        ok(UpdateFiles.sha(named).equals(original) && UpdateFiles.sha(legacy).equals(original),
+                "Duplicate files changed");
+        Files.delete(legacy);
+
+        Files.write(named, jar(2026102501L, OTHER));
+        rejects(() -> ApplyUpdate.apply(game, staged, valid, UpdateFiles.sha(named)),
+                "Accepted an opposite-channel JAR with the expected filename");
+        Path wrongName = named.resolveSibling("better-sunlit-" + OTHER + ".jar");
+        Files.move(named, wrongName);
+        rejects(() -> UpdateFiles.target(game), "Selected the other channel's filename");
     }
     static void testAfterExit(String productionHelper)throws Exception {
         Path testHelper=work.resolve("test-worker.jar");
@@ -84,13 +113,14 @@ public final class UpdaterTests {
             }
         }
         String java=Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name").startsWith("Windows")?"java.exe":"java").toString();
-        Path game=fixture("wait for parent 종료");Path target=game.resolve("mods").resolve(SignedRelease.FILE);String before=UpdateFiles.sha(target);incoming(game);Path root=game.resolve(".better-sunlit-update");Path gate=work.resolve("parent-exit.gate");
+        Path game=fixture("wait for parent 종료",DOWNLOAD_NAME);Path target=game.resolve("mods").resolve(DOWNLOAD_NAME);String before=UpdateFiles.sha(target);incoming(game);Path root=game.resolve(".better-sunlit-update");Path gate=work.resolve("parent-exit.gate");
         String parentCp=Path.of(UpdaterTests.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString();Process parent=new ProcessBuilder(java,"-cp",parentCp,"UpdaterTests$Parent",gate.toString()).start();
         Properties p=new Properties();p.setProperty("game",game.toString());p.setProperty("parentPid",Long.toString(parent.pid()));p.setProperty("parentStarted",parent.toHandle().info().startInstant().orElseThrow().toString());p.setProperty("build",Long.toString(valid.build()));p.setProperty("oldSha256",before);UpdateFiles.writeProperties(root.resolve("pending.properties"),p);Files.write(root.resolve("manifest.properties"),signed(metadata()));
         Process worker=new ProcessBuilder(java,"-cp",testHelper.toString(),ApplyUpdate.class.getName(),root.resolve("pending.properties").toString()).redirectErrorStream(true).redirectOutput(work.resolve("worker.log").toFile()).start();
         Thread.sleep(700);ok(worker.isAlive(),"Helper died while parent alive");ok(UpdateFiles.sha(target).equals(before),"Replaced running parent's JAR");
         Files.writeString(gate,"exit");ok(parent.waitFor(10,TimeUnit.SECONDS),"Test parent did not exit");ok(worker.waitFor(15,TimeUnit.SECONDS),"Helper did not finish after parent exit");ok(worker.exitValue()==0,"Helper failed: "+Files.readString(work.resolve("worker.log")));ok(UpdateFiles.sha(target).equals(valid.sha256()),"Helper did not apply after exit");ok(!Files.exists(root.resolve("pending.properties")),"Pending plan not cleared");
         ok(SignedRelease.properties(Files.readAllBytes(root.resolve("last-update.properties"))).getProperty("status").equals("applied"),"Missing success receipt");
+        ok(!Files.exists(target.resolveSibling(SignedRelease.FILE)), "Worker created a second JAR with the legacy filename");
     }
     public static final class Parent {public static void main(String[] args)throws Exception{for(int i=0;i<200 && !Files.exists(Path.of(args[0]));i++)Thread.sleep(100);}}
     static void testChangedPlan(String productionHelper)throws Exception {

@@ -59,8 +59,11 @@ class ReleaseGitTests(unittest.TestCase):
         self.git('push', '-u', 'origin', 'client', 'server')
         self.root_patch = mock.patch.object(release, 'ROOT', self.root)
         self.root_patch.start()
+        self.bundle_patch = mock.patch.object(release, 'publish_downloads')
+        self.publish_downloads = self.bundle_patch.start()
 
     def tearDown(self):
+        self.bundle_patch.stop()
         self.root_patch.stop()
         self.temp.cleanup()
 
@@ -101,6 +104,7 @@ class ReleaseGitTests(unittest.TestCase):
         choose.assert_not_called()
         build.assert_not_called()
         publish_side.assert_not_called()
+        self.publish_downloads.assert_called_once_with()
         self.assertEqual(self.git('ls-remote', 'origin'), refs)
 
     def test_partial_publication_retries_only_channel_with_unreleased_source(self):
@@ -131,6 +135,7 @@ class ReleaseGitTests(unittest.TestCase):
             release.release('both')
         build.assert_called_once()
         publish_side.assert_called_once()
+        self.publish_downloads.assert_called_once_with()
         dated_path = self.root/'releases/20261115.1.json'
         self.assertEqual(publish_side.call_args.args, ('server', dated_path))
         self.assertEqual(self.git('show', 'server:releases/20261114.2.json'), published_notes)
@@ -144,12 +149,15 @@ class ReleaseGitTests(unittest.TestCase):
         self.git('checkout', 'server')
         self.publish_snapshot('server', '2026.11.14.1')
         self.git('checkout', 'client')
-        self.write('boot-agent/src/Agent.java', 'class Agent {}\n')
         self.write('src/main/java/dev/sunlit/client/Presentation.java', 'class Presentation {}\n')
-        self.commit('Boot agent change')
+        self.commit('Client presentation change')
 
         self.assertTrue(release.needs_release('client'))
         self.assertFalse(release.needs_release('server'))
+
+        self.write('boot-agent/src/Agent.java', 'class Agent {}\n')
+        self.commit('Shared boot agent change')
+        self.assertTrue(release.needs_release('server'))
 
     def test_merge_preserves_both_changes_and_each_channel(self):
         self.write('src/main/resources/client-added.mcmeta', 'client feature\n')
@@ -192,6 +200,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.git('checkout', 'client')
         events = []
         actual_run = release.run
+        self.publish_downloads.side_effect = lambda: events.append('bundle')
 
         def run_stub(command, *, check=True):
             if str(command[0]) == sys.executable:
@@ -223,7 +232,7 @@ class ReleaseGitTests(unittest.TestCase):
             release.release('both')
 
         self.assertEqual(events, ['build', 'test', 'prepare-client', 'prepare-server',
-                                  'publish-client', 'publish-server'])
+                                  'publish-client', 'publish-server', 'bundle'])
         self.assertEqual(self.git('show', 'client:feed/update.properties'), 'client-new')
         self.assertEqual(self.git('show', 'server:feed/update.properties'), 'server-new')
         self.assertEqual(self.git('show', 'server:release-channel.properties'), 'channel=server')
@@ -247,6 +256,7 @@ class ReleaseGitTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 release.release('both')
         self.assertEqual(published, [])
+        self.publish_downloads.assert_not_called()
         self.assertEqual(self.git('show', 'origin/client:feed/update.properties'), 'client-old')
         self.assertEqual(self.git('show', 'origin/server:feed/update.properties'), 'server-old')
 
@@ -254,6 +264,7 @@ class ReleaseGitTests(unittest.TestCase):
         self.git('checkout', initial)
         events = []
         actual_run = release.run
+        self.publish_downloads.side_effect = lambda: events.append('bundle')
 
         def run_stub(command, *, check=True):
             if str(command[0]) == sys.executable:
@@ -277,7 +288,7 @@ class ReleaseGitTests(unittest.TestCase):
              mock.patch.object(release, 'run', side_effect=run_stub), \
              mock.patch.object(release, 'publish_side', side_effect=publish_stub):
             release.release(side)
-        self.assertEqual(events, ['build', 'test', 'prepare-' + side, 'publish-' + side])
+        self.assertEqual(events, ['build', 'test', 'prepare-' + side, 'publish-' + side, 'bundle'])
         self.assertEqual((self.root/'feed/update.properties').read_text(), side + '-old\n')
         self.assertEqual((self.root/'release-channel.properties').read_text(), 'channel=' + side + '\n')
 
@@ -286,6 +297,25 @@ class ReleaseGitTests(unittest.TestCase):
 
     def test_server_only_from_client_branch(self):
         self.check_single_channel_from_opposite_branch('server', 'client')
+
+    def test_local_client_build_preserves_the_installed_download_name(self):
+        instance = self.root.parent / 'instance'
+        mods = instance / 'minecraft/mods'
+        mods.mkdir(parents=True)
+        downloaded = mods / 'better-sunlit-client.jar'
+        legacy = mods / 'better-sunlit.jar'
+        downloaded.write_bytes(b'old client')
+        self.write('build/client/better-sunlit.jar', 'new client')
+
+        with mock.patch.object(release, 'INSTANCE', instance), \
+             mock.patch.object(release, 'is_client_build_current', return_value=True):
+            release.local_build('client')
+            self.assertEqual(downloaded.read_bytes(), b'new client')
+            self.assertFalse(legacy.exists())
+            legacy.write_bytes(b'duplicate')
+            with self.assertRaisesRegex(RuntimeError, 'JAR 한 개'):
+                release.local_build('client')
+            self.assertEqual(legacy.read_bytes(), b'duplicate')
 
     def test_concurrent_release_lock_is_rejected(self):
         with release.release_lock():

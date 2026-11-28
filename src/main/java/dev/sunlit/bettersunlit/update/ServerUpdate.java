@@ -1,6 +1,6 @@
 package dev.sunlit.bettersunlit.update;
 import java.nio.file.*;import java.nio.channels.*;import java.util.*;import java.time.*;
-/** Pre-start only; never stops a running server and only replaces this mod's canonical JAR. */
+/** Pre-start only. Replaces the installed server JAR in place. */
 public final class ServerUpdate {
  public static void main(String[]args)throws Exception{if(!"server".equals(Build.CHANNEL))throw new IllegalStateException("Use the server branch artifact");if(args.length!=1)throw new IllegalArgumentException("Expected server directory");Path game=Path.of(args[0]).toRealPath();Path state=UpdateFiles.directory(game.resolve(".better-sunlit-update"));
   try(var channel=FileChannel.open(state.resolve("server-update.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);var lock=channel.tryLock()){
