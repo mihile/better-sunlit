@@ -133,6 +133,7 @@
     "PerfWaterMediaImageMixin",
     "PerfWaterMediaCacheMixin",
     "PerfKubeJsClientPackMixin",
+    "PlatformRendererRegistryMixin",
     "PerfModelBakeryPrewarmMixin",
     "PerfModelBakeEventHelperMixin",
     "PerfBakedModelOverrideRegistryAccessor",

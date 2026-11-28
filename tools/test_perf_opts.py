@@ -20,11 +20,12 @@ common_mixins = mixins_cfg.get('mixins', [])
 client_mixins = mixins_cfg.get('client', [])
 assert len(common_mixins) == 38 and "DewDropSprinklerMixin" not in common_mixins, common_mixins
 assert {"PerfQuarkSharedChatMixin", "PerfJourneyMapResetMixin", "PerfQuickPackMixin", "PerfObjTokenizerMixin", "PerfCodepointMapMixin"}.issubset(client_mixins)
-assert len(client_mixins) == 149 and {
+assert len(client_mixins) == 150 and {
     "ClientJadePondDataMixin",
     "EmiItemLookupMixin", "EmiCraftingSpecAccessor", "EmiSpecRecipeFillerMixin",
     "PerfBlockModelShaperMixin", "LegacySpriteContentsTransparencyMixin",
     "PerfMysticalOakTreeLoreMixin", "RottenCreaturesModelCompatMixin", "SnowPigModelCompatMixin",
+    "PlatformRendererRegistryMixin",
 }.issubset(client_mixins), client_mixins
 
 with zipfile.ZipFile(CLIENT_JAR) as zf:
